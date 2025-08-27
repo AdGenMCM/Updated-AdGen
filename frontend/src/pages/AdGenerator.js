@@ -61,52 +61,67 @@ function AdGenerator() {
       <h1 className="app-title">AI Ad Generator</h1>
       <p className="decription"> Please fill out the fields below as accuratly as possible to allow for the best possible generation. It will return an AD Image and a description that will help increase post engagement!</p>
 
-      <form className="adgen-form" onSubmit={handleSubmit}>
-        <input
-          name="product_name"
-          placeholder="Product Name"
-          value={form.product_name}
-          onChange={handleChange}
-        />
-        <textarea
-          name="description"
-          placeholder="Product Description"
-          value={form.description}
-          onChange={handleChange}
-        />
-        <input
-          name="audience"
-          placeholder="Target Audience"
-          value={form.audience}
-          onChange={handleChange}
-        />
-        <input
-          name="tone"
-          placeholder="Tone (e.g., energetic, friendly)"
-          value={form.tone}
-          onChange={handleChange}
-        />
-        <input
-          name="platform"
-          placeholder="Ad Platform (e.g., Instagram)"
-          value={form.platform}
-          onChange={handleChange}
-        />
-        <label className="image-size-label">
-          Image Size:
-          <select name="imageSize" value={form.imageSize} onChange={handleChange}>
-            <option value="1024x1024">Square (1024x1024)</option>
-            <option value="1024x1792">Portrait (1024x1792)</option>
-            <option value="1792x1024">Landscape (1792x1024)</option>
-          </select>
-        </label>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Generating..." : "Generate Ad"}
-        </button>
-      </form>
+<form className="adgen-form" onSubmit={handleSubmit}>
+  <input
+    name="product_name"
+    placeholder="Product Name"
+    value={form.product_name}
+    onChange={handleChange}
+    disabled={loading}
+  />
+  <textarea
+    name="description"
+    placeholder="Product Description"
+    value={form.description}
+    onChange={handleChange}
+    disabled={loading}
+  />
+  <input
+    name="audience"
+    placeholder="Target Audience"
+    value={form.audience}
+    onChange={handleChange}
+    disabled={loading}
+  />
+  <input
+    name="tone"
+    placeholder="Tone (e.g., energetic, friendly)"
+    value={form.tone}
+    onChange={handleChange}
+    disabled={loading}
+  />
+  <input
+    name="platform"
+    placeholder="Ad Platform (e.g., Instagram)"
+    value={form.platform}
+    onChange={handleChange}
+    disabled={loading}
+  />
+  <label className="image-size-label">
+    Image Size:
+    <select
+      name="imageSize"
+      value={form.imageSize}
+      onChange={handleChange}
+      disabled={loading}
+    >
+      <option value="1024x1024">Square (1024x1024)</option>
+      <option value="1024x1792">Portrait (1024x1792)</option>
+      <option value="1792x1024">Landscape (1792x1024)</option>
+    </select>
+  </label>
 
-      {loading && <div className="spinner"></div>}
+  <button type="submit" disabled={loading}>
+    {loading ? "Generating..." : "Generate Ad"}
+  </button>
+</form>
+
+<div className={`loading-overlay ${loading ? "show" : ""}`} role="status" aria-live="polite">
+  <div className="spinner" />
+  <div className="loading-text">Generating your ad…</div>
+</div>
+
 
       {result && (
         <div className="result">
