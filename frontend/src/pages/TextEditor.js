@@ -47,9 +47,10 @@ export default function TextEditor() {
       bold: true,
       italic: false,
       shadow: true,
+      underline: false,      // NEW
       x: 100,
       y: 120,
-      maxWidthPct: 0.8,         // wrap width (% of canvas width) — resizable
+      maxWidthPct: 0.8,      // wrap width (% of canvas width) — resizable
       lineHeightMult: 1.08,
     },
   ]);
@@ -139,7 +140,7 @@ export default function TextEditor() {
         lineHeight
       );
 
-      // Draw text
+      // Draw text (with underline if enabled)
       let anchorX = b.x;
       if (b.align === "center") anchorX = b.x;
       if (b.align === "right") anchorX = b.x;
@@ -147,6 +148,27 @@ export default function TextEditor() {
       lines.forEach((ln, i) => {
         const y = b.y + i * lineHeight;
         ctx.fillText(ln, anchorX, y);
+
+        // ---- Underline (manual) ----
+        if (b.underline) {
+          const metrics = ctx.measureText(ln);
+          let lineX = anchorX;
+          if (b.align === "center") lineX = anchorX - metrics.width / 2;
+          if (b.align === "right") lineX = anchorX - metrics.width;
+
+          const gap = Math.round(b.fontSize * 0.08); // small gap under glyphs
+          const underlineY = y + b.fontSize + gap;
+
+          ctx.save();
+          ctx.shadowColor = "transparent"; // no shadow on underline
+          ctx.beginPath();
+          ctx.strokeStyle = b.color;
+          ctx.lineWidth = Math.max(1, Math.round(b.fontSize * 0.05)); // scales with size
+          ctx.moveTo(lineX, underlineY);
+          ctx.lineTo(lineX + metrics.width, underlineY);
+          ctx.stroke();
+          ctx.restore();
+        }
       });
 
       // Selection outline + handles
@@ -271,13 +293,27 @@ export default function TextEditor() {
   const getActiveBounds = () => {
     const canvas = canvasRef.current;
     const can = getCanvasRect();
-    if (guide === "none") return can;
-    const m = getGuideMarginsPct(guide);
-    const left = (m.l / 100) * canvas.width;
-    const right = canvas.width - (m.r / 100) * canvas.width;
-    const top = (m.t / 100) * canvas.height;
-    const bottom = canvas.height - (m.b / 100) * canvas.height;
-    return { left, top, right, bottom, width: right - left, height: bottom - top };
+    let bounds = can;
+
+    if (guide !== "none") {
+      const m = getGuideMarginsPct(guide);
+      const left = (m.l / 100) * canvas.width;
+      const right = canvas.width - (m.r / 100) * canvas.width;
+      const top = (m.t / 100) * canvas.height;
+      const bottom = canvas.height - (m.b / 100) * canvas.height;
+      bounds = { left, top, right, bottom, width: right - left, height: bottom - top };
+    }
+
+    // Add 5px inward padding for snap/clamp
+    const pad = 6;
+    return {
+      left: bounds.left + pad,
+      top: bounds.top + pad,
+      right: bounds.right - pad,
+      bottom: bounds.bottom - pad,
+      width: bounds.width - pad * 2,
+      height: bounds.height - pad * 2,
+    };
   };
 
   /** Snap & clamp helpers (px space) */
@@ -288,7 +324,7 @@ export default function TextEditor() {
     const canvasCenterX = canvas.width / 2;
     const canvasCenterY = canvas.height / 2;
 
-    const bounds = getActiveBounds(); // safe area (if any) or full canvas
+    const bounds = getActiveBounds(); // safe area (if any) or full canvas (padded)
     const right = left + width;
     const bottom = top + height;
 
@@ -454,6 +490,7 @@ export default function TextEditor() {
         bold: true,
         italic: false,
         shadow: true,
+        underline: false, // NEW
         x: 100,
         y: 100,
         maxWidthPct: 0.75,
@@ -580,7 +617,7 @@ export default function TextEditor() {
         )}
         {showCenters && (
           <>
-            {/* Horizontal & Vertical center (no margin) */}
+            {/* Horizontal & Vertical center */}
             <div style={{ ...common, top: "50%", left: 0, right: 0, height: 1, transform: "translateY(-0.5px)" }} />
             <div style={{ ...common, left: "50%", top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)" }} />
           </>
@@ -777,6 +814,22 @@ export default function TextEditor() {
                   }
                 />
                 Shadow
+              </label>
+
+              {/* NEW: Underline */}
+              <label className="texteditor-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selected.underline}
+                  onChange={(e) =>
+                    setBoxes((prev) =>
+                      prev.map((b) =>
+                        b.id === selected.id ? { ...b, underline: e.target.checked } : b
+                      )
+                    )
+                  }
+                />
+                Underline
               </label>
             </div>
           </>
