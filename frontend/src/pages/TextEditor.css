@@ -1,0 +1,124 @@
+.texteditor-container {
+  padding: 24px;
+}
+
+.texteditor-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.texteditor-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.texteditor-label,
+.texteditor-labelWide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.texteditor-labelWide {
+  flex: 1;
+}
+
+.texteditor-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid #e3e5ee;
+  border-radius: 8px;
+  background: #fafbff;
+}
+
+.texteditor-btn {
+  padding: 10px 14px;
+  border: 1px solid #d5d7e0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+.texteditor-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.texteditor-btnPrimary {
+  padding: 10px 14px;
+  border: 1px solid #1f7aed;
+  border-radius: 10px;
+  background: #1f7aed;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* Canvas area */
+.texteditor-canvasWrap {
+  position: relative;
+  width: 100%;
+  max-width: 512px;        /* keeps huge images from taking the whole screen */
+  margin: 0 auto;           /* center it */
+  min-height: 160px;
+  border: 1px dashed #cfd2dc;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f6f7fb;
+}
+
+/* The inner box is sized to match the canvas' CSS height so overlays align */
+.texteditor-inner {
+  position: relative;
+  width: 100%;
+}
+
+.texteditor-canvas {
+  width: 100%;
+  height: auto; /* keep aspect ratio */
+  display: block;
+}
+
+.texteditor-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #6c7280;
+  font-size: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+/* --- Safe-area guides --- */
+.texteditor-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* don't block dragging */
+  z-index: 2;
+}
+
+.texteditor-guide-safe {
+  position: absolute;
+  border: 2px dashed #00e0ff;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.35); /* darken outside */
+  border-radius: 8px;
+}
+
+.texteditor-guide-label {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(0,0,0,.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+
