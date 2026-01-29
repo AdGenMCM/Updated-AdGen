@@ -32,6 +32,14 @@ client = OpenAI(api_key=openai_key)
 
 app = FastAPI()
 
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "service": "AdGen backend",
+        "message": "Backend is running"
+    }
+
 # CORS for your local frontend (add your prod origin when you deploy)
 app.add_middleware(
     CORSMiddleware,
