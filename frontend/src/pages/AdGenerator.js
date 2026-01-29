@@ -99,7 +99,7 @@ function AdGenerator() {
     disabled={loading}
   />
   <label className="image-size-label">
-    Image Size:
+    Image Size: &nbsp;
     <select
       name="imageSize"
       value={form.imageSize}

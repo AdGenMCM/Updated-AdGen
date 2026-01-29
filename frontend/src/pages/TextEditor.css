@@ -1,11 +1,14 @@
 .texteditor-container {
   padding: 24px;
+  align-items: center;
 }
 
 .texteditor-toolbar {
   display: grid;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  align-items: center;
 }
 
 .texteditor-row {
@@ -21,6 +24,8 @@
   flex-direction: column;
   gap: 6px;
   font-size: 14px;
+  font-weight: 700;
+
 }
 .texteditor-labelWide {
   flex: 1;
@@ -61,9 +66,9 @@
 .texteditor-canvasWrap {
   position: relative;
   width: 100%;
-  max-width: 512px;        /* keeps huge images from taking the whole screen */
+  max-width: 1024px;        /* keeps huge images from taking the whole screen */
   margin: 0 auto;           /* center it */
-  min-height: 160px;
+  min-height: 360px;
   border: 1px dashed #cfd2dc;
   border-radius: 12px;
   overflow: hidden;
@@ -119,6 +124,41 @@
   border-radius: 6px;
   pointer-events: none;
   z-index: 2;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+p{
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+/* Center the whole toolbar block horizontally */
+.texteditor-toolbar {
+  justify-items: center;   /* for grid children */
+  margin-inline: auto;
+}
+
+/* Center ONLY the first row (Background image + Guide) */
+.texteditor-toolbar .texteditor-row:first-child {
+  justify-content: center; /* center its flex children */
+}
+
+/* Center the label stacks and their controls in that first row */
+.texteditor-toolbar .texteditor-row:first-child .texteditor-label,
+.texteditor-toolbar .texteditor-row:first-child .texteditor-labelWide {
+  align-items: center;   /* centers label text + control vertically */
+  text-align: center;    /* centers the label text */
+}
+
+/* Ensure the file input and select actually center */
+.texteditor-toolbar .texteditor-row:first-child input[type="file"],
+.texteditor-toolbar .texteditor-row:first-child select {
+  display: block;        /* margin auto works on block elements */
+  margin: 0 auto;
 }
 
 

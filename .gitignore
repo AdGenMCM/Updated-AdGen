@@ -1,0 +1,19 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node / React
+node_modules/
+frontend/node_modules/
+
+# Env files
+.env
+.env.local
+.env.production
+
+# Build output
+frontend/build/
+
+# OS junk
+.DS_Store
