@@ -41,13 +41,24 @@ def root():
     }
 
 # CORS for your local frontend (add your prod origin when you deploy)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
+
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+if FRONTEND_URL:
+    origins.append(FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # add "https://your-frontend.com" later
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # OpenAI stays for ad copy
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
