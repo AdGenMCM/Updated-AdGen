@@ -46,9 +46,11 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://adgen-mcm---ad-generator.web.app",
+    "https://adgen-mcm---ad-generator.firebaseapp.com",
 ]
 
-if FRONTEND_URL:
+if FRONTEND_URL and FRONTEND_URL not in origins:
     origins.append(FRONTEND_URL)
 
 app.add_middleware(
@@ -58,6 +60,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 # OpenAI stays for ad copy
