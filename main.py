@@ -46,12 +46,16 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://adgen-mcm---ad-generator.web.app",
-    "https://adgen-mcm---ad-generator.firebaseapp.com",
+    "https://adgenmcm.com",
+    "https://www.adgenmcm.com",
 ]
 
-if FRONTEND_URL and FRONTEND_URL not in origins:
+# Keep env var too (optional, but fine)
+if FRONTEND_URL:
     origins.append(FRONTEND_URL)
+
+# Deduplicate in case FRONTEND_URL matches one above
+origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,
