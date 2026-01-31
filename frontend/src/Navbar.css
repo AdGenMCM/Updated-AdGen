@@ -6,10 +6,9 @@
   z-index: 50;
   background: #333;
   border-bottom: 1px solid #eee;
-  margin-bottom: 20px; /* ✅ spacing below the navbar */
+  margin-bottom: 20px; /* spacing below the navbar */
   padding: 10px 0px 10px 0px;
 }
-
 
 .nav-inner {
   display: flex;
@@ -82,3 +81,69 @@
 .btn:active {
   transform: translateY(1px);
 }
+
+/* ------------------------------ */
+/* Dropdown styles (far right)    */
+/* ------------------------------ */
+
+.nav-dropdown {
+  position: relative;
+}
+
+.dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 22px;
+  transition: background-color 0.2s ease;
+}
+
+.dropdown-toggle:hover {
+  background-color: #555;
+}
+
+/* Dropdown panel */
+.dropdown-menu {
+  position: absolute;
+  top: 52px;
+  min-width: 220px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 12px;
+  padding: 8px 0;
+  z-index: 1000;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+/* Right align the dropdown panel */
+.dropdown-menu-right {
+  right: 0;
+  left: auto;
+}
+
+.dropdown-item {
+  display: block;
+  padding: 10px 14px;
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+}
+
+.dropdown-item:hover {
+  background-color: #555;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #555;
+  margin: 6px 0;
+}
+
+
