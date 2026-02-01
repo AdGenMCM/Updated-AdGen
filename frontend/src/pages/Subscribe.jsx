@@ -18,6 +18,9 @@ export default function Subscribe() {
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
 
+  // ✅ NEW: selected plan tier
+  const [tier, setTier] = useState("starter_monthly");
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -26,7 +29,7 @@ export default function Subscribe() {
   const from = location.state?.from?.pathname || "/adgenerator";
   const pollRef = useRef(null);
 
-  // Cache session_id if user isn't logged in yet (so we don't lose it at login screen)
+  // Cache session_id if user isn't logged in yet
   useEffect(() => {
     const sid = params.get("session_id");
     if (!currentUser && sid) {
@@ -74,7 +77,6 @@ export default function Subscribe() {
         setStripeInfo(data?.stripe || null);
 
         if (s === "active") {
-          // Clean URL and go to the gated page
           navigate(from, { replace: true });
         }
       },
@@ -87,7 +89,7 @@ export default function Subscribe() {
     return () => unsub && unsub();
   }, [currentUser, navigate, from]);
 
-  // Poll sync while status is pending (helps if webhook is delayed)
+  // Poll sync while status is pending
   useEffect(() => {
     if (!currentUser || !sessionId || status !== "pending") {
       if (pollRef.current) {
@@ -126,8 +128,9 @@ export default function Subscribe() {
       const { url } = await createCheckoutSession({
         uid: currentUser.uid,
         email: currentUser.email,
+        tier, // ✅ required by backend
       });
-      window.location.href = url;
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to start checkout.");
@@ -142,7 +145,7 @@ export default function Subscribe() {
         return;
       }
       const { url } = await createPortalSession(stripeInfo.customerId);
-      window.location.href = url;
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to open billing portal.");
@@ -162,6 +165,7 @@ export default function Subscribe() {
   };
 
   const showSpinner = status === "checking" || syncing || status === "pending";
+  const isActive = status === "active";
 
   return (
     <div className="auth-container" style={{ minHeight: "60vh" }}>
@@ -171,16 +175,33 @@ export default function Subscribe() {
         <p style={{ marginBottom: 12 }}>
           {showSpinner
             ? "Finalizing your subscription…"
-            : status === "active"
+            : isActive
             ? "Subscription active!"
-            : "Get access to Ad Generator & Text Editor."}
+            : "Choose a plan to get access to Ad Generator & Text Editor."}
         </p>
 
         {error && <p style={{ color: "crimson", marginBottom: 12 }}>{error}</p>}
 
+        {!isActive && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: "block", marginBottom: 6 }}>Plan</label>
+            <select
+              value={tier}
+              onChange={(e) => setTier(e.target.value)}
+              style={{ width: "100%", padding: 10, borderRadius: 8 }}
+              disabled={showSpinner}
+            >
+              <option value="trial_monthly">Trial Monthly - $4.99</option>
+              <option value="starter_monthly">Starter Monthly - $24.99</option>
+              <option value="pro_monthly">Pro Monthly - $49.99</option>
+              <option value="business_monthly">Business Monthly - $124.99</option>
+            </select>
+          </div>
+        )}
+
         {showSpinner ? (
           <button type="button" disabled>Processing…</button>
-        ) : status !== "active" ? (
+        ) : !isActive ? (
           <button type="button" onClick={startSubscription}>Subscribe with Stripe</button>
         ) : (
           <button type="button" onClick={openBilling}>Manage Billing</button>
@@ -196,6 +217,7 @@ export default function Subscribe() {
         <div style={{ marginTop: 16, fontSize: 12, opacity: 0.7 }}>
           <div>UID: {currentUser.uid}</div>
           <div>Status: {status}</div>
+          <div>Selected tier: {tier}</div>
           <div>Customer: {stripeInfo?.customerId || "—"}</div>
           <div>Sub: {stripeInfo?.subscriptionId || "—"}</div>
           <div>Session: {sessionId || "—"}</div>
@@ -204,6 +226,7 @@ export default function Subscribe() {
     </div>
   );
 }
+
 
 
 

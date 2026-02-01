@@ -1,20 +1,6 @@
 # stripe_server.py
 import os
 import json
-from typing import Optional
-
-from fastapi import FastAPI, HTTPException, Request, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
-from dotenv import load_dotenv
-import stripe
-
-# Firebase Admin
-# stripe_server.py
-import os
-import json
 from typing import Optional, Dict
 
 from fastapi import FastAPI, HTTPException, Request, Query
@@ -25,23 +11,21 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import stripe
 
-# Firebase Admin
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 
-# ---------------- FastAPI app ----------------
 app = FastAPI()
 
-FRONTEND_FALLBACK = "http://localhost:3000"
+# CORS: safe default because we are not using cookies (allow_credentials=False)
+# You can lock this down later to your domain(s).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_FALLBACK, "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ---------------- Env + settings ----------------
 STRIPE_SECRET_KEY = None
@@ -50,28 +34,28 @@ FRONTEND_URL = None
 FIREBASE_SA_PATH = None
 
 PRICE_MAP_JSON = None
-PRICE_MAP: Dict[str, str] = {}
+PRICE_MAP: Dict[str, str] = {}  # { "starter_monthly": "price_...", ... }
+
 
 def _load_settings_from_env():
-    """Load .env and refresh all runtime settings + Stripe key."""
     global STRIPE_SECRET_KEY, WEBHOOK_SECRET, FRONTEND_URL, FIREBASE_SA_PATH
     global PRICE_MAP_JSON, PRICE_MAP
 
     load_dotenv(override=True)
 
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-    WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # must be set in production
-    FRONTEND_URL = os.getenv("FRONTEND_URL", FRONTEND_FALLBACK)
+    WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # MUST be set in production
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
     FIREBASE_SA_PATH = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
 
     PRICE_MAP_JSON = os.getenv("STRIPE_PRICE_MAP_JSON")
 
     if not STRIPE_SECRET_KEY:
         raise RuntimeError("Missing STRIPE_SECRET_KEY")
-    if not FIREBASE_SA_PATH or not os.path.exists(FIREBASE_SA_PATH):
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON path is missing or invalid")
     if not PRICE_MAP_JSON:
         raise RuntimeError("Missing STRIPE_PRICE_MAP_JSON")
+    if not FIREBASE_SA_PATH or not os.path.exists(FIREBASE_SA_PATH):
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON path is missing or invalid")
 
     try:
         PRICE_MAP = json.loads(PRICE_MAP_JSON)
@@ -84,10 +68,11 @@ def _load_settings_from_env():
         raise RuntimeError(f"STRIPE_PRICE_MAP_JSON missing keys: {sorted(missing)}")
 
     stripe.api_key = STRIPE_SECRET_KEY
-    print("ENV reloaded:", {"FRONTEND_URL": FRONTEND_URL, "WEBHOOK_SECRET?": bool(WEBHOOK_SECRET)})
+    print("ENV loaded:", {"FRONTEND_URL": FRONTEND_URL, "WEBHOOK_SECRET?": bool(WEBHOOK_SECRET)})
+
 
 @app.on_event("startup")
-def on_startup_reload_env():
+def startup():
     _load_settings_from_env()
 
 
@@ -99,6 +84,7 @@ def init_firebase_once():
         cred = credentials.Certificate(FIREBASE_SA_PATH)
         firebase_admin.initialize_app(cred)
 
+
 def get_db():
     init_firebase_once()
     return firestore.client()
@@ -108,7 +94,8 @@ def get_db():
 class CheckoutPayload(BaseModel):
     uid: str
     email: Optional[str] = None
-    tier: str  # "trial_monthly" | "starter_monthly" | "pro_monthly" | "business_monthly"
+    tier: str  # trial_monthly | starter_monthly | pro_monthly | business_monthly
+
 
 class PortalPayload(BaseModel):
     customer_id: str
@@ -118,9 +105,9 @@ class PortalPayload(BaseModel):
 def price_id_to_tier(price_id: Optional[str]) -> Optional[str]:
     if not price_id:
         return None
-    for k, v in PRICE_MAP.items():
-        if v == price_id:
-            return k
+    for tier, pid in PRICE_MAP.items():
+        if pid == price_id:
+            return tier
     return None
 
 
@@ -133,9 +120,9 @@ def health():
 @app.post("/create-checkout-session")
 def create_checkout_session(body: CheckoutPayload):
     """
-    Creates a Stripe Checkout Session for a subscription for a specific tier/price.
-    Also writes:
-      - reverse index: stripe_customers/{customerId} -> { uid }
+    Creates a Stripe Checkout Session for a subscription for a specific tier.
+    Writes:
+      - stripe_customers/{customerId} -> { uid }
       - users/{uid}.stripe.customerId + status = 'pending'
     """
     try:
@@ -143,10 +130,9 @@ def create_checkout_session(body: CheckoutPayload):
             raise HTTPException(status_code=400, detail="Invalid tier")
 
         selected_price_id = PRICE_MAP[body.tier]
-
         db = get_db()
 
-        # 1) Create or fetch Stripe Customer mapped to this uid
+        # 1) Fetch existing stripe customer (if any)
         user_ref = db.collection("users").document(body.uid)
         user_data = user_ref.get().to_dict() or {}
         stripe_info = user_data.get("stripe") or {}
@@ -159,14 +145,14 @@ def create_checkout_session(body: CheckoutPayload):
             )
             customer_id = customer.id
 
-        # 2) Reverse index & pending status (store chosen tier for your UI)
+        # 2) Reverse index & pending status (+ remember requested tier)
         db.collection("stripe_customers").document(customer_id).set({"uid": body.uid}, merge=True)
         user_ref.set(
             {"stripe": {"customerId": customer_id, "status": "pending", "requestedTier": body.tier}},
             merge=True,
         )
 
-        # 3) Create Checkout Session
+        # 3) Create Checkout session
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer_id,
@@ -206,7 +192,7 @@ async def stripe_webhook(request: Request):
     Handles Stripe events:
       - checkout.session.completed
       - customer.subscription.created|updated|deleted
-    Uses reverse index to update users/{uid}.stripe
+    Writes users/{uid}.stripe.status + subscriptionId + tier + priceId
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -215,22 +201,20 @@ async def stripe_webhook(request: Request):
         if WEBHOOK_SECRET:
             event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
         else:
-            # OK for local dev only; do not rely on this in production.
+            # Local dev only (no signature verification)
             event = json.loads(payload.decode("utf-8"))
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Webhook error: {e}"})
 
     db = get_db()
-
     event_type = event.get("type")
     obj = event.get("data", {}).get("object", {})
 
-    # We primarily trust subscription.* events for plan/status
     if event_type in {
+        "checkout.session.completed",
         "customer.subscription.created",
         "customer.subscription.updated",
         "customer.subscription.deleted",
-        "checkout.session.completed",
     }:
         customer_id = None
         sub_id = None
@@ -240,10 +224,11 @@ async def stripe_webhook(request: Request):
         current_period_end = None
 
         if event_type == "checkout.session.completed":
-            # Helpful, but not the source of truth for plan; subscription events will follow.
+            # Helpful, but subscription events are the source of truth.
             customer_id = obj.get("customer")
             sub_id = obj.get("subscription")
             status = "active"
+
         elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
@@ -252,24 +237,24 @@ async def stripe_webhook(request: Request):
             active_like = {"active", "trialing", "past_due"}
             status = "active" if sub_status in active_like else "inactive"
 
-            # Extract price id from subscription items
             items = obj.get("items", {}).get("data", [])
             if items and items[0].get("price"):
                 price_id = items[0]["price"].get("id")
+                tier = price_id_to_tier(price_id)
 
-            tier = price_id_to_tier(price_id)
             current_period_end = obj.get("current_period_end")  # unix seconds
+
         else:  # deleted
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
             status = "inactive"
 
         if customer_id:
-            # Prefer reverse index, fall back to customer metadata if needed
             uid = None
             m = db.collection("stripe_customers").document(customer_id).get()
             if m.exists:
                 uid = (m.to_dict() or {}).get("uid")
+
             if not uid:
                 try:
                     cust = stripe.Customer.retrieve(customer_id)
@@ -288,14 +273,12 @@ async def stripe_webhook(request: Request):
                         "updatedAt": firestore.SERVER_TIMESTAMP,
                     }
                 }
-
-                # Only store tier/priceId when we have it (subscription events)
                 if price_id:
                     update["stripe"]["priceId"] = price_id
                 if tier:
                     update["stripe"]["tier"] = tier
                 if current_period_end:
-                    update["stripe"]["currentPeriodEnd"] = current_period_end  # unix seconds
+                    update["stripe"]["currentPeriodEnd"] = current_period_end
 
                 db.collection("users").document(uid).set(update, merge=True)
 
@@ -303,7 +286,6 @@ async def stripe_webhook(request: Request):
     return {"received": True}
 
 
-# -------- OPTIONAL: success-page fallback (accepts session_id OR customer_id)
 @app.get("/sync-subscription")
 def sync_subscription(
     uid: str = Query(...),
@@ -312,9 +294,10 @@ def sync_subscription(
 ):
     """
     Confirms/repairs subscription state after Checkout.
-    - If session_id (cs_...) is provided: fetch Checkout Session + subscription.
-    - Else if customer_id (cus_...) is provided: fetch customer's latest subscription.
-    Updates users/{uid}.stripe to 'active' if paid/active, and maintains reverse index.
+    Accepts:
+      - session_id (cs_...) OR
+      - customer_id (cus_...)
+    Writes users/{uid}.stripe.status + tier + priceId when possible.
     """
     try:
         db = get_db()
@@ -332,12 +315,12 @@ def sync_subscription(
             session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
             resolved_customer = session.get("customer")
             subscription = session.get("subscription") or {}
+
             resolved_sub_id = subscription.get("id")
             resolved_sub_status = subscription.get("status")
             resolved_session_status = session.get("status")
             resolved_payment_status = session.get("payment_status")
 
-            # Get price from expanded subscription if present
             items = (subscription.get("items") or {}).get("data") or []
             if items and items[0].get("price"):
                 resolved_price_id = items[0]["price"].get("id")
@@ -368,6 +351,7 @@ def sync_subscription(
 
             active_like = {"active", "trialing", "past_due"}
             status = "active" if (resolved_sub_status in active_like) else "pending"
+
         else:
             raise HTTPException(status_code=400, detail="Provide session_id (cs_...) or customer_id (cus_...).")
 
@@ -401,6 +385,7 @@ def sync_subscription(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 

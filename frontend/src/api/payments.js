@@ -30,8 +30,9 @@ export async function syncSubscription({ uid, sessionId, customerId }) {
   if (customerId) url.searchParams.set("customer_id", customerId);
   const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
-  return res.json(); // { ok, status, ... }
+  return res.json();
 }
+
 
 
 

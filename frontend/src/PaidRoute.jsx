@@ -9,9 +9,8 @@ const db = getFirestore();
 export default function PaidRoute() {
   const { currentUser } = useAuth();
   const location = useLocation();
-  const [status, setStatus] = useState("checking"); // checking | inactive | pending | active
+  const [status, setStatus] = useState("checking"); // checking | inactive | pending | active | trialing
 
-  // Hooks first (avoid "Rendered fewer hooks than expected")
   useEffect(() => {
     if (!currentUser) return;
     const ref = doc(db, "users", currentUser.uid);
@@ -23,19 +22,19 @@ export default function PaidRoute() {
   }, [currentUser]);
 
   if (!currentUser) {
-    // preserve full path + query so we can return here after login
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (status === "checking") return null; // or a loader/spinner
+  if (status === "checking") return null;
 
-  if (status !== "active") {
+  const allowed = status === "active" || status === "trialing";
+  if (!allowed) {
     return <Navigate to="/subscribe" replace state={{ from: location }} />;
   }
 
-  // ⬇️ With nested routes, render the matched child via <Outlet />
   return <Outlet />;
 }
+
 
 
 
