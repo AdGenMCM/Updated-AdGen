@@ -80,7 +80,7 @@ export default function Navbar() {
       <div className="nav-inner">
         {/* Brand left */}
         <Link to="/" className="brand" onClick={() => setInfoOpen(false)}>
-          AdGen MCM
+          ADGen MCM
         </Link>
 
         {/* Right side */}
