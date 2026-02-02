@@ -105,7 +105,7 @@ def generate_ad(payload: AdRequest):
         f"Studio product photograph for a {payload.tone.lower()} {payload.platform} ad "
         f"featuring {payload.product_name}. Clean composition, brand-safe, "
         f"gradient or soft background, negative space reserved for headline area, "
-        f"no overlays, no labels on background, natural lighting, high contrast, balanced framing."
+        f"no overlays, no labels on background, no letters, no lettering, no text, no words, natural lighting, high contrast, balanced framing."
     )
 
     try:
