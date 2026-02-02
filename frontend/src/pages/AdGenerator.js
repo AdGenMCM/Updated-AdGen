@@ -24,10 +24,10 @@ function AdGenerator() {
     setResult(null);
 
     // Use env var in production; fallback to localhost for local dev
-    const apiBase = process.env.REACT_APP_API_URL?.trim();
+    const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
 
 if (!apiBase) {
-  console.error("❌ Missing REACT_APP_API_URL at build time");
+  console.error("❌ Missing REACT_APP_API_BASE_URL at build time");
   alert("Config error: API URL is missing. App must be rebuilt.");
   setLoading(false);
   return;

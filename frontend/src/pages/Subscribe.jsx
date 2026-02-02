@@ -122,6 +122,17 @@ export default function Subscribe() {
 
   if (!currentUser) return <p>Please log in first.</p>;
 
+  const openInNewTab = (url) => {
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+
+
   const startSubscription = async () => {
     setError("");
     try {
@@ -130,7 +141,7 @@ export default function Subscribe() {
         email: currentUser.email,
         tier, // ✅ required by backend
       });
-      window.open(url, "_blank", "noopener,noreferrer");
+      openInNewTab(url);
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to start checkout.");
@@ -145,7 +156,7 @@ export default function Subscribe() {
         return;
       }
       const { url } = await createPortalSession(stripeInfo.customerId);
-      window.open(url, "_blank", "noopener,noreferrer");
+      openInNewTab(url);
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to open billing portal.");
