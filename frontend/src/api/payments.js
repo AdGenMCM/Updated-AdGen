@@ -10,20 +10,15 @@ const API_BASE =
 
 // Helper: try endpoint at root first, then /stripe if 404
 async function fetchWithStripeFallback(path, options) {
-  // Try root path first
   let res = await fetch(`${API_BASE}${path}`, options);
-
-  // If backend mounted Stripe under /stripe, root may 404
   if (res.status === 404) {
     res = await fetch(`${API_BASE}/stripe${path}`, options);
   }
-
   return res;
 }
 
 async function readError(res) {
   const text = await res.text();
-  // try to extract FastAPI JSON {"detail": "..."} or {"detail": {...}}
   try {
     const j = JSON.parse(text);
     if (j?.detail) return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
@@ -38,6 +33,7 @@ export async function createCheckoutSession({ uid, email, tier }) {
   const res = await fetchWithStripeFallback(`/create-checkout-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ uid, email, tier }),
   });
 
@@ -49,6 +45,7 @@ export async function createPortalSession(customerId) {
   const res = await fetchWithStripeFallback(`/create-portal-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ customer_id: customerId }),
   });
 
@@ -57,25 +54,25 @@ export async function createPortalSession(customerId) {
 }
 
 export async function syncSubscription({ uid, sessionId, customerId }) {
-  // Build query string once, reuse for both root and /stripe fallback
   const url = new URL(`${API_BASE}/sync-subscription`);
   url.searchParams.set("uid", uid);
   if (sessionId) url.searchParams.set("session_id", sessionId);
   if (customerId) url.searchParams.set("customer_id", customerId);
 
-  let res = await fetch(url.toString(), { method: "GET" });
+  let res = await fetch(url.toString(), { method: "GET", credentials: "include" });
 
   if (res.status === 404) {
     const url2 = new URL(`${API_BASE}/stripe/sync-subscription`);
     url2.searchParams.set("uid", uid);
     if (sessionId) url2.searchParams.set("session_id", sessionId);
     if (customerId) url2.searchParams.set("customer_id", customerId);
-    res = await fetch(url2.toString(), { method: "GET" });
+    res = await fetch(url2.toString(), { method: "GET", credentials: "include" });
   }
 
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
+
 
 
 

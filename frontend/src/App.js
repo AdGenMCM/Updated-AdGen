@@ -8,6 +8,8 @@ import ProtectedRoute from "./ProtectedRoute"; // auth-only, for /subscribe
 import PaidRoute from "./PaidRoute"; // auth + active sub
 import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
+import MyAccount from "./pages/MyAccount";
+
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -36,6 +38,7 @@ export default function App() {
           {/* Auth-only route to start/see subscription */}
           <Route element={<ProtectedRoute />}>
             <Route path="/subscribe" element={<Subscribe />} />
+            <Route path="/account" element={<MyAccount />} />
           </Route>
 
           {/* Paid features (require active sub) */}

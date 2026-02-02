@@ -69,7 +69,14 @@ export default function Navbar() {
     { to: "/about", label: "About" },
     { to: "/pricing", label: "Pricing" },
     { to: "/contact", label: "Contact" },
-    ...(user ? [{ divider: true }, { to: "/subscribe", label: "Manage Subscription" }] : []),
+
+    ...(user
+      ? [
+          { divider: true },
+          { to: "/account", label: "My Account" },
+        ]
+      : []),
+
     { divider: true },
     { to: "/terms", label: "Terms of Service" },
     { to: "/privacy", label: "Privacy Policy" },
@@ -102,9 +109,7 @@ export default function Navbar() {
               <div className="dropdown-menu dropdown-menu-right" role="menu">
                 {dropdownItems.map((item, idx) => {
                   if (item.divider) {
-                    return (
-                      <div className="dropdown-divider" key={`div-${idx}`} />
-                    );
+                    return <div className="dropdown-divider" key={`div-${idx}`} />;
                   }
                   return (
                     <Link
@@ -125,18 +130,10 @@ export default function Navbar() {
           {/* Paid features links */}
           {verified && isActive && (
             <>
-              <NavLink
-                to="/adgenerator"
-                className="nav-link"
-                onClick={() => setInfoOpen(false)}
-              >
+              <NavLink to="/adgenerator" className="nav-link" onClick={() => setInfoOpen(false)}>
                 Ad Generator
               </NavLink>
-              <NavLink
-                to="/texteditor"
-                className="nav-link"
-                onClick={() => setInfoOpen(false)}
-              >
+              <NavLink to="/texteditor" className="nav-link" onClick={() => setInfoOpen(false)}>
                 Text Editor
               </NavLink>
             </>
@@ -154,11 +151,7 @@ export default function Navbar() {
               Logout
             </button>
           ) : (
-            <NavLink
-              to="/login"
-              className="btn primary"
-              onClick={() => setInfoOpen(false)}
-            >
+            <NavLink to="/login" className="btn primary" onClick={() => setInfoOpen(false)}>
               Login
             </NavLink>
           )}
@@ -167,6 +160,7 @@ export default function Navbar() {
     </nav>
   );
 }
+
 
 
 
