@@ -181,6 +181,7 @@ def create_checkout_session(body: CheckoutPayload):
                 allow_promotion_codes=True,
                 automatic_tax={"enabled": True},
                 billing_address_collection="required",
+                customer_update={"address": "auto"},  # ✅ FIX: save address from Checkout onto Customer
             )
         except stripe.error.StripeError as e:
             msg = getattr(e, "user_message", None) or str(e)
@@ -400,6 +401,7 @@ async def webhook(request: Request):
     except Exception as e:
         logger.exception("Server error in webhook: %r", e)
         return JSONResponse(status_code=500, content={"error": f"Server error: {repr(e)}"})
+
 
 
 
