@@ -5,6 +5,8 @@ import os
 from openai import OpenAI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from stripe_server import stripe_router
+
 
 # new: for reading the image and encoding as data URL
 import base64
@@ -31,6 +33,8 @@ client = OpenAI(api_key=openai_key)
 
 
 app = FastAPI()
+
+app.include_router(stripe_router)
 
 @app.get("/")
 def root():
