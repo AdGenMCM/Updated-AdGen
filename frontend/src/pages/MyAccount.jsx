@@ -1,14 +1,81 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthProvider";
-import { createPortalSession } from "../api/payments"; // <-- keep this path consistent with your repo
+import { createPortalSession } from "../api/payments";
+import { auth } from "../firebaseConfig"; // adjust ONLY if your firebaseConfig path differs
 import "./MyAccount.css";
+
+function formatUnixToLocalDateTime(unixSeconds) {
+  if (!unixSeconds || typeof unixSeconds !== "number") return "—";
+  try {
+    const d = new Date(unixSeconds * 1000);
+    return d.toLocaleString();
+  } catch {
+    return "—";
+  }
+}
 
 export default function MyAccount() {
   const navigate = useNavigate();
   const { currentUser, stripe } = useAuth();
+
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [error, setError] = useState("");
+
+  // Usage state
+  const [usage, setUsage] = useState(null); // { used, cap, remaining, periodStart, periodEnd } OR {month,...}
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState("");
+
+  const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
+
+  async function fetchUsage() {
+    setUsageError("");
+    setUsageLoading(true);
+
+    try {
+      if (!apiBase) {
+        throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
+      }
+
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("Not logged in.");
+      }
+
+      const token = await user.getIdToken();
+
+      const res = await fetch(`${apiBase}/usage`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        // ignore parse error
+      }
+
+      if (!res.ok) {
+        const detail = data?.detail || data?.message || `Failed to load usage (${res.status})`;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+
+      setUsage(data);
+    } catch (e) {
+      setUsage(null);
+      setUsageError(e?.message || "Failed to load usage.");
+    } finally {
+      setUsageLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+    fetchUsage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid]);
 
   if (!currentUser) {
     return (
@@ -35,13 +102,11 @@ export default function MyAccount() {
     try {
       if (!customerId) {
         throw new Error(
-          "No Stripe customer found yet. If you just subscribed, refresh in 10 seconds or visit Subscribe."
+          "No Stripe customer found yet. If you just subscribed, refresh in 10 seconds or visit Pricing."
         );
       }
 
       const { url } = await createPortalSession(customerId);
-
-      // ✅ open portal in a new tab
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e?.message || "Could not open billing portal.");
@@ -49,6 +114,15 @@ export default function MyAccount() {
       setLoadingPortal(false);
     }
   }
+
+  // ✅ Billing-cycle reset date display:
+  // If you are using Stripe-cycle caps, /usage returns periodEnd (unix seconds).
+  const resetsOn =
+    usage?.periodEnd && typeof usage.periodEnd === "number"
+      ? formatUnixToLocalDateTime(usage.periodEnd)
+      : usage?.month
+      ? `End of month (${usage.month})`
+      : "—";
 
   return (
     <div className="acctPage">
@@ -109,7 +183,50 @@ export default function MyAccount() {
 
           <p className="acctTiny">Billing portal opens in a new tab.</p>
         </div>
+
+        <div className="acctSection">
+          <h2 className="acctH2">Usage</h2>
+
+          {usageError && <div className="acctErr">{usageError}</div>}
+
+          <div className="acctActions">
+            <button className="acctBtn" onClick={fetchUsage} disabled={usageLoading}>
+              {usageLoading ? "Refreshing..." : "Refresh Usage"}
+            </button>
+          </div>
+
+          {usage ? (
+            <>
+              <div className="acctRow">
+                <span className="acctLabel">Used</span>
+                <span className="acctValue">
+                  {usage.used}/{usage.cap}
+                </span>
+              </div>
+
+              <div className="acctRow">
+                <span className="acctLabel">Remaining</span>
+                <span className="acctValue">{usage.remaining}</span>
+              </div>
+
+              <div className="acctRow">
+                <span className="acctLabel">Resets on</span>
+                <span className="acctValue">{resetsOn}</span>
+              </div>
+
+              {usage.remaining === 0 && (
+                <p className="acctTiny">
+                  You’ve reached your limit. Upgrade to continue generating ads this billing period.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="acctTiny">{usageLoading ? "Loading usage…" : "Usage data not available yet."}</p>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+

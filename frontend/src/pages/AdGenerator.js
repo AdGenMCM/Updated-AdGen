@@ -1,7 +1,11 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
+import { auth } from "../firebaseConfig"; // ✅ adjust ONLY if your firebaseConfig path differs
 
 function AdGenerator() {
+  const navigate = useNavigate();
+
   const [form, setForm] = useState({
     product_name: "",
     description: "",
@@ -14,34 +18,55 @@ function AdGenerator() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // For cap / auth errors
+  const [uiError, setUiError] = useState(null);
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const safeDetailMessage = (detail) => {
+    if (!detail) return null;
+    if (typeof detail === "string") return detail;
+    if (typeof detail === "object") {
+      return detail.message || detail.error || JSON.stringify(detail);
+    }
+    return String(detail);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
+    setUiError(null);
 
     // Use env var in production; fallback to localhost for local dev
     const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
 
-if (!apiBase) {
-  console.error("❌ Missing REACT_APP_API_BASE_URL at build time");
-  alert("Config error: API URL is missing. App must be rebuilt.");
-  setLoading(false);
-  return;
-}
-
-console.log("✅ API URL:", apiBase);
-
+    if (!apiBase) {
+      console.error("❌ Missing REACT_APP_API_BASE_URL at build time");
+      alert("Config error: API URL is missing. App must be rebuilt.");
+      setLoading(false);
+      return;
+    }
 
     try {
-      console.log("API URL:", apiBase);
+      // ✅ Firebase token required by your new backend
+      const user = auth.currentUser;
+      if (!user) {
+        alert("You must be logged in to generate an ad.");
+        navigate("/login");
+        return;
+      }
+
+      const token = await user.getIdToken();
 
       const response = await fetch(`${apiBase}/generate-ad`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // ✅ required
+        },
         body: JSON.stringify(form),
       });
 
@@ -58,10 +83,50 @@ console.log("✅ API URL:", apiBase);
       console.log("[AdGen] API JSON:", data);
 
       if (!response.ok) {
-        // FastAPI often returns { detail: "..." }
-        const msg =
-          (data && (data.detail || data.error || data.message)) ||
-          `Request failed (${response.status})`;
+        // FastAPI often returns { detail: "..." } or { detail: { message, cap, used, upgradePath } }
+        const detail = data?.detail ?? data?.error ?? data?.message;
+
+        // ✅ Cap reached case from our backend: status 429 with detail object
+        if (response.status === 429) {
+          const msg = safeDetailMessage(detail) || "You’ve reached your monthly limit.";
+          const upgradePath = detail?.upgradePath || "/account";
+          const used = detail?.used;
+          const cap = detail?.cap;
+
+          setUiError({
+            type: "cap",
+            message:
+              used != null && cap != null
+                ? `${msg} (${used}/${cap} used this month)`
+                : msg,
+            upgradePath,
+          });
+          return;
+        }
+
+        // ✅ Auth cases
+        if (response.status === 401) {
+          setUiError({
+            type: "auth",
+            message: safeDetailMessage(detail) || "Session expired. Please log in again.",
+            upgradePath: "/login",
+          });
+          return;
+        }
+
+        // ✅ Subscription inactive (if you return 402)
+        if (response.status === 402) {
+          setUiError({
+            type: "sub",
+            message:
+              safeDetailMessage(detail) ||
+              "Subscription inactive. Please manage your subscription.",
+            upgradePath: "/account",
+          });
+          return;
+        }
+
+        const msg = safeDetailMessage(detail) || `Request failed (${response.status})`;
         alert(msg);
         return;
       }
@@ -73,7 +138,6 @@ console.log("✅ API URL:", apiBase);
 
       if (!data.imageUrl) {
         console.warn("[AdGen] No imageUrl in response. Full payload:", data);
-        // Not fatal if your backend returns text-only sometimes, but warn the user
         alert("Ad copy generated, but no image URL was returned.");
       }
 
@@ -164,6 +228,23 @@ console.log("✅ API URL:", apiBase);
         <div className="loading-text">Generating your ad…</div>
       </div>
 
+      {/* ✅ Cap / auth / subscription messages (keeps your styling) */}
+      {uiError && (
+        <div className="result">
+          <h2>Notice</h2>
+          <p className="ad-text">{uiError.message}</p>
+
+          <div className="result-container">
+            <button
+              className="download-button"
+              onClick={() => navigate(uiError.upgradePath || "/account")}
+            >
+              {uiError.type === "auth" ? "Go to Login" : "Go to My Account"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {result && (
         <div className="result">
           <h2>Generated Ad Copy:</h2>
@@ -200,3 +281,4 @@ console.log("✅ API URL:", apiBase);
 }
 
 export default AdGenerator;
+
