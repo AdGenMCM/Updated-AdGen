@@ -7,45 +7,111 @@ import stripe
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from firebase_admin import firestore
 
-from firebase_utils import get_db
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 stripe_router = APIRouter()
 
-# --- Stripe env ---
-STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
-STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
-FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:3000").rstrip("/")
-PRICE_MAP_JSON = (os.getenv("STRIPE_PRICE_MAP_JSON") or "").strip()
 
-if not STRIPE_SECRET_KEY:
-    raise RuntimeError("Missing STRIPE_SECRET_KEY")
-if not PRICE_MAP_JSON:
-    raise RuntimeError("Missing STRIPE_PRICE_MAP_JSON")
+# ----------------------------
+# Firebase (robust init)
+# ----------------------------
+def _init_firebase_once():
+    """
+    Supports FIREBASE_SERVICE_ACCOUNT_JSON as:
+    - a file path (Render Secret Files => /etc/secrets/xxx.json)
+    - OR raw JSON string
+    """
+    try:
+        firebase_admin.get_app()
+        return
+    except ValueError:
+        pass
 
-try:
-    PRICE_MAP: Dict[str, str] = json.loads(PRICE_MAP_JSON)
-except Exception:
-    raise RuntimeError("STRIPE_PRICE_MAP_JSON must be valid JSON")
+    sa_value = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if not sa_value:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not set.")
 
-required_keys = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
-missing = required_keys - set(PRICE_MAP.keys())
-if missing:
-    raise RuntimeError(f"STRIPE_PRICE_MAP_JSON missing keys: {sorted(missing)}")
+    # Case 1: env var is a file path
+    if os.path.exists(sa_value):
+        cred = credentials.Certificate(sa_value)
+        firebase_admin.initialize_app(cred)
+        return
 
-stripe.api_key = STRIPE_SECRET_KEY
+    # Case 2: env var is raw JSON
+    try:
+        sa_dict = json.loads(sa_value)
+        cred = credentials.Certificate(sa_dict)
+        firebase_admin.initialize_app(cred)
+        return
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "FIREBASE_SERVICE_ACCOUNT_JSON must be a valid file path on the server "
+        "or a JSON string containing the service account."
+    )
 
 
-def price_id_to_tier(price_id: Optional[str]) -> Optional[str]:
+def _db():
+    _init_firebase_once()
+    return firestore.client()
+
+
+# ----------------------------
+# Stripe config (lazy)
+# ----------------------------
+_price_map_cache: Optional[Dict[str, str]] = None
+
+
+def _get_stripe_config() -> tuple[str, str, str, Dict[str, str]]:
+    """
+    Returns (stripe_secret_key, webhook_secret, frontend_url, price_map)
+    Lazily validates so the module doesn't crash Render at import time.
+    """
+    global _price_map_cache
+
+    stripe_secret_key = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
+    webhook_secret = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
+    frontend_url = (os.getenv("FRONTEND_URL") or "http://localhost:3000").rstrip("/")
+    price_map_json = (os.getenv("STRIPE_PRICE_MAP_JSON") or "").strip()
+
+    if not stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Server misconfigured: STRIPE_SECRET_KEY missing.")
+    if not price_map_json:
+        raise HTTPException(status_code=500, detail="Server misconfigured: STRIPE_PRICE_MAP_JSON missing.")
+
+    if _price_map_cache is None:
+        try:
+            _price_map_cache = json.loads(price_map_json)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Server misconfigured: STRIPE_PRICE_MAP_JSON invalid JSON.")
+
+        required = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
+        missing = required - set(_price_map_cache.keys())
+        if missing:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server misconfigured: STRIPE_PRICE_MAP_JSON missing keys: {sorted(missing)}",
+            )
+
+    stripe.api_key = stripe_secret_key
+    return stripe_secret_key, webhook_secret, frontend_url, _price_map_cache
+
+
+def _price_id_to_tier(price_id: Optional[str], price_map: Dict[str, str]) -> Optional[str]:
     if not price_id:
         return None
-    for tier, pid in PRICE_MAP.items():
+    for tier, pid in price_map.items():
         if pid == price_id:
             return tier
     return None
 
 
+# ----------------------------
+# API Models
+# ----------------------------
 class CheckoutPayload(BaseModel):
     uid: str
     email: Optional[str] = None
@@ -56,13 +122,18 @@ class PortalPayload(BaseModel):
     customer_id: str
 
 
+# ----------------------------
+# Stripe endpoints (router)
+# ----------------------------
 @stripe_router.post("/create-checkout-session")
 def create_checkout_session(body: CheckoutPayload):
-    if body.tier not in PRICE_MAP:
+    _, _, frontend_url, price_map = _get_stripe_config()
+
+    if body.tier not in price_map:
         raise HTTPException(status_code=400, detail="Invalid tier")
 
-    price_id = PRICE_MAP[body.tier]
-    db = get_db()
+    price_id = price_map[body.tier]
+    db = _db()
 
     user_ref = db.collection("users").document(body.uid)
     user_data = user_ref.get().to_dict() or {}
@@ -79,7 +150,7 @@ def create_checkout_session(body: CheckoutPayload):
     # Map customer -> uid
     db.collection("stripe_customers").document(customer_id).set({"uid": body.uid}, merge=True)
 
-    # Save pending state
+    # Save pending state immediately
     user_ref.set(
         {"stripe": {"customerId": customer_id, "status": "pending", "requestedTier": body.tier}},
         merge=True,
@@ -89,8 +160,8 @@ def create_checkout_session(body: CheckoutPayload):
         mode="subscription",
         customer=customer_id,
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=f"{FRONTEND_URL}/subscribe?success=1&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{FRONTEND_URL}/subscribe?canceled=1",
+        success_url=f"{frontend_url}/subscribe?success=1&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{frontend_url}/subscribe?canceled=1",
         allow_promotion_codes=True,
         automatic_tax={"enabled": True},
         billing_address_collection="required",
@@ -101,16 +172,19 @@ def create_checkout_session(body: CheckoutPayload):
 
 @stripe_router.post("/create-portal-session")
 def create_portal_session(body: PortalPayload):
+    _, _, frontend_url, _ = _get_stripe_config()
+
     session = stripe.billing_portal.Session.create(
         customer=body.customer_id,
-        return_url=f"{FRONTEND_URL}/subscribe",
+        return_url=f"{frontend_url}/subscribe",
     )
     return {"url": session.url}
 
 
 @stripe_router.get("/sync-subscription")
 def sync_subscription(uid: str, session_id: Optional[str] = None, customer_id: Optional[str] = None):
-    db = get_db()
+    _, _, _, price_map = _get_stripe_config()
+    db = _db()
 
     resolved_customer = None
     resolved_sub = None
@@ -129,7 +203,7 @@ def sync_subscription(uid: str, session_id: Optional[str] = None, customer_id: O
         items = (sub.get("items") or {}).get("data") or []
         if items and items[0].get("price"):
             resolved_price_id = items[0]["price"].get("id")
-            resolved_tier = price_id_to_tier(resolved_price_id)
+            resolved_tier = _price_id_to_tier(resolved_price_id, price_map)
 
         resolved_period_end = sub.get("current_period_end")
 
@@ -144,7 +218,7 @@ def sync_subscription(uid: str, session_id: Optional[str] = None, customer_id: O
             items = (sub.get("items") or {}).get("data") or []
             if items and items[0].get("price"):
                 resolved_price_id = items[0]["price"].get("id")
-                resolved_tier = price_id_to_tier(resolved_price_id)
+                resolved_tier = _price_id_to_tier(resolved_price_id, price_map)
 
             resolved_period_end = sub.get("current_period_end")
     else:
@@ -176,15 +250,17 @@ def sync_subscription(uid: str, session_id: Optional[str] = None, customer_id: O
 
 @stripe_router.post("/webhook")
 async def webhook(request: Request):
+    _, webhook_secret, _, price_map = _get_stripe_config()
+
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Webhook error: {e}"})
 
-    db = get_db()
+    db = _db()
     event_type = event.get("type")
     obj = event.get("data", {}).get("object", {})
 
@@ -214,7 +290,7 @@ async def webhook(request: Request):
             items = obj.get("items", {}).get("data", [])
             if items and items[0].get("price"):
                 price_id = items[0]["price"].get("id")
-                tier = price_id_to_tier(price_id)
+                tier = _price_id_to_tier(price_id, price_map)
 
         if event_type == "customer.subscription.deleted":
             status = "inactive"
@@ -235,7 +311,7 @@ async def webhook(request: Request):
                     uid = None
 
             if uid:
-                update = {
+                update: Dict[str, Any] = {
                     "stripe": {
                         "customerId": customer_id,
                         "subscriptionId": sub_id,
@@ -253,6 +329,7 @@ async def webhook(request: Request):
                 db.collection("users").document(uid).set(update, merge=True)
 
     return {"received": True}
+
 
 
 

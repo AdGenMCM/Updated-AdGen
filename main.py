@@ -1,78 +1,65 @@
 # main.py
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 import os
-from openai import OpenAI
-from fastapi.middleware.cors import CORSMiddleware
+import base64
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from openai import OpenAI
+
+# Stripe router (separate file)
 from stripe_server import stripe_router
 
-
-# new: for reading the image and encoding as data URL
-import base64
-
-# IMPORTANT: adjust this import to match your file layout.
-# If your file is at providers/ideogram.py, use:
-from providers.ideogram import generate_ideogram
-# If ideogram.py sits next to main.py, use:
-# from ideogram import generate_ideogram
-
-load_dotenv()
-
-# --- API key checks ---
-openai_key = os.getenv("OPENAI_API_KEY")
-if not openai_key:
-    raise RuntimeError("OPENAI_API_KEY is missing. Check your .env file.")
-
-ideogram_key = os.getenv("IDEOGRAM_API_KEY")
-if not ideogram_key:
-    raise RuntimeError("IDEOGRAM_API_KEY is missing. Check your .env file.")
-
-# Initialize OpenAI client
-client = OpenAI(api_key=openai_key)
-
+load_dotenv(override=True)
 
 app = FastAPI()
 
-app.include_router(stripe_router)
-
-@app.get("/")
-def root():
-    return {
-        "status": "ok",
-        "service": "AdGen backend",
-        "message": "Backend is running"
-    }
-
-# CORS for your local frontend (add your prod origin when you deploy)
-FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
-
+# ---------------- CORS ----------------
+FRONTEND_URL = (os.getenv("FRONTEND_URL") or "").rstrip("/")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://adgenmcm.com",
     "https://www.adgenmcm.com",
 ]
-
-# Keep env var too (optional, but fine)
 if FRONTEND_URL:
     origins.append(FRONTEND_URL)
 
-# Deduplicate in case FRONTEND_URL matches one above
+# Deduplicate
 origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=True,   # keep consistent with what you had deployed
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ---------------- Basic health ----------------
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "AdGen backend"}
 
+# ---------------- OpenAI + Ideogram ----------------
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
 
-# OpenAI stays for ad copy
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY is missing.")
+if not IDEOGRAM_API_KEY:
+    raise RuntimeError("IDEOGRAM_API_KEY is missing.")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# ✅ Make Ideogram import resilient to either layout:
+# - providers/ideogram.py
+# - ideogram.py at repo root
+try:
+    from providers.ideogram import generate_ideogram  # type: ignore
+except Exception:
+    from ideogram import generate_ideogram  # type: ignore
+
 
 class AdRequest(BaseModel):
     product_name: str
@@ -82,10 +69,8 @@ class AdRequest(BaseModel):
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
 
+
 def size_to_aspect_ratio(size: str) -> str:
-    """
-    Map your UI's size to Ideogram's aspect ratios.
-    """
     s = size.lower().replace(" ", "")
     if s in ("1024x1792", "720x1280", "1080x1920"):
         return "9x16"
@@ -93,13 +78,13 @@ def size_to_aspect_ratio(size: str) -> str:
         return "16x9"
     return "1x1"
 
+
 @app.post("/generate-ad")
-def generate_ad(request: AdRequest):
-    # 1) Generate ad copy (OpenAI)
+def generate_ad(payload: AdRequest):
     prompt = (
-        f"Create a compelling {request.tone.lower()} ad for {request.product_name}, "
-        f'a product described as: "{request.description}". '
-        f"Target it to {request.audience} on {request.platform}. Make it short and catchy."
+        f"Create a compelling {payload.tone.lower()} ad for {payload.product_name}, "
+        f'described as: "{payload.description}". '
+        f"Target it to {payload.audience} on {payload.platform}. Make it short and catchy."
     )
 
     try:
@@ -115,37 +100,28 @@ def generate_ad(request: AdRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")
 
-    # 2) Generate the image via Ideogram provider
-    aspect_ratio = size_to_aspect_ratio(request.imageSize)
-
-    # If you DON'T want text rendered in the image, remove the quotes & ad_text here.
-
+    aspect_ratio = size_to_aspect_ratio(payload.imageSize)
     visual_prompt = (
-     f"Studio product photograph for a {request.tone.lower()} {request.platform} ad "
-    f"featuring {request.product_name}. Clean composition, brand-safe, "
-    f"gradient or soft background, negative space reserved for headline area, "
-    f"no overlays, no labels on background, natural lighting, high contrast, balanced framing."
-    )
-
-    negative_prompt = (
-        "text, letters, words, numbers, typography, captions, hashtags, emojis, watermarks, "
-    "logos, brandmarks, signage, packaging text, stickers, UI text, labels, handwriting"
+        f"Studio product photograph for a {payload.tone.lower()} {payload.platform} ad "
+        f"featuring {payload.product_name}. Clean composition, brand-safe, "
+        f"gradient or soft background, negative space reserved for headline area, "
+        f"no overlays, no labels on background, natural lighting, high contrast, balanced framing."
     )
 
     try:
-        # providers/ideogram.py returns a list of local file paths
         paths = generate_ideogram(
             prompt=visual_prompt,
             aspect_ratio=aspect_ratio,
             rendering_speed="DEFAULT",
-            num_images=1
+            num_images=1,
         )
         if not paths:
             raise HTTPException(status_code=502, detail="Ideogram returned no images")
+
         image_path = paths[0]
-        # read file and return as base64 data URL (so your frontend <img src=...> works)
         with open(image_path, "rb") as f:
             img_bytes = f.read()
+
         b64 = base64.b64encode(img_bytes).decode("utf-8")
         data_url = f"data:image/png;base64,{b64}"
     except HTTPException:
@@ -154,3 +130,8 @@ def generate_ad(request: AdRequest):
         raise HTTPException(status_code=502, detail=f"Ideogram image generation failed: {e}")
 
     return {"text": ad_text, "imageUrl": data_url}
+
+
+# ---------------- Stripe routes (kept separate) ----------------
+# This is the line that makes /create-checkout-session etc appear in /docs
+app.include_router(stripe_router)
