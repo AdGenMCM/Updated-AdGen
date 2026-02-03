@@ -5,9 +5,8 @@ import os
 import requests
 from fastapi import HTTPException
 
-
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -18,6 +17,9 @@ from stripe_server import stripe_router
 # Firebase auth + Firestore
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
 from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status
+
+# ✅ NEW: admin dependency
+from admin_guard import admin_required
 
 load_dotenv(override=True)
 
@@ -49,6 +51,13 @@ app.add_middleware(
 def root():
     return {"status": "ok", "service": "AdGen backend"}
 
+
+# ✅ OPTIONAL: admin-only health route (safe to remove)
+@app.get("/admin/health", dependencies=[Depends(admin_required)])
+def admin_health():
+    return {"ok": True, "admin": True}
+
+
 # ---------------- OpenAI + Ideogram ----------------
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
@@ -74,6 +83,7 @@ class AdRequest(BaseModel):
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
 
+
 class ContactForm(BaseModel):
     name: str
     email: str
@@ -89,6 +99,10 @@ def size_to_aspect_ratio(size: str) -> str:
     return "1x1"
 
 
+def is_admin(claims: dict) -> bool:
+    return claims.get("role") == "admin"
+
+
 def require_user(authorization: str | None):
     token = get_bearer_token(authorization)
     if not token:
@@ -99,7 +113,7 @@ def require_user(authorization: str | None):
         email = claims.get("email")
         if not uid:
             raise HTTPException(status_code=401, detail="Invalid auth token (no uid).")
-        return uid, email
+        return uid, email, claims
     except HTTPException:
         raise
     except Exception:
@@ -108,7 +122,7 @@ def require_user(authorization: str | None):
 
 @app.get("/usage")
 def get_usage(authorization: str | None = Header(default=None)):
-    uid, _ = require_user(authorization)
+    uid, _email, _claims = require_user(authorization)
     db = get_db()
 
     user_snap = db.collection("users").document(uid).get()
@@ -193,7 +207,8 @@ def send_contact_email(payload: ContactForm):
 @app.post("/generate-ad")
 def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
     # 1) Auth
-    uid, _email = require_user(authorization)
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
 
     # 2) Load tier/status from Firestore
     db = get_db()
@@ -201,31 +216,36 @@ def generate_ad(payload: AdRequest, authorization: str | None = Header(default=N
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
-    # If you want to require an active subscription for non-trial tiers,
-    # you can tighten this later. For now:
-    # - allow trialing/active
-    # - allow missing tier => treat as trial cap
-    allowed_statuses = {"active", "trialing"}
-    if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-        raise HTTPException(
-            status_code=402,
-            detail="Subscription inactive. Please subscribe to continue.",
-        )
+    # ✅ Admin bypasses subscription gating
+    if not admin:
+        # If you want to require an active subscription for non-trial tiers,
+        # you can tighten this later. For now:
+        # - allow trialing/active
+        # - allow missing tier => treat as trial cap
+        allowed_statuses = {"active", "trialing"}
+        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
 
-    # 3) Cap enforcement (transactional)
-    cap_result = check_and_increment_usage(db, uid, tier)
-    if not cap_result["allowed"]:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
-                "used": cap_result["used"],
-                "cap": cap_result["cap"],
-                "month": cap_result["month"],
-                # Frontend can send user to /account for Stripe portal button
-                "upgradePath": "/account",
-            },
-        )
+        # 3) Cap enforcement (transactional)
+        cap_result = check_and_increment_usage(db, uid, tier)
+        if not cap_result["allowed"]:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
+                    "used": cap_result["used"],
+                    "cap": cap_result["cap"],
+                    "month": cap_result["month"],
+                    # Frontend can send user to /account for Stripe portal button
+                    "upgradePath": "/account",
+                },
+            )
+    else:
+        # ✅ For admins, skip caps entirely but return a consistent shape
+        cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
     # 4) Generate text (OpenAI)
     prompt = (
@@ -285,13 +305,14 @@ def generate_ad(payload: AdRequest, authorization: str | None = Header(default=N
             "used": cap_result["used"],
             "cap": cap_result["cap"],
             "month": cap_result["month"],
-            "remaining": max(0, cap_result["cap"] - cap_result["used"]),
+            "remaining": max(0, (cap_result["cap"] or 0) - (cap_result["used"] or 0)),
         },
     }
 
 
 # ---------------- Stripe routes (kept separate) ----------------
 app.include_router(stripe_router)
+
 
 
 

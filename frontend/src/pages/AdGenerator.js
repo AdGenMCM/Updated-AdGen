@@ -40,6 +40,9 @@ function AdGenerator() {
     setResult(null);
     setUiError(null);
 
+    // ✅ Give React a frame to paint the loading overlay before alerts/returns/navigation
+    await new Promise((r) => setTimeout(r, 0));
+
     // Use env var in production; fallback to localhost for local dev
     const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
 
@@ -55,6 +58,7 @@ function AdGenerator() {
       const user = auth.currentUser;
       if (!user) {
         alert("You must be logged in to generate an ad.");
+        setLoading(false); // ✅ ensure spinner stops before redirect
         navigate("/login");
         return;
       }
@@ -224,8 +228,8 @@ function AdGenerator() {
         role="status"
         aria-live="polite"
       >
-        <div className="spinner" />
-        <div className="loading-text">Generating your ad…</div>
+        <div className="adgen-spinner" />
+        <div className="loading-text">Generating your ad! Please Wait...</div>
       </div>
 
       {/* ✅ Cap / auth / subscription messages (keeps your styling) */}
@@ -281,5 +285,6 @@ function AdGenerator() {
 }
 
 export default AdGenerator;
+
 
 
