@@ -68,7 +68,7 @@ export default function Navbar() {
     { to: "/", label: "Home" },
     { to: "/about", label: "About" },
     { to: "/pricing", label: "Pricing" },
-    { to: "/contact", label: "Contact" },
+    { to: "/contact", label: "Support" },
 
     ...(user
       ? [

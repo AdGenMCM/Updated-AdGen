@@ -167,6 +167,7 @@ export default function MyAccount() {
           </div>
 
           <p className="acctTiny">Billing portal opens in a new tab.</p>
+           <p className="acctTiny"><i>* May need to allow pop-ups in your browser settings. Last case scenario, try a different browser *</i></p>
         </div>
 
         {/* ✅ Usage section from GET /usage */}
@@ -199,6 +200,11 @@ export default function MyAccount() {
                 <span className="acctLabel">Remaining</span>
                 <span className="acctValue">{usage.remaining}</span>
               </div>
+
+              <div className="acctRow">
+                <span className="acctLabel"><i>* Usage resets on the first of each month *</i></span>
+              </div>
+
 
               {usage.remaining === 0 && (
                 <p className="acctTiny">
