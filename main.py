@@ -1,8 +1,10 @@
 # main.py
 import os
 import base64
-import smtplib
-from email.message import EmailMessage
+import os
+import requests
+from fastapi import HTTPException
+
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header
@@ -118,51 +120,73 @@ def get_usage(authorization: str | None = Header(default=None)):
 
 @app.post("/contact")
 def send_contact_email(payload: ContactForm):
-    # Reads Gmail SMTP settings from environment variables.
-    # Required:
-    #   EMAIL_HOST=smtp.gmail.com
-    #   EMAIL_PORT=587
-    #   EMAIL_USER=adgenmcm@gmail.com
-    #   EMAIL_PASS=<16-char Gmail App Password>
-    host = (os.getenv("EMAIL_HOST") or "").strip()
-    port_raw = (os.getenv("EMAIL_PORT") or "").strip()
-    user = (os.getenv("EMAIL_USER") or "").strip()
-    app_pass = (os.getenv("EMAIL_PASS") or "").strip()
+    api_key = os.getenv("SENDGRID_API_KEY")
+    from_email = os.getenv("CONTACT_FROM_EMAIL")
+    to_email = os.getenv("CONTACT_TO_EMAIL", from_email)
 
-    if not host or not port_raw or not user or not app_pass:
-        raise HTTPException(
-            status_code=500,
-            detail="Email service is not configured (missing EMAIL_HOST/EMAIL_PORT/EMAIL_USER/EMAIL_PASS).",
-        )
+    if not api_key:
+        raise HTTPException(status_code=500, detail="SENDGRID_API_KEY not configured")
+    if not from_email:
+        raise HTTPException(status_code=500, detail="CONTACT_FROM_EMAIL not configured")
+
+    subject = f"New Contact Form Message from {payload.name}"
+    text_body = (
+        f"New contact form submission:\n\n"
+        f"Name: {payload.name}\n"
+        f"Email: {payload.email}\n\n"
+        f"Message:\n{payload.message}\n"
+    )
+
+    sendgrid_url = "https://api.sendgrid.com/v3/mail/send"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "personalizations": [
+            {
+                "to": [{"email": to_email}],
+                "subject": subject,
+                # Reply goes to the user who filled out the form
+                "headers": {"Reply-To": payload.email},
+            }
+        ],
+        "from": {
+            "email": from_email,
+            "name": "AdGen MCM",
+        },
+        "content": [
+            {
+                "type": "text/plain",
+                "value": text_body,
+            }
+        ],
+    }
 
     try:
-        port = int(port_raw)
-    except ValueError:
-        raise HTTPException(status_code=500, detail="EMAIL_PORT must be an integer.")
-
-    try:
-        msg = EmailMessage()
-        msg["Subject"] = f"New Contact Form Message from {payload.name}"
-        msg["From"] = user
-        msg["To"] = "adgenmcm@gmail.com"
-        msg["Reply-To"] = payload.email
-
-        msg.set_content(
-            "New contact form submission:\n\n"
-            f"Name: {payload.name}\n"
-            f"Email: {payload.email}\n\n"
-            "Message:\n"
-            f"{payload.message}\n"
+        response = requests.post(
+            sendgrid_url,
+            headers=headers,
+            json=data,
+            timeout=15,
         )
 
-        with smtplib.SMTP(host, port) as server:
-            server.starttls()
-            server.login(user, app_pass)
-            server.send_message(msg)
+        # SendGrid returns 202 Accepted on success
+        if response.status_code != 202:
+            raise HTTPException(
+                status_code=500,
+                detail=f"SendGrid error: {response.status_code} {response.text}",
+            )
 
         return {"success": True}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send contact email: {str(e)}",
+        )
 
 
 @app.post("/generate-ad")

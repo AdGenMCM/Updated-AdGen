@@ -25,6 +25,8 @@
   font-size: 28px;
   letter-spacing: -0.02em;
   color: #0f172a;
+  font-weight: 700;
+  text-align: center;
 }
 
 .contact__subtitle {
@@ -86,7 +88,7 @@
   height: 44px;
   border: 1px solid #0f172a;
   border-radius: 12px;
-  background: #0f172a;
+  background: #4a90e2;;
   color: #ffffff;
   font-weight: 700;
   font-size: 14px;
@@ -101,6 +103,7 @@
 .contact__button:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+  background-color: #357ab8;
 }
 
 .contact__button:disabled {
