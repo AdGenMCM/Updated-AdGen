@@ -147,13 +147,14 @@ def send_contact_email(payload: ContactForm):
             {
                 "to": [{"email": to_email}],
                 "subject": subject,
-                # Reply goes to the user who filled out the form
-                "headers": {"Reply-To": payload.email},
             }
         ],
         "from": {
             "email": from_email,
             "name": "AdGen MCM",
+        },
+        "reply_to": {
+            "email": payload.email,
         },
         "content": [
             {
@@ -291,6 +292,10 @@ def generate_ad(payload: AdRequest, authorization: str | None = Header(default=N
 
 # ---------------- Stripe routes (kept separate) ----------------
 app.include_router(stripe_router)
+
+
+
+
 
 
 
