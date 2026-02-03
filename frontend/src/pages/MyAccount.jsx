@@ -5,16 +5,6 @@ import { createPortalSession } from "../api/payments";
 import { auth } from "../firebaseConfig"; // adjust ONLY if your firebaseConfig path differs
 import "./MyAccount.css";
 
-function formatUnixToLocalDateTime(unixSeconds) {
-  if (!unixSeconds || typeof unixSeconds !== "number") return "—";
-  try {
-    const d = new Date(unixSeconds * 1000);
-    return d.toLocaleString();
-  } catch {
-    return "—";
-  }
-}
-
 export default function MyAccount() {
   const navigate = useNavigate();
   const { currentUser, stripe } = useAuth();
@@ -23,10 +13,11 @@ export default function MyAccount() {
   const [error, setError] = useState("");
 
   // Usage state
-  const [usage, setUsage] = useState(null); // { used, cap, remaining, periodStart, periodEnd } OR {month,...}
+  const [usage, setUsage] = useState(null); // { used, cap, month, remaining }
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
 
+  // API base
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
   async function fetchUsage() {
@@ -47,7 +38,9 @@ export default function MyAccount() {
 
       const res = await fetch(`${apiBase}/usage`, {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       let data = null;
@@ -73,6 +66,7 @@ export default function MyAccount() {
 
   useEffect(() => {
     if (!currentUser) return;
+    // Fetch usage when account page loads
     fetchUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
@@ -114,15 +108,6 @@ export default function MyAccount() {
       setLoadingPortal(false);
     }
   }
-
-  // ✅ Billing-cycle reset date display:
-  // If you are using Stripe-cycle caps, /usage returns periodEnd (unix seconds).
-  const resetsOn =
-    usage?.periodEnd && typeof usage.periodEnd === "number"
-      ? formatUnixToLocalDateTime(usage.periodEnd)
-      : usage?.month
-      ? `End of month (${usage.month})`
-      : "—";
 
   return (
     <div className="acctPage">
@@ -184,6 +169,7 @@ export default function MyAccount() {
           <p className="acctTiny">Billing portal opens in a new tab.</p>
         </div>
 
+        {/* ✅ Usage section from GET /usage */}
         <div className="acctSection">
           <h2 className="acctH2">Usage</h2>
 
@@ -198,6 +184,11 @@ export default function MyAccount() {
           {usage ? (
             <>
               <div className="acctRow">
+                <span className="acctLabel">This month</span>
+                <span className="acctValue">{usage.month || "—"}</span>
+              </div>
+
+              <div className="acctRow">
                 <span className="acctLabel">Used</span>
                 <span className="acctValue">
                   {usage.used}/{usage.cap}
@@ -209,24 +200,22 @@ export default function MyAccount() {
                 <span className="acctValue">{usage.remaining}</span>
               </div>
 
-              <div className="acctRow">
-                <span className="acctLabel">Resets on</span>
-                <span className="acctValue">{resetsOn}</span>
-              </div>
-
               {usage.remaining === 0 && (
                 <p className="acctTiny">
-                  You’ve reached your limit. Upgrade to continue generating ads this billing period.
+                  You’ve reached your limit. Upgrade to continue generating ads this month.
                 </p>
               )}
             </>
           ) : (
-            <p className="acctTiny">{usageLoading ? "Loading usage…" : "Usage data not available yet."}</p>
+            <p className="acctTiny">
+              {usageLoading ? "Loading usage…" : "Usage data not available yet."}
+            </p>
           )}
         </div>
       </div>
     </div>
   );
 }
+
 
 

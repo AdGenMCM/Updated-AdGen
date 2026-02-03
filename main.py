@@ -1,35 +1,26 @@
 # main.py
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
 import os
-from openai import OpenAI
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import base64
 
-from providers.ideogram import generate_ideogram
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from openai import OpenAI
 
-from auth_helpers import get_db, get_bearer_token, verify_firebase_token
-from usage_caps import check_and_increment_usage, peek_usage
+# Stripe router (separate file)
 from stripe_server import stripe_router
 
+# Firebase auth + Firestore
+from auth_helpers import get_db, get_bearer_token, verify_firebase_token
+from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status
+
 load_dotenv(override=True)
-
-# --- API key checks ---
-openai_key = os.getenv("OPENAI_API_KEY")
-if not openai_key:
-    raise RuntimeError("OPENAI_API_KEY is missing. Check your .env file.")
-
-ideogram_key = os.getenv("IDEOGRAM_API_KEY")
-if not ideogram_key:
-    raise RuntimeError("IDEOGRAM_API_KEY is missing. Check your .env file.")
-
-client = OpenAI(api_key=openai_key)
 
 app = FastAPI()
 
 # ---------------- CORS ----------------
-FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
+FRONTEND_URL = (os.getenv("FRONTEND_URL") or "").rstrip("/")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -38,6 +29,7 @@ origins = [
 ]
 if FRONTEND_URL:
     origins.append(FRONTEND_URL)
+
 origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
@@ -48,13 +40,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Stripe routes on same service/domain
-app.include_router(stripe_router)
-
-
+# ---------------- Basic health ----------------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "AdGen backend", "message": "Backend is running"}
+    return {"status": "ok", "service": "AdGen backend"}
+
+# ---------------- OpenAI + Ideogram ----------------
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
+
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY is missing.")
+if not IDEOGRAM_API_KEY:
+    raise RuntimeError("IDEOGRAM_API_KEY is missing.")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+try:
+    from providers.ideogram import generate_ideogram  # type: ignore
+except Exception:
+    from ideogram import generate_ideogram  # type: ignore
 
 
 class AdRequest(BaseModel):
@@ -92,27 +97,6 @@ def require_user(authorization: str | None):
         raise HTTPException(status_code=401, detail="Invalid or expired auth token.")
 
 
-def read_stripe_context(user_doc: dict):
-    stripe = (user_doc or {}).get("stripe") or {}
-    tier = stripe.get("tier") or stripe.get("requestedTier")  # fallback
-    status = (stripe.get("status") or "inactive").lower()
-
-    ps = stripe.get("currentPeriodStart")
-    pe = stripe.get("currentPeriodEnd")
-
-    try:
-        ps = int(ps) if ps is not None else None
-    except Exception:
-        ps = None
-
-    try:
-        pe = int(pe) if pe is not None else None
-    except Exception:
-        pe = None
-
-    return tier, status, ps, pe
-
-
 @app.get("/usage")
 def get_usage(authorization: str | None = Header(default=None)):
     uid, _ = require_user(authorization)
@@ -120,47 +104,53 @@ def get_usage(authorization: str | None = Header(default=None)):
 
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
 
-    tier, _status, ps, pe = read_stripe_context(user_doc)
-    return peek_usage(db, uid, tier, ps, pe)
+    return peek_usage(db, uid, tier)
 
 
 @app.post("/generate-ad")
-def generate_ad(request: AdRequest, authorization: str | None = Header(default=None)):
+def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
     # 1) Auth
     uid, _email = require_user(authorization)
 
-    # 2) Read subscription context (tier/status/billing cycle)
+    # 2) Load tier/status from Firestore
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    tier, status, ps, pe = read_stripe_context(user_doc)
+    tier, status = get_tier_and_status(user_doc)
 
-    # Optional: require paid users to be active/trialing; trial is allowed without subscription
-    if tier and tier != "trial_monthly":
-        if status not in {"active", "trialing"}:
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+    # If you want to require an active subscription for non-trial tiers,
+    # you can tighten this later. For now:
+    # - allow trialing/active
+    # - allow missing tier => treat as trial cap
+    allowed_statuses = {"active", "trialing"}
+    if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+        raise HTTPException(
+            status_code=402,
+            detail="Subscription inactive. Please subscribe to continue.",
+        )
 
-    # 3) Cap enforcement aligned to Stripe billing cycle
-    cap_result = check_and_increment_usage(db, uid, tier, ps, pe)
+    # 3) Cap enforcement (transactional)
+    cap_result = check_and_increment_usage(db, uid, tier)
     if not cap_result["allowed"]:
         raise HTTPException(
             status_code=429,
             detail={
-                "message": "You’ve reached your billing-cycle limit. Upgrade to continue.",
+                "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
                 "used": cap_result["used"],
                 "cap": cap_result["cap"],
-                "periodStart": cap_result.get("periodStart"),
-                "periodEnd": cap_result.get("periodEnd"),
+                "month": cap_result["month"],
+                # Frontend can send user to /account for Stripe portal button
                 "upgradePath": "/account",
             },
         )
 
-    # 4) Generate ad copy (OpenAI)
+    # 4) Generate text (OpenAI)
     prompt = (
-        f"Create a compelling {request.tone.lower()} ad for {request.product_name}, "
-        f'a product described as: "{request.description}". '
-        f"Target it to {request.audience} on {request.platform}. Make it short and catchy."
+        f"Create a compelling {payload.tone.lower()} ad for {payload.product_name}, "
+        f'described as: "{payload.description}". '
+        f"Target it to {payload.audience} on {payload.platform}. Make it short and catchy."
     )
 
     try:
@@ -176,19 +166,14 @@ def generate_ad(request: AdRequest, authorization: str | None = Header(default=N
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")
 
-    # 5) Generate image via Ideogram provider
-    aspect_ratio = size_to_aspect_ratio(request.imageSize)
-
+    # 5) Generate image (Ideogram)
+    aspect_ratio = size_to_aspect_ratio(payload.imageSize)
     visual_prompt = (
-        f"Studio product photograph for a {request.tone.lower()} {request.platform} ad "
-        f"featuring {request.product_name}. Clean composition, brand-safe, "
+        f"Studio product photograph for a {payload.tone.lower()} {payload.platform} ad "
+        f"featuring {payload.product_name}. Clean composition, brand-safe, "
         f"gradient or soft background, negative space reserved for headline area, "
-        f"no overlays, no labels on background, natural lighting, high contrast, balanced framing."
-    )
-
-    negative_prompt = (
-        "text, letters, words, numbers, typography, captions, hashtags, emojis, watermarks, "
-        "logos, brandmarks, signage, packaging text, stickers, UI text, labels, handwriting"
+        f"no overlays, no labels on background, no letters, no lettering, no text, no words, "
+        f"natural lighting, high contrast, balanced framing."
     )
 
     try:
@@ -197,8 +182,6 @@ def generate_ad(request: AdRequest, authorization: str | None = Header(default=N
             aspect_ratio=aspect_ratio,
             rendering_speed="DEFAULT",
             num_images=1,
-            # if your provider supports negative prompts, keep this line; otherwise remove it
-            negative_prompt=negative_prompt,  # safe even if ignored by provider
         )
         if not paths:
             raise HTTPException(status_code=502, detail="Ideogram returned no images")
@@ -206,25 +189,11 @@ def generate_ad(request: AdRequest, authorization: str | None = Header(default=N
         image_path = paths[0]
         with open(image_path, "rb") as f:
             img_bytes = f.read()
+
         b64 = base64.b64encode(img_bytes).decode("utf-8")
         data_url = f"data:image/png;base64,{b64}"
     except HTTPException:
         raise
-    except TypeError:
-        # Some provider wrappers don't accept negative_prompt
-        paths = generate_ideogram(
-            prompt=visual_prompt,
-            aspect_ratio=aspect_ratio,
-            rendering_speed="DEFAULT",
-            num_images=1,
-        )
-        if not paths:
-            raise HTTPException(status_code=502, detail="Ideogram returned no images")
-        image_path = paths[0]
-        with open(image_path, "rb") as f:
-            img_bytes = f.read()
-        b64 = base64.b64encode(img_bytes).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64}"
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ideogram image generation failed: {e}")
 
@@ -234,9 +203,13 @@ def generate_ad(request: AdRequest, authorization: str | None = Header(default=N
         "usage": {
             "used": cap_result["used"],
             "cap": cap_result["cap"],
+            "month": cap_result["month"],
             "remaining": max(0, cap_result["cap"] - cap_result["used"]),
-            "periodStart": cap_result.get("periodStart"),
-            "periodEnd": cap_result.get("periodEnd"),
         },
     }
+
+
+# ---------------- Stripe routes (kept separate) ----------------
+app.include_router(stripe_router)
+
 

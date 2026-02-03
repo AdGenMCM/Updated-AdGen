@@ -64,3 +64,4 @@ def verify_firebase_token(id_token: str) -> Dict[str, Any]:
     """Verify Firebase ID token and return decoded claims."""
     init_firebase_once()
     return fb_auth.verify_id_token(id_token)
+
