@@ -148,8 +148,7 @@ export default function Pricing() {
                 <h3 className="tier-section-title">Includes</h3>
                 <ul className="tier-includes">
                   <li>AI ad text & image generation</li>
-                  <li>Ad editor</li>
-                  <li>Generation history</li>
+                  <li>Text Editor</li>
                   <li>Email support</li>
                 </ul>
               </div>

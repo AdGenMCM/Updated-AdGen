@@ -91,6 +91,15 @@ export default function Navbar() {
     { to: "/pricing", label: "Products & Pricing" },
     { to: "/contact", label: "Contact Us" },
 
+    // ✅ Mobile-only paid links inside dropdown
+    ...(canAccessPaid
+      ? [
+          { divider: true, mobileOnly: true },
+          { to: "/adgenerator", label: "Ad Generator", mobileOnly: true },
+          { to: "/texteditor", label: "Text Editor", mobileOnly: true },
+        ]
+      : []),
+
     ...(user
       ? [
           { divider: true },
@@ -130,13 +139,23 @@ export default function Navbar() {
               <div className="dropdown-menu dropdown-menu-right" role="menu">
                 {dropdownItems.map((item, idx) => {
                   if (item.divider) {
-                    return <div className="dropdown-divider" key={`div-${idx}`} />;
+                    return (
+                      <div
+                        className={`dropdown-divider ${
+                          item.mobileOnly ? "mobile-only" : ""
+                        }`}
+                        key={`div-${idx}`}
+                      />
+                    );
                   }
+
                   return (
                     <Link
                       key={`${item.to}-${idx}`}
                       to={item.to}
-                      className="dropdown-item"
+                      className={`dropdown-item ${
+                        item.mobileOnly ? "mobile-only" : ""
+                      }`}
                       role="menuitem"
                       onClick={() => setInfoOpen(false)}
                     >
@@ -148,7 +167,7 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Paid features links */}
+          {/* Paid features links (desktop only via CSS) */}
           {canAccessPaid && (
             <>
               <NavLink
@@ -193,6 +212,7 @@ export default function Navbar() {
     </nav>
   );
 }
+
 
 
 
