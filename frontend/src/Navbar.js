@@ -88,7 +88,7 @@ export default function Navbar() {
   const dropdownItems = [
     { to: "/", label: "Home" },
     { to: "/about", label: "About" },
-    { to: "/pricing", label: "Pricing" },
+    { to: "/pricing", label: "Products & Pricing" },
     { to: "/contact", label: "Contact Us" },
 
     ...(user

@@ -237,7 +237,7 @@ function AdGenerator() {
       {/* ✅ Cap / auth / subscription messages (keeps your styling) */}
       {uiError && (
         <div className="result">
-          <h2 className="notice">Notice</h2>
+          <h2 className="notice">NOTICE:</h2>
           <p className="ad-text">{uiError.message}</p>
 
           <div className="result-container">

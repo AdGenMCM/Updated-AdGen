@@ -1,0 +1,165 @@
+.about-page {
+  line-height: 1.6;
+}
+
+/* Containers */
+.about-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Buttons (match Home) */
+.btn {
+  display: inline-block;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  text-decoration: none;
+  font-weight: 800;
+  color: #0f172a;
+  background: #fff;
+}
+
+.btn.primary {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
+.text-link {
+  text-decoration: underline;
+  font-weight: 800;
+  color: inherit;
+}
+
+/* Hero */
+.about-hero {
+  padding: 70px 0 40px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.about-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.about-title {
+  margin: 12px 0 10px;
+  font-size: 44px;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 480px) {
+  .about-title {
+    font-size: 34px;
+  }
+}
+
+.about-subtitle {
+  margin: 0 0 16px;
+  max-width: 820px;
+  opacity: 0.85;
+}
+
+.about-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Sections */
+.about-section {
+  padding: 56px 0;
+}
+
+.about-section.alt {
+  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.about-h2 {
+  margin: 0 0 14px;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+
+/* Grid */
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+@media (min-width: 900px) {
+  .about-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+.about-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff;
+}
+
+.about-card h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.about-card p {
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* List */
+.about-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.about-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 16px;
+  background: #fff;
+}
+
+@media (max-width: 560px) {
+  .about-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.about-row strong {
+  font-weight: 900;
+}
+
+.about-row span {
+  opacity: 0.85;
+}
+
+/* Bottom CTA */
+.about-bottom-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}

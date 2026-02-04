@@ -1,0 +1,61 @@
+/* src/pages/privacy.css */
+
+/* Page layout */
+.legal-page {
+  padding: 56px 20px;
+}
+
+.legal-container {
+  max-width: 900px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Header */
+.legal-header {
+  margin-bottom: 28px;
+}
+
+.legal-title {
+  font-size: 40px;
+  margin: 0 0 6px;
+}
+
+.legal-meta {
+  margin: 0;
+  opacity: 0.75;
+}
+
+/* Sections */
+.legal-section {
+  margin-top: 22px;
+}
+
+.legal-h2 {
+  font-size: 20px;
+  margin: 0 0 10px;
+}
+
+.legal-h3 {
+  font-size: 16px;
+  margin: 14px 0 8px;
+}
+
+.legal-p {
+  margin: 0 0 10px;
+}
+
+/* Lists */
+.legal-ul {
+  margin: 0 0 10px 18px;
+  padding-left: 0;
+}
+
+.legal-li {
+  margin: 6px 0;
+}
+
+/* Links */
+.legal-link {
+  text-decoration: underline;
+}

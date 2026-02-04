@@ -104,3 +104,24 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
+.adgen-container .download-button {
+  display: block;
+  margin: 1rem auto 0;
+  padding: 0.6rem 1.2rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.adgen-container .download-button:hover {
+  background-color: #0056b3;
+}
+.notice {
+  color: #b22222;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
