@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
 import { auth } from "../firebaseConfig"; // ✅ adjust ONLY if your firebaseConfig path differs
 
+
 function AdGenerator() {
   const navigate = useNavigate();
 
@@ -20,6 +21,7 @@ function AdGenerator() {
 
   // For cap / auth errors
   const [uiError, setUiError] = useState(null);
+
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -157,6 +159,13 @@ function AdGenerator() {
   return (
     <div className="adgen-container">
       <h1 className="app-title">AI Ad Generator</h1>
+      <button
+  onClick={copyIdToken}
+  style={{ marginBottom: "16px", background: "#eee" }}
+>
+  Copy Firebase ID Token (TEMP)
+</button>
+
       <p className="decription">
         Please fill out the fields below as accuratly as possible to allow for
         the best possible generation. It will return an AD Image and a
