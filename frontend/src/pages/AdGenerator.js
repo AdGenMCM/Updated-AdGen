@@ -159,14 +159,7 @@ function AdGenerator() {
   return (
     <div className="adgen-container">
       <h1 className="app-title">AI Ad Generator</h1>
-      <button
-  onClick={copyIdToken}
-  style={{ marginBottom: "16px", background: "#eee" }}
->
-  Copy Firebase ID Token (TEMP)
-</button>
-
-      <p className="decription">
+      <p className="description">
         Please fill out the fields below as accuratly as possible to allow for
         the best possible generation. It will return an AD Image and a
         description that will help increase post engagement!
@@ -244,7 +237,7 @@ function AdGenerator() {
       {/* ✅ Cap / auth / subscription messages (keeps your styling) */}
       {uiError && (
         <div className="result">
-          <h2>Notice</h2>
+          <h2 className="notice">Notice</h2>
           <p className="ad-text">{uiError.message}</p>
 
           <div className="result-container">

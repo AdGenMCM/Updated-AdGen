@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { signOut, onAuthStateChanged, getIdTokenResult } from "firebase/auth";
 import { auth } from "./firebaseConfig";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import "./Navbar.css";
@@ -9,7 +9,8 @@ const db = getFirestore();
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
-  const [subStatus, setSubStatus] = useState("checking"); // checking | inactive | pending | active
+  const [subStatus, setSubStatus] = useState("checking"); // checking | inactive | pending | active | trialing
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Dropdown state
   const [infoOpen, setInfoOpen] = useState(false);
@@ -17,7 +18,24 @@ export default function Navbar() {
 
   // Auth state
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, setUser);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+
+      if (!u) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        // Force refresh so updated custom claims show up
+        const tokenResult = await getIdTokenResult(u, true);
+        setIsAdmin(tokenResult?.claims?.role === "admin");
+      } catch (e) {
+        console.warn("[Navbar] Failed to read token claims:", e);
+        setIsAdmin(false);
+      }
+    });
+
     return () => unsub();
   }, []);
 
@@ -42,7 +60,10 @@ export default function Navbar() {
   }, [user]);
 
   const verified = !!user && user.emailVerified;
-  const isActive = subStatus === "active";
+  const isActive = subStatus === "active" || subStatus === "trialing";
+
+  // ✅ Admin should see everything regardless of subscription / verification
+  const canAccessPaid = !!user && (isAdmin || (verified && isActive));
 
   // Close dropdown on outside click + Escape
   useEffect(() => {
@@ -128,12 +149,20 @@ export default function Navbar() {
           </div>
 
           {/* Paid features links */}
-          {verified && isActive && (
+          {canAccessPaid && (
             <>
-              <NavLink to="/adgenerator" className="nav-link" onClick={() => setInfoOpen(false)}>
+              <NavLink
+                to="/adgenerator"
+                className="nav-link"
+                onClick={() => setInfoOpen(false)}
+              >
                 Ad Generator
               </NavLink>
-              <NavLink to="/texteditor" className="nav-link" onClick={() => setInfoOpen(false)}>
+              <NavLink
+                to="/texteditor"
+                className="nav-link"
+                onClick={() => setInfoOpen(false)}
+              >
                 Text Editor
               </NavLink>
             </>
@@ -151,7 +180,11 @@ export default function Navbar() {
               Logout
             </button>
           ) : (
-            <NavLink to="/login" className="btn primary" onClick={() => setInfoOpen(false)}>
+            <NavLink
+              to="/login"
+              className="btn primary"
+              onClick={() => setInfoOpen(false)}
+            >
               Login
             </NavLink>
           )}
@@ -160,6 +193,7 @@ export default function Navbar() {
     </nav>
   );
 }
+
 
 
 

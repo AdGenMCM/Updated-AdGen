@@ -29,6 +29,8 @@ export default function PaidRoute() {
       try {
         // Force refresh so newly-set custom claims appear
         const tokenResult = await getIdTokenResult(currentUser, true);
+        console.log("[PaidRoute] claims:", tokenResult.claims);
+        console.log("[PaidRoute] isAdmin:", tokenResult.claims?.role === "admin");
         if (!cancelled) {
           setIsAdmin(tokenResult?.claims?.role === "admin");
           setClaimsChecked(true);

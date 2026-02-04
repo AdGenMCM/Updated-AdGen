@@ -104,17 +104,3 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-.download-button {
-  align: center;
-  margin-top: 1rem;
-  padding: 0.6rem 1.2rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.download-button:hover {
-  background-color: #0056b3;
-}
