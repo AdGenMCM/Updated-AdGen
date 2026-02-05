@@ -7,7 +7,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAME45e-85ca3KcylGWNceT2WFd3Yn42ps",
   authDomain: "adgen-mcm---ad-generator.firebaseapp.com",
   projectId: "adgen-mcm---ad-generator",
-  storageBucket: "adgen-mcm---ad-generator.firebasestorage.app",
+  storageBucket: "adgen-mcm---ad-generator.appspot.com",
   messagingSenderId: "340851760898",
   appId: "1:340851760898:web:0ed56b613a48fe36fbec1b",
   measurementId: "G-YM4NSQ126N"

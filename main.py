@@ -1,15 +1,18 @@
 # main.py
+from urllib.parse import quote
 import os
-import base64
-import os
+import re
+import json
+import uuid
+import asyncio
 import requests
-from fastapi import HTTPException
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
+from firebase_admin import storage  # Firebase Storage (requires firebase_admin init)
 
 # Stripe router (separate file)
 from stripe_server import stripe_router
@@ -18,7 +21,7 @@ from stripe_server import stripe_router
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
 from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status
 
-# ✅ NEW: admin dependency
+# admin dependency
 from admin_guard import admin_required
 
 load_dotenv(override=True)
@@ -52,7 +55,6 @@ def root():
     return {"status": "ok", "service": "AdGen backend"}
 
 
-# ✅ OPTIONAL: admin-only health route (safe to remove)
 @app.get("/admin/health", dependencies=[Depends(admin_required)])
 def admin_health():
     return {"ok": True, "admin": True}
@@ -64,6 +66,7 @@ IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
 
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing.")
+# Keep this check because your ideogram.py likely needs it
 if not IDEOGRAM_API_KEY:
     raise RuntimeError("IDEOGRAM_API_KEY is missing.")
 
@@ -75,6 +78,7 @@ except Exception:
     from ideogram import generate_ideogram  # type: ignore
 
 
+# ---------------- Models ----------------
 class AdRequest(BaseModel):
     product_name: str
     description: str
@@ -83,6 +87,14 @@ class AdRequest(BaseModel):
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
 
+    # ✅ NEW (optional so older clients won't break)
+    offer: str | None = None
+    goal: str | None = None
+    stylePreset: str | None = None
+
+    # ✅ OPTIONAL (recommended, see below)
+    productType: str | None = None
+
 
 class ContactForm(BaseModel):
     name: str
@@ -90,8 +102,56 @@ class ContactForm(BaseModel):
     message: str
 
 
+# ---------------- Helpers ----------------
+def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> str:
+    """
+    Upload PNG bytes to Firebase Storage and return a direct download URL.
+
+    Uses firebaseStorageDownloadTokens so the URL can be fetched without auth.
+    Requires FIREBASE_STORAGE_BUCKET env var (e.g. 'your-project-id.appspot.com').
+    """
+    bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
+    if not bucket_name:
+        raise RuntimeError(
+            "FIREBASE_STORAGE_BUCKET is missing (e.g. 'your-project-id.appspot.com')."
+        )
+
+    bucket = storage.bucket(bucket_name)
+    object_id = f"generated_ads/{uid}/{uuid.uuid4().hex}.png"
+    token = uuid.uuid4().hex
+
+    blob = bucket.blob(object_id)
+    blob.metadata = {"firebaseStorageDownloadTokens": token}
+    blob.upload_from_string(img_bytes, content_type="image/png")
+
+    return (
+        f"https://firebasestorage.googleapis.com/v0/b/{bucket_name}/o/"
+        f"{quote(object_id, safe='')}?alt=media&token={token}"
+    )
+
+
+def _extract_json_object(text: str) -> dict:
+    """Best-effort extraction of a JSON object from model output."""
+    text = (text or "").strip()
+    if not text:
+        return {}
+
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    m = re.search(r"\{[\s\S]*\}", text)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return {}
+
+
 def size_to_aspect_ratio(size: str) -> str:
-    s = size.lower().replace(" ", "")
+    s = (size or "").lower().replace(" ", "")
     if s in ("1024x1792", "720x1280", "1080x1920"):
         return "9x16"
     if s in ("1792x1024", "1280x720", "1920x1080"):
@@ -120,6 +180,72 @@ def require_user(authorization: str | None):
         raise HTTPException(status_code=401, detail="Invalid or expired auth token.")
 
 
+# Style presets (image “look”)
+STYLE_HINTS = {
+    "Minimal": "studio product hero shot, clean background, minimal props, crisp soft lighting",
+    "Premium": "luxury editorial product hero shot, dramatic lighting, premium materials, high-end look",
+    "Bold": "high contrast modern product photo, dynamic angle, punchy lighting, energetic composition",
+    "Lifestyle": "lifestyle in-use scene in a realistic environment, natural daylight, candid composition",
+    "UGC": "authentic user-generated style photo, handheld feel, casual environment, slight grain, imperfect framing",
+}
+
+
+def infer_visual_subject(
+    product_name: str,
+    description: str,
+    product_type: str | None = None,
+) -> str:
+    """
+    Returns a generic, brand-neutral subject that can represent ANY product.
+    The goal is: reduce label/logo/text hallucinations and improve “what is this?” accuracy.
+    """
+    pn = (product_name or "").lower()
+    desc = (description or "").lower()
+    text = f"{pn} {desc}"
+
+    # If productType is provided, trust it (best accuracy)
+    if product_type:
+        pt = product_type.lower().strip()
+        if pt in ("beverage", "drink", "food"):
+            return "a generic food or beverage product container with a completely blank label"
+        if pt in ("skincare", "cosmetics", "beauty"):
+            return "a minimalist cosmetic container set with blank labels (no readable text)"
+        if pt in ("app", "software", "saas"):
+            return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
+        if pt in ("home appliance", "electronics", "device"):
+            return "a clean product shot of a generic consumer device with no logos or text"
+        if pt in ("apparel", "clothing"):
+            return "a clean product shot of apparel with no logos or text"
+        # fallback: use the provided type as generic noun
+        return f"a clean hero product photo of a generic {pt} with no logos and no readable text"
+
+    # Otherwise infer from text
+    if any(k in text for k in ["app", "software", "saas", "website", "dashboard", "mobile app"]):
+        return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
+    if any(k in text for k in ["course", "ebook", "book", "pdf", "guide", "workshop"]):
+        return "a clean book/ebook cover mockup with abstract shapes (no readable text)"
+    if any(k in text for k in ["shirt", "hoodie", "hat", "clothing", "apparel", "sneaker", "shoes"]):
+        return "a clean product shot of apparel with no logos or text"
+    if any(k in text for k in ["skincare", "lotion", "serum", "cream", "cosmetic", "shampoo"]):
+        return "a minimalist cosmetic container set with blank labels (no readable text)"
+    if any(k in text for k in ["candle", "soap", "perfume"]):
+        return "a premium lifestyle product shot with unbranded packaging and no readable text"
+    if any(k in text for k in ["beer", "soda", "drink", "beverage", "coffee", "tea"]):
+        return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
+    if any(k in text for k in ["supplement", "vitamin", "protein", "creatine"]):
+        return "a generic supplement jar with a completely blank label (no readable text)"
+    if any(k in text for k in ["fan", "ac", "air conditioner", "cooling", "heater", "humidifier"]):
+        return "a modern home appliance product shot (minimal design, no branding, no display text)"
+    if any(k in text for k in ["tool", "drill", "hardware", "gadget", "device", "electronics"]):
+        return "a clean product shot of a generic consumer device with no logos or text"
+    if any(k in text for k in ["restaurant", "food", "meal", "snack", "cookie", "chips"]):
+        return "a food product hero shot with unbranded packaging and no readable text"
+
+    # safe default
+    return "a clean hero product photo of a generic item that represents the product, with no logos and no readable text"
+
+
+# ---------------- Usage ----------------
 @app.get("/usage")
 def get_usage(authorization: str | None = Header(default=None)):
     uid, _email, _claims = require_user(authorization)
@@ -132,6 +258,7 @@ def get_usage(authorization: str | None = Header(default=None)):
     return peek_usage(db, uid, tier)
 
 
+# ---------------- Contact ----------------
 @app.post("/contact")
 def send_contact_email(payload: ContactForm):
     api_key = os.getenv("SENDGRID_API_KEY")
@@ -157,55 +284,29 @@ def send_contact_email(payload: ContactForm):
         "Content-Type": "application/json",
     }
     data = {
-        "personalizations": [
-            {
-                "to": [{"email": to_email}],
-                "subject": subject,
-            }
-        ],
-        "from": {
-            "email": from_email,
-            "name": "AdGen MCM",
-        },
-        "reply_to": {
-            "email": payload.email,
-        },
-        "content": [
-            {
-                "type": "text/plain",
-                "value": text_body,
-            }
-        ],
+        "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
+        "from": {"email": from_email, "name": "AdGen MCM"},
+        "reply_to": {"email": payload.email},
+        "content": [{"type": "text/plain", "value": text_body}],
     }
 
     try:
-        response = requests.post(
-            sendgrid_url,
-            headers=headers,
-            json=data,
-            timeout=15,
-        )
-
-        # SendGrid returns 202 Accepted on success
+        response = requests.post(sendgrid_url, headers=headers, json=data, timeout=15)
         if response.status_code != 202:
             raise HTTPException(
                 status_code=500,
                 detail=f"SendGrid error: {response.status_code} {response.text}",
             )
-
         return {"success": True}
-
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send contact email: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
 
 
+# ---------------- Generate Ad ----------------
 @app.post("/generate-ad")
-def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
+async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
     # 1) Auth
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
@@ -218,10 +319,6 @@ def generate_ad(payload: AdRequest, authorization: str | None = Header(default=N
 
     # ✅ Admin bypasses subscription gating
     if not admin:
-        # If you want to require an active subscription for non-trial tiers,
-        # you can tighten this later. For now:
-        # - allow trialing/active
-        # - allow missing tier => treat as trial cap
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
             raise HTTPException(
@@ -239,79 +336,172 @@ def generate_ad(payload: AdRequest, authorization: str | None = Header(default=N
                     "used": cap_result["used"],
                     "cap": cap_result["cap"],
                     "month": cap_result["month"],
-                    # Frontend can send user to /account for Stripe portal button
                     "upgradePath": "/account",
                 },
             )
     else:
-        # ✅ For admins, skip caps entirely but return a consistent shape
         cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
-    # 4) Generate text (OpenAI)
-    prompt = (
-        f"Create a compelling {payload.tone.lower()} ad for {payload.product_name}, "
-        f'described as: "{payload.description}". '
-        f"Target it to {payload.audience} on {payload.platform}. Make it short and catchy."
-    )
+    # 4) Normalize inputs
+    product_name = (payload.product_name or "").strip()[:80]
+    description = (payload.description or "").strip()[:800]
+    audience = (payload.audience or "").strip()[:120]
+    tone = (payload.tone or "confident").strip()[:40]
+    platform = (payload.platform or "Instagram").strip()[:40]  # used for COPY only
 
-    try:
-        chat_response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": "You are a creative ad copywriter."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=300,
-        )
-        ad_text = chat_response.choices[0].message.content.strip()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")
+    offer = (payload.offer or "").strip()[:80]
+    goal = (payload.goal or "Sales").strip()[:30]
+    style = (payload.stylePreset or "Minimal").strip()[:30]
+    product_type = (payload.productType or "").strip()[:40] or None
 
-    # 5) Generate image (Ideogram)
+    style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
+
+    # 5) Copy prompt (structured JSON)
+    copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
+
+Return one JSON object with:
+- headline: string (<= 40 chars)
+- primary_text: string (<= 125 chars)
+- cta: string (one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now)
+- hooks: array of 3 short strings (each <= 8 words)
+- variants: array of 3 objects, each with headline, primary_text, cta
+
+Inputs:
+product_name: {product_name}
+description: {description}
+audience: {audience}
+tone: {tone}
+platform: {platform}
+goal: {goal}
+offer: {offer or "N/A"}
+"""
+
+    # 6) Visual prompt (universal, brand-neutral, no platform leakage)
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
+    subject = infer_visual_subject(product_name, description, product_type)
+
     visual_prompt = (
-        f"Studio product photograph for a {payload.tone.lower()} {payload.platform} ad "
-        f"featuring {payload.product_name}. Clean composition, brand-safe, "
-        f"gradient or soft background, negative space reserved for headline area, "
-        f"no overlays, no labels on background, no letters, no lettering, no text, no words, "
-        f"natural lighting, high contrast, balanced framing."
+        f"{style_hint}. "
+        f"High-end ad photography of {subject}. "
+        f"Everything must be brand-neutral and unbranded: "
+        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
+        f"No readable text anywhere in the scene (including background, packaging, screens): "
+        f"no letters, no words, no numbers, no fake writing, no glyphs. "
+        f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
+        f"Goal: {goal}. "
+        f"{'Offer: ' + offer + '. ' if offer else ''}"
+        f"Clean composition with generous negative space reserved for headline placement. "
+        f"Professional commercial lighting, realistic proportions, natural shadows. "
+        f"No embossed text, no engraved markings. "
+
+        # 🔒 HARD NEGATIVE BLOCK (universal)
+        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
+        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
+        f"distorted products, warped shapes, melted surfaces, extra random objects, "
+        f"surreal elements, cartoon style, illustration, heavy CGI look, "
+        f"faces, hands, fingers, posters or signs with text."
     )
 
-    try:
-        paths = generate_ideogram(
-            prompt=visual_prompt,
-            aspect_ratio=aspect_ratio,
-            rendering_speed="DEFAULT",
-            num_images=1,
-        )
-        if not paths:
-            raise HTTPException(status_code=502, detail="Ideogram returned no images")
+    async def _gen_copy():
+        try:
+            resp = await asyncio.to_thread(
+                lambda: client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert direct-response ad copywriter. Output ONLY valid JSON.",
+                        },
+                        {"role": "user", "content": copy_prompt},
+                    ],
+                    max_tokens=450,
+                )
+            )
+            raw = (resp.choices[0].message.content or "").strip()
+            obj = _extract_json_object(raw)
 
-        image_path = paths[0]
-        with open(image_path, "rb") as f:
-            img_bytes = f.read()
+            if not obj or "headline" not in obj:
+                return {
+                    "headline": product_name or "Ad Headline",
+                    "primary_text": raw[:250],
+                    "cta": "Learn More",
+                    "hooks": [],
+                    "variants": [],
+                    "_raw": raw,
+                }
 
-        b64 = base64.b64encode(img_bytes).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64}"
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ideogram image generation failed: {e}")
+            obj.setdefault("headline", product_name or "Ad Headline")
+            obj.setdefault("primary_text", "")
+            obj.setdefault("cta", "Learn More")
+            obj.setdefault("hooks", [])
+            obj.setdefault("variants", [])
+            return obj
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")
+
+    async def _gen_image_and_upload():
+        try:
+            paths = await asyncio.to_thread(
+                lambda: generate_ideogram(
+                    prompt=visual_prompt,
+                    aspect_ratio=aspect_ratio,
+                    rendering_speed="DEFAULT",
+                    num_images=1,
+                )
+            )
+            if not paths:
+                raise HTTPException(status_code=502, detail="Ideogram returned no images")
+
+            image_path = paths[0]
+            with open(image_path, "rb") as f:
+                img_bytes = f.read()
+
+            url = upload_png_to_firebase_storage(img_bytes, uid)
+
+            # best-effort cleanup
+            try:
+                os.remove(image_path)
+            except Exception:
+                pass
+
+            return url
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Ideogram image generation failed: {e}")
+
+    copy_obj, image_url = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
+
+    # legacy string (keeps older UI working)
+    legacy_text = (
+        f"{copy_obj.get('headline','')}\n\n"
+        f"{copy_obj.get('primary_text','')}\n\n"
+        f"CTA: {copy_obj.get('cta','')}"
+    ).strip()
 
     return {
-        "text": ad_text,
-        "imageUrl": data_url,
+        "text": legacy_text,
+        "copy": copy_obj,
+        "imageUrl": image_url,
+        "meta": {
+            "goal": goal,
+            "stylePreset": style,
+            "offer": offer,
+            "productType": product_type,
+        },
         "usage": {
-            "used": cap_result["used"],
-            "cap": cap_result["cap"],
-            "month": cap_result["month"],
-            "remaining": max(0, (cap_result["cap"] or 0) - (cap_result["used"] or 0)),
+            "used": cap_result.get("used"),
+            "cap": cap_result.get("cap"),
+            "month": cap_result.get("month"),
+            "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
         },
     }
 
 
-# ---------------- Stripe routes (kept separate) ----------------
+# ---------------- Stripe routes ----------------
 app.include_router(stripe_router)
+
+
 
 
 

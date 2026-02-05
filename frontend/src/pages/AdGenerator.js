@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
 import { auth } from "../firebaseConfig"; // ✅ adjust ONLY if your firebaseConfig path differs
 
-
 function AdGenerator() {
   const navigate = useNavigate();
 
@@ -14,6 +13,12 @@ function AdGenerator() {
     tone: "",
     platform: "",
     imageSize: "1024x1024",
+
+    // ✅ NEW
+    offer: "",
+    goal: "Sales", // default
+    stylePreset: "Minimal", // default
+    productType: "auto", // default = auto-detect on backend
   });
 
   const [result, setResult] = useState(null);
@@ -21,7 +26,6 @@ function AdGenerator() {
 
   // For cap / auth errors
   const [uiError, setUiError] = useState(null);
-
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -42,10 +46,8 @@ function AdGenerator() {
     setResult(null);
     setUiError(null);
 
-    // ✅ Give React a frame to paint the loading overlay before alerts/returns/navigation
     await new Promise((r) => setTimeout(r, 0));
 
-    // Use env var in production; fallback to localhost for local dev
     const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
 
     if (!apiBase) {
@@ -56,29 +58,33 @@ function AdGenerator() {
     }
 
     try {
-      // ✅ Firebase token required by your new backend
       const user = auth.currentUser;
       if (!user) {
         alert("You must be logged in to generate an ad.");
-        setLoading(false); // ✅ ensure spinner stops before redirect
+        setLoading(false);
         navigate("/login");
         return;
       }
 
       const token = await user.getIdToken();
 
+      // ✅ send null/undefined for auto, so backend truly auto-detects
+      const payload = {
+        ...form,
+        productType: form.productType === "auto" ? null : form.productType,
+      };
+
       const response = await fetch(`${apiBase}/generate-ad`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // ✅ required
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       console.log("[AdGen] HTTP status:", response.status, response.statusText);
 
-      // Try to parse JSON even on non-200 responses so we can show useful errors
       let data = null;
       try {
         data = await response.json();
@@ -89,10 +95,8 @@ function AdGenerator() {
       console.log("[AdGen] API JSON:", data);
 
       if (!response.ok) {
-        // FastAPI often returns { detail: "..." } or { detail: { message, cap, used, upgradePath } }
         const detail = data?.detail ?? data?.error ?? data?.message;
 
-        // ✅ Cap reached case from our backend: status 429 with detail object
         if (response.status === 429) {
           const msg = safeDetailMessage(detail) || "You’ve reached your monthly limit.";
           const upgradePath = detail?.upgradePath || "/account";
@@ -102,15 +106,12 @@ function AdGenerator() {
           setUiError({
             type: "cap",
             message:
-              used != null && cap != null
-                ? `${msg} (${used}/${cap} used this month)`
-                : msg,
+              used != null && cap != null ? `${msg} (${used}/${cap} used this month)` : msg,
             upgradePath,
           });
           return;
         }
 
-        // ✅ Auth cases
         if (response.status === 401) {
           setUiError({
             type: "auth",
@@ -120,7 +121,6 @@ function AdGenerator() {
           return;
         }
 
-        // ✅ Subscription inactive (if you return 402)
         if (response.status === 402) {
           setUiError({
             type: "sub",
@@ -206,19 +206,80 @@ function AdGenerator() {
           disabled={loading}
         />
 
-        <label className="image-size-label">
-          Image Size: &nbsp;
-          <select
-            name="imageSize"
-            value={form.imageSize}
-            onChange={handleChange}
-            disabled={loading}
-          >
-            <option value="1024x1024">Square (1024x1024)</option>
-            <option value="1024x1792">Portrait (1024x1792)</option>
-            <option value="1792x1024">Landscape (1792x1024)</option>
-          </select>
-        </label>
+        {/* ✅ Offer */}
+        <input
+          name="offer"
+          placeholder='Offer (e.g., "20% off", "Free trial")'
+          value={form.offer}
+          onChange={handleChange}
+          disabled={loading}
+        />
+
+        {/* ✅ NEW: Product Type (optional, improves image accuracy) */}
+        {/* ✅ Grouped fields */}
+<div className="field-grid">
+  <div className="field">
+    <div className="field-label">Product Type</div>
+    <select
+      name="productType"
+      value={form.productType}
+      onChange={handleChange}
+      disabled={loading}
+    >
+      <option value="auto">Auto-detect</option>
+      <option value="App / Software">App / Software</option>
+      <option value="Electronics / Device">Electronics / Device</option>
+      <option value="Home Appliance">Home Appliance</option>
+      <option value="Skincare / Beauty">Skincare / Beauty</option>
+      <option value="Supplement">Supplement</option>
+      <option value="Beverage / Food">Beverage / Food</option>
+      <option value="Apparel">Apparel</option>
+      <option value="Service">Service</option>
+      <option value="Other Physical Product">Other Physical Product</option>
+    </select>
+  </div>
+
+  <div className="field">
+    <div className="field-label">Goal</div>
+    <select name="goal" value={form.goal} onChange={handleChange} disabled={loading}>
+      <option value="Sales">Sales</option>
+      <option value="Leads">Leads</option>
+      <option value="Traffic">Traffic</option>
+      <option value="Awareness">Awareness</option>
+      <option value="App Installs">App Installs</option>
+    </select>
+  </div>
+
+  <div className="field">
+    <div className="field-label">Style</div>
+    <select
+      name="stylePreset"
+      value={form.stylePreset}
+      onChange={handleChange}
+      disabled={loading}
+    >
+      <option value="Minimal">Minimal (Studio)</option>
+      <option value="Lifestyle">Lifestyle</option>
+      <option value="UGC">UGC (Creator)</option>
+      <option value="Premium">Premium (Luxury)</option>
+      <option value="Bold">Bold (High-contrast)</option>
+    </select>
+  </div>
+
+  <div className="field">
+    <div className="field-label">Image Size</div>
+    <select
+      name="imageSize"
+      value={form.imageSize}
+      onChange={handleChange}
+      disabled={loading}
+    >
+      <option value="1024x1024">Square (1024x1024)</option>
+      <option value="1024x1792">Portrait (1024x1792)</option>
+      <option value="1792x1024">Landscape (1792x1024)</option>
+    </select>
+  </div>
+</div>
 
         <button type="submit" disabled={loading}>
           {loading ? "Generating..." : "Generate Ad"}
@@ -234,7 +295,6 @@ function AdGenerator() {
         <div className="loading-text">Generating your ad! Please Wait...</div>
       </div>
 
-      {/* ✅ Cap / auth / subscription messages (keeps your styling) */}
       {uiError && (
         <div className="result">
           <h2 className="notice">NOTICE:</h2>
@@ -254,7 +314,22 @@ function AdGenerator() {
       {result && (
         <div className="result">
           <h2>Generated Ad Copy:</h2>
-          <p className="ad-text">{result.text}</p>
+
+          {result.copy ? (
+            <div className="ad-copy">
+              <p className="ad-text">
+                <strong>Headline:</strong> {result.copy.headline}
+              </p>
+              <p className="ad-text">
+                <strong>Primary Text:</strong> {result.copy.primary_text}
+              </p>
+              <p className="ad-text">
+                <strong>CTA:</strong> {result.copy.cta}
+              </p>
+            </div>
+          ) : (
+            <p className="ad-text">{result.text}</p>
+          )}
 
           {result.imageUrl && (
             <div className="result-container">
@@ -287,6 +362,8 @@ function AdGenerator() {
 }
 
 export default AdGenerator;
+
+
 
 
 
