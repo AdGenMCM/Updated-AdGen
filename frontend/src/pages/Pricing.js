@@ -218,8 +218,7 @@ export default function Pricing() {
           <h2 className="pricing-h2">How usage works</h2>
           <p className="pricing-p">
             Each plan includes a fixed number of AI generations per month. One successful click of
-            “Generate” counts as one use. Usage resets automatically at the beginning of each billing
-            cycle.
+            “Generate” counts as one use. Usage resets automatically at the beginning of each month.
           </p>
 
           <h3 className="pricing-h3">What happens if I hit my limit?</h3>
