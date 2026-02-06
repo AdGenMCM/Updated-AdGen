@@ -12,7 +12,10 @@ def init_firebase_once() -> None:
 
     FIREBASE_SERVICE_ACCOUNT_JSON supports:
       - a file path on server (Render secret file path like /etc/secrets/<file>.json)
-      - OR raw JSON string (not recommended, but supported)
+      - OR raw JSON string (supported)
+
+    FIREBASE_STORAGE_BUCKET should be set to your default storage bucket name, e.g.:
+      adgen-mcm---ad-generator.firebasestorage.app
     """
     try:
         firebase_admin.get_app()
@@ -24,17 +27,26 @@ def init_firebase_once() -> None:
     if not sa_value:
         raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not set.")
 
+    bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
+    init_options = {"storageBucket": bucket_name} if bucket_name else None
+
     # Case 1: file path
     if os.path.exists(sa_value):
         cred = credentials.Certificate(sa_value)
-        firebase_admin.initialize_app(cred)
+        if init_options:
+            firebase_admin.initialize_app(cred, init_options)
+        else:
+            firebase_admin.initialize_app(cred)
         return
 
     # Case 2: raw JSON
     try:
         sa_dict = json.loads(sa_value)
         cred = credentials.Certificate(sa_dict)
-        firebase_admin.initialize_app(cred)
+        if init_options:
+            firebase_admin.initialize_app(cred, init_options)
+        else:
+            firebase_admin.initialize_app(cred)
         return
     except Exception as e:
         raise RuntimeError(
@@ -64,4 +76,6 @@ def verify_firebase_token(id_token: str) -> Dict[str, Any]:
     """Verify Firebase ID token and return decoded claims."""
     init_firebase_once()
     return fb_auth.verify_id_token(id_token)
+
+
 

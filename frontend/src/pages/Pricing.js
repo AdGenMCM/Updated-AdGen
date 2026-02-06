@@ -53,6 +53,10 @@ function formatUSD(n) {
   }
 }
 
+function hasOptimizer(tierId) {
+  return tierId === "pro" || tierId === "business";
+}
+
 export default function Pricing() {
   // Meta Ads service math
   const minSpend = 100;
@@ -122,7 +126,7 @@ export default function Pricing() {
                   <span className="tier-price-suffix">/mo</span>
                 </div>
 
-                {/* ✅ No billing redirect: show modal */}
+                {/* No billing redirect: show modal */}
                 <button
                   type="button"
                   className={`tier-cta ${tier.highlighted ? "primary" : ""}`}
@@ -150,13 +154,20 @@ export default function Pricing() {
                   <li>AI ad text & image generation</li>
                   <li>Text Editor</li>
                   <li>Email support</li>
+
+                  {/* ✅ Pro/Business feature */}
+                  {hasOptimizer(tier.id) && (
+                    <li>
+                      <strong>Ad Performance Optimization (Pro+)</strong>
+                    </li>
+                  )}
                 </ul>
               </div>
             </article>
           ))}
         </section>
 
-        {/* NEW SERVICE OFFERING */}
+        {/* SERVICE OFFERING */}
         <section className="service-wrap" aria-label="Meta Ads campaign setup service">
           <div className="service-card">
             <div className="service-header">
@@ -214,6 +225,42 @@ export default function Pricing() {
           </div>
         </section>
 
+        {/* ✅ NEW: Feature description block directly under Meta Campaigns (matches existing CSS) */}
+        <section className="service-wrap" aria-label="Ad Performance Optimization feature">
+          <div className="service-card">
+            <div className="service-header">
+              <div>
+                <h2 className="service-title">Ad Performance Optimization</h2>
+                <p className="service-subtitle">
+                  Available on <strong>Pro</strong> and <strong>Business</strong> plans.
+                </p>
+              </div>
+              <span className="service-badge">Pro+</span>
+            </div>
+
+            <div className="service-grid">
+              <div className="service-block">
+                <h3 className="service-block-title">What it does</h3>
+                <p className="pricing-p">
+                  Upload key metrics like CTR, CPC, CPA, spend, and audience type. AdGen MCM analyzes what’s
+                  likely happening and recommends improvements to help you iterate faster and get more
+                  value from your creative.
+                </p>
+              </div>
+
+              <div className="service-block">
+                <h3 className="service-block-title">You get</h3>
+                <ul className="service-list">
+                  <li>Diagnosis of likely performance issues</li>
+                  <li>Clear, actionable improvement suggestions</li>
+                  <li>Improved headline, primary text, and CTA</li>
+                  <li>Optimized image prompt for your next iteration</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="pricing-faq" aria-label="Usage and billing details">
           <h2 className="pricing-h2">How usage works</h2>
           <p className="pricing-p">
@@ -241,7 +288,7 @@ export default function Pricing() {
         </section>
       </div>
 
-      {/* ✅ Modal */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" onMouseDown={closeModal}>
           <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
@@ -276,6 +323,7 @@ export default function Pricing() {
     </main>
   );
 }
+
 
 
 

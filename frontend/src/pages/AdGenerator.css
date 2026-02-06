@@ -93,7 +93,7 @@ body { background: var(--bg); }
   cursor: not-allowed;
 }
 
-/* ✅ NEW: tidy grid for dropdown fields */
+/* ✅ tidy grid for dropdown fields */
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -101,7 +101,6 @@ body { background: var(--bg); }
   margin-top: 2px;
 }
 
-/* A label “card” that stacks the label text above the select */
 .field {
   display: flex;
   flex-direction: column;
@@ -116,14 +115,18 @@ body { background: var(--bg); }
   padding-left: 2px;
 }
 
-/* keep selects consistent */
-.field select {
-  max-width: 100%;
+.field select { max-width: 100%; }
+
+/* ✅ NEW: centered button row utility */
+.button-row{
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 /* Primary button */
 .adgen-form button {
-  margin-top: 6px;
   padding: 12px 14px;
   border: none;
   border-radius: var(--radius-sm);
@@ -171,9 +174,7 @@ body { background: var(--bg); }
   font-weight: 500;
 }
 
-.ad-copy .ad-text strong {
-  font-weight: 700;
-}
+.ad-copy .ad-text strong { font-weight: 700; }
 
 /* Image + actions */
 .result-container {
@@ -207,12 +208,13 @@ body { background: var(--bg); }
   transition: background 0.15s ease, transform 0.08s ease, opacity 0.15s ease;
 }
 
-.download-button:hover {
-  background: var(--primary-hover);
-}
+.download-button:hover { background: var(--primary-hover); }
+.download-button:active { transform: translateY(1px); }
 
-.download-button:active {
-  transform: translateY(1px);
+/* ✅ Ensure optimizer buttons are centered even if not wrapped */
+.optimizer-card .download-button{
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Notice */
@@ -273,4 +275,54 @@ body { background: var(--bg); }
   .app-title { font-size: 1.7rem; }
   .adgen-form, .result { padding: 14px; }
 }
+
+/* AD Optimizer */
+.optimizer-card{
+  display: block;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.optimizer-locked{
+  padding: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+/* =========================
+   FULL-WIDTH BUTTONS
+========================= */
+
+/* Primary form button */
+.adgen-form button {
+  width: 100%;
+}
+
+/* Download / action buttons */
+.download-button {
+  width: 100%;
+}
+
+/* Optimizer buttons */
+.optimizer-card .download-button,
+.optimizer-card button {
+  width: 100%;
+}
+
+/* Locked optimizer upgrade button */
+.optimizer-locked .download-button {
+  width: 100%;
+}
+
+/* Result action buttons (image download, apply optimized copy, etc.) */
+.result-container button,
+.result button {
+  width: 100%;
+}
+
+
 
