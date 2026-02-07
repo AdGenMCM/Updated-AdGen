@@ -468,39 +468,28 @@ offer: {offer or "N/A"}
 
     # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
-    f"{style_hint}. "
-    f"High-end ad photography of {subject}. "
-
-    f"Everything must be brand-neutral and unbranded: "
-    f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-
-    f"No readable text anywhere in the scene (including background, packaging, screens): "
-    f"no letters, no words, no numbers, no fake writing, no glyphs. "
-
-    f"No text-bearing surfaces of any kind: "
-    f"no labels, no packaging faces, no signs, no cards, no panels, no banners, "
-    f"no screens, no displays, no UI surfaces, no paper, no posters, no billboards. "
-
-    f"No letter-shaped, word-shaped, or symbol-shaped geometry. "
-    f"No raised, carved, cut-out, debossed, engraved, or embossed shapes "
-    f"that resemble letters, numbers, or symbols. "
-
-    f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
-    f"Goal: {goal}. "
-
-    f"Clean composition with generous negative space reserved for headline placement. "
-    f"Professional commercial lighting, realistic proportions, natural shadows. "
-
-    f"All visible surfaces must be smooth, organic, or abstract with no straight text baselines. "
-    f"Textures must be natural or abstract only. "
-
-    f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
-    f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
-    f"graphic design structures, frames, borders, text boxes, layout grids, "
-    f"distorted products, warped shapes, melted surfaces, extra random objects, "
-    f"surreal elements, cartoon style, illustration, heavy CGI look, "
-    f"faces, hands, fingers, posters or signs with text."
-)
+        f"{style_hint}. "
+        f"High-end ad photography of {subject}. "
+        f"Everything must be brand-neutral and unbranded: "
+        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
+        f"No readable text anywhere in the scene (including background, packaging, screens): "
+        f"no letters, no words, no numbers, no fake writing, no glyphs. "
+        f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
+        f"Goal: {goal}. "
+        #f"{'Offer: ' + offer + '. ' if offer else ''}"
+        f"Clean composition with generous negative space reserved for headline placement. "
+        f"Professional commercial lighting, realistic proportions, natural shadows. "
+        f"No embossed text, no engraved markings. "
+        f"No letter-shaped, word-shaped, or symbol-shaped geometry. "
+        f"No raised, carved, cut-out, debossed, engraved, or embossed shapes "
+        f"no margins that imply text placement, no headline areas, no text boxes, no patterns that resemble writing or symbols, no callout areas. "
+        f"that resemble letters, numbers, or symbols. "
+        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
+        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
+        f"distorted products, warped shapes, text on the product, melted surfaces, extra random objects, "
+        f"surreal elements, cartoon style, illustration, heavy CGI look, "
+        f"faces, hands, fingers, posters or signs with text."
+    )
 
 
     async def _gen_copy():
