@@ -343,7 +343,7 @@ function AdGenerator() {
 
       <form className="adgen-form" onSubmit={handleSubmit}>
         <input name="product_name" placeholder="Product Name" value={form.product_name} onChange={handleChange} disabled={loading} />
-        <textarea name="description" placeholder="Product Description" value={form.description} onChange={handleChange} disabled={loading} />
+        <textarea name="description" placeholder="Product Description or Image Prompt you'd like to generate" value={form.description} onChange={handleChange} disabled={loading} />
         <input name="audience" placeholder="Target Audience" value={form.audience} onChange={handleChange} disabled={loading} />
         <input name="tone" placeholder="Tone (e.g., energetic, friendly)" value={form.tone} onChange={handleChange} disabled={loading} />
         <input name="platform" placeholder="Ad Platform (e.g., Instagram)" value={form.platform} onChange={handleChange} disabled={loading} />
