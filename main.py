@@ -190,45 +190,141 @@ STYLE_HINTS = {
 }
 
 
+# ✅ UPDATED: keyword-first + many more categories + productType normalized
 def infer_visual_subject(product_name: str, description: str, product_type: str | None = None) -> str:
     pn = (product_name or "").lower()
     desc = (description or "").lower()
-    text = f"{pn} {desc}"
+    text = f"{pn} {desc}".strip()
 
+    def has_any(keys: list[str]) -> bool:
+        return any(k in text for k in keys)
+
+    # --- Food / Candy / Snacks (specific first) ---
+    if has_any(["candy", "candies", "sweet", "sweets", "gummy", "gummies", "lollipop", "lollipops",
+                "chocolate", "taffy", "caramel", "marshmallow", "sour candy"]):
+        return "a colorful assortment of unbranded wrapped candies and gummies on a clean tabletop (no readable text)"
+
+    if has_any(["ice cream", "gelato", "frozen yogurt", "sundae"]):
+        return "a premium dessert hero shot featuring a generic ice cream cup or bowl (no readable text)"
+
+    if has_any(["cookie", "cookies", "brownie", "cake", "cupcake", "donut", "doughnut", "pastry", "dessert"]):
+        return "a premium dessert hero shot featuring generic baked goods on a clean surface (no readable text)"
+
+    if has_any(["chips", "nachos", "pretzel", "popcorn", "snack", "snacks", "cracker", "crackers",
+                "granola bar", "protein bar", "trail mix", "nuts"]):
+        return "a premium snack hero shot featuring unbranded packaging or a snack assortment (no readable text)"
+
+    if has_any(["pizza", "burger", "sandwich", "taco", "sushi", "salad", "meal", "restaurant", "takeout", "delivery"]):
+        return "a delicious food hero shot plated on a clean tabletop scene (no readable text)"
+
+    # --- Beverages ---
+    if has_any(["coffee", "latte", "espresso", "cappuccino", "tea", "matcha"]):
+        return "a premium café-style beverage scene with a generic cup and no branding (no readable text)"
+
+    if has_any(["soda", "sparkling water", "soft drink", "energy drink", "beverage", "drink", "juice",
+                "smoothie", "sports drink"]):
+        return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
+
+    if has_any(["beer", "wine", "whiskey", "vodka", "tequila", "cocktail"]):
+        return "a premium beverage hero shot featuring generic glassware and unbranded bottle silhouettes (no readable text)"
+
+    # --- Beauty / Personal Care ---
+    if has_any(["skincare", "serum", "moisturizer", "cleanser", "toner", "sunscreen", "spf", "face mask"]):
+        return "a minimalist skincare product set with blank labels (no readable text)"
+
+    if has_any(["shampoo", "conditioner", "haircare", "hair", "styling", "pomade"]):
+        return "a premium haircare bottle set with blank labels (no readable text)"
+
+    if has_any(["makeup", "mascara", "lipstick", "foundation", "concealer", "blush", "eyeliner", "palette"]):
+        return "a premium cosmetics flat-lay with unbranded items (no readable text)"
+
+    if has_any(["perfume", "cologne", "fragrance"]):
+        return "a luxury fragrance bottle silhouette with no branding (no readable text)"
+
+    # --- Apparel / Accessories ---
+    if has_any(["shirt", "tshirt", "t-shirt", "hoodie", "jacket", "dress", "apparel", "clothing"]):
+        return "a clean apparel product hero shot with no logos (no readable text)"
+
+    if has_any(["shoes", "sneakers", "boots", "footwear"]):
+        return "a premium footwear product shot with no logos (no readable text)"
+
+    if has_any(["watch", "jewelry", "necklace", "bracelet", "ring", "earrings"]):
+        return "a luxury jewelry product shot (no branding, no readable text)"
+
+    if has_any(["bag", "handbag", "backpack", "wallet", "purse"]):
+        return "a premium accessory product shot with no logos and no readable text"
+
+    # --- Tech / Electronics ---
+    if has_any(["phone", "smartphone", "tablet", "laptop", "computer"]):
+        return "a modern device mockup on a clean desk scene with blank, non-readable UI (no readable text)"
+
+    if has_any(["headphones", "earbuds", "speaker", "audio"]):
+        return "a clean product shot of generic audio gear with no logos (no readable text)"
+
+    if has_any(["camera", "lens", "microphone", "mic"]):
+        return "a premium product hero shot of generic creator gear with no logos (no readable text)"
+
+    if has_any(["charger", "charging", "power bank", "usb", "cable"]):
+        return "a clean product shot of generic charging accessories with no logos (no readable text)"
+
+    # --- Home / Household ---
+    if has_any(["candle", "diffuser", "essential oil", "home scent"]):
+        return "a cozy home fragrance scene with unbranded candles/diffusers (no readable text)"
+
+    if has_any(["cleaning", "detergent", "soap", "dish", "laundry", "disinfectant", "spray"]):
+        return "a clean home cleaning product set with blank labels (no readable text)"
+
+    if has_any(["furniture", "sofa", "chair", "table", "desk", "mattress"]):
+        return "a bright interior lifestyle scene featuring generic furniture (no branding, no readable text)"
+
+    if has_any(["kitchen", "cookware", "pan", "pot", "knife", "blender", "air fryer", "toaster"]):
+        return "a clean kitchen product hero shot featuring generic cookware/appliance with no logos (no readable text)"
+
+    # --- Fitness / Wellness ---
+    if has_any(["supplement", "vitamin", "protein", "creatine", "preworkout", "pre-workout"]):
+        return "a generic supplement jar with a completely blank label (no readable text)"
+
+    if has_any(["gym", "fitness", "workout", "yoga", "pilates", "dumbbell", "kettlebell"]):
+        return "a lifestyle fitness scene with generic gear and no branding (no readable text)"
+
+    # --- Pets ---
+    if has_any(["pet", "dog", "cat", "puppy", "kitten", "pet food", "kibble", "pet treats"]):
+        return "a pet product hero shot with a generic bag/container with blank label and pet bowl (no readable text)"
+
+    # --- Automotive ---
+    if has_any(["car", "auto", "automotive", "tire", "oil", "wax", "detail", "detailing"]):
+        return "a premium automotive product shot with generic car-care bottle silhouettes (no readable text)"
+
+    # --- Tools / DIY ---
+    if has_any(["tool", "drill", "hammer", "screwdriver", "wrench", "hardware", "diy"]):
+        return "a clean product hero shot of generic tools on a workshop tabletop (no logos, no readable text)"
+
+    # --- SaaS / App / Service ---
+    if has_any(["app", "software", "saas", "website", "dashboard", "mobile app", "analytics", "platform"]):
+        return "a modern smartphone or laptop mockup showing a generic dashboard UI with no readable text"
+
+    if has_any(["course", "ebook", "book", "pdf", "guide", "workshop"]):
+        return "a clean book/ebook cover mockup with abstract shapes (no readable text)"
+
+    # --- productType fallback (only if keyword detection didn’t match) ---
     if product_type:
         pt = product_type.lower().strip()
-        if pt in ("beverage", "drink", "food"):
-            return "a generic food or beverage product container with a completely blank label"
-        if pt in ("skincare", "cosmetics", "beauty"):
-            return "a minimalist cosmetic container set with blank labels (no readable text)"
-        if pt in ("app", "software", "saas"):
-            return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
-        if pt in ("home appliance", "electronics", "device"):
-            return "a clean product shot of a generic consumer device with no logos or text"
-        if pt in ("apparel", "clothing"):
-            return "a clean product shot of apparel with no logos or text"
-        return f"a clean hero product photo of a generic {pt} with no logos and no readable text"
 
-    if any(k in text for k in ["app", "software", "saas", "website", "dashboard", "mobile app"]):
-        return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
-    if any(k in text for k in ["course", "ebook", "book", "pdf", "guide", "workshop"]):
-        return "a clean book/ebook cover mockup with abstract shapes (no readable text)"
-    if any(k in text for k in ["shirt", "hoodie", "hat", "clothing", "apparel", "sneaker", "shoes"]):
-        return "a clean product shot of apparel with no logos or text"
-    if any(k in text for k in ["skincare", "lotion", "serum", "cream", "cosmetic", "shampoo"]):
-        return "a minimalist cosmetic container set with blank labels (no readable text)"
-    if any(k in text for k in ["candle", "soap", "perfume"]):
-        return "a premium lifestyle product shot with unbranded packaging and no readable text"
-    if any(k in text for k in ["beer", "soda", "drink", "beverage", "coffee", "tea"]):
-        return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
-    if any(k in text for k in ["supplement", "vitamin", "protein", "creatine"]):
-        return "a generic supplement jar with a completely blank label (no readable text)"
-    if any(k in text for k in ["fan", "ac", "air conditioner", "cooling", "heater", "humidifier"]):
-        return "a modern home appliance product shot (minimal design, no branding, no display text)"
-    if any(k in text for k in ["tool", "drill", "hardware", "gadget", "device", "electronics"]):
-        return "a clean product shot of a generic consumer device with no logos or text"
-    if any(k in text for k in ["restaurant", "food", "meal", "snack", "cookie", "chips"]):
-        return "a food product hero shot with unbranded packaging and no readable text"
+        # normalize dropdown values like "Beverage / Food"
+        if "beverage" in pt or "drink" in pt:
+            return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
+        if "food" in pt or "snack" in pt:
+            return "a premium food/snack hero shot with unbranded packaging and no readable text"
+        if "skincare" in pt or "cosmetic" in pt or "beauty" in pt:
+            return "a minimalist cosmetic container set with blank labels (no readable text)"
+        if "app" in pt or "software" in pt or "saas" in pt:
+            return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
+        if "electronics" in pt or "device" in pt or "tech" in pt:
+            return "a clean product shot of a generic consumer device with no logos or text"
+        if "apparel" in pt or "clothing" in pt:
+            return "a clean product shot of apparel with no logos or text"
+
+        return f"a clean hero product photo of a generic {pt} with no logos and no readable text"
 
     return "a clean hero product photo of a generic item that represents the product, with no logos and no readable text"
 
@@ -370,16 +466,19 @@ offer: {offer or "N/A"}
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
     subject = infer_visual_subject(product_name, description, product_type)
 
+    # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
         f"{style_hint}. "
-        f"High-end ad photography of {subject}. "
+        f"Create a high-end photorealistic social media ad image.\n"
+        f"Product concept: {product_name}. {description}\n"
+        f"Depict: {subject}.\n"
+        f"Target audience: {audience}. Platform: {platform}. Tone: {tone}. "
+        f"Goal: {goal}. "
+        f"{'Offer: ' + offer + '. ' if offer else ''}\n"
         f"Everything must be brand-neutral and unbranded: "
         f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
         f"No readable text anywhere in the scene (including background, packaging, screens): "
         f"no letters, no words, no numbers, no fake writing, no glyphs. "
-        f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
-        f"Goal: {goal}. "
-        f"{'Offer: ' + offer + '. ' if offer else ''}"
         f"Clean composition with generous negative space reserved for headline placement. "
         f"Professional commercial lighting, realistic proportions, natural shadows. "
         f"No embossed text, no engraved markings. "
@@ -397,6 +496,7 @@ offer: {offer or "N/A"}
                     model="gpt-4-turbo",
                     messages=[
                         {"role": "system", "content": "You are an expert direct-response ad copywriter. Output ONLY valid JSON."},
+                        {"role": "user", "content": copy_prompt},
                         {"role": "user", "content": copy_prompt},
                     ],
                     max_tokens=450,
@@ -426,12 +526,22 @@ offer: {offer or "N/A"}
 
     async def _gen_image_and_upload():
         try:
+            # ✅ NEW: negative prompt strongly discourages text/logos + common “ad overlay” artifacts
+            negative_prompt = (
+                "text, typography, letters, words, numbers, discount text, sale text, "
+                "logos, brand marks, labels, stickers, watermarks, QR codes, barcodes, slogans, badges, "
+                "faces, hands, fingers, posters, signage, clutter, surreal, cartoon, illustration"
+            )
+
             paths = await asyncio.to_thread(
                 lambda: generate_ideogram(
                     prompt=visual_prompt,
                     aspect_ratio=aspect_ratio,
                     rendering_speed="DEFAULT",
                     num_images=1,
+                    magic_prompt="OFF",
+                    negative_prompt=negative_prompt,
+                    style_type="REALISTIC",
                 )
             )
             if not paths:
@@ -586,6 +696,7 @@ confidence ("low"|"medium"|"high")
 
 # ---------------- Stripe routes ----------------
 app.include_router(stripe_router)
+
 
 
 
