@@ -468,26 +468,28 @@ offer: {offer or "N/A"}
 
     # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
-        f"{style_hint}. "
-        f"Create a high-end photorealistic social media ad image.\n"
-        f"Product concept: {product_name}. {description}\n"
-        f"Depict: {subject}.\n"
-        f"Target audience: {audience}. Platform: {platform}. Tone: {tone}. "
-        f"Goal: {goal}. "
-        f"{'Offer: ' + offer + '. ' if offer else ''}\n"
-        f"Everything must be brand-neutral and unbranded: "
-        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-        f"No readable text anywhere in the scene (including background, packaging, screens): "
-        f"no letters, no words, no numbers, no fake writing, no glyphs. "
-        f"Clean composition with generous negative space reserved for headline placement. "
-        f"Professional commercial lighting, realistic proportions, natural shadows. "
-        f"No embossed text, no engraved markings. "
-        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
-        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
-        f"distorted products, warped shapes, melted surfaces, extra random objects, "
-        f"surreal elements, cartoon style, illustration, heavy CGI look, "
-        f"faces, hands, fingers, posters or signs with text."
-    )
+    f"{style_hint}. "
+    f"Create a high-end photorealistic product photograph suitable for a social ad. "
+    f"Image must contain ZERO text overlays.\n"
+    f"Product concept: {product_name}. {description}\n"
+    f"Depict: {subject}.\n"
+    f"Target audience: {audience}. Platform: {platform}. Tone: {tone}. Goal: {goal}. "
+    #f"{'Offer: ' + offer + '. ' if offer else ''}\n"
+
+    f"IMPORTANT: Do NOT create a poster, flyer, menu, brochure, label design, or typography layout. "
+    f"Do NOT add headline blocks, paragraphs, price tags, discount badges, seals, stamps, "
+    f"QR codes, barcodes, UI panels, or any graphic text elements.\n"
+
+    f"Everything must be brand-neutral and unbranded. "
+    f"NO logos, NO brand marks, NO labels with text, NO icons, NO trademarks. "
+    f"No readable text anywhere (including packaging, background, props): "
+    f"no letters, no words, no numbers, no fake writing, no glyphs.\n"
+
+    f"Composition: clean product hero shot on the right side with generous empty negative space on the left side "
+    f"(blank background) reserved for later text placement by the marketer. "
+    f"Professional commercial lighting, realistic proportions, natural shadows. "
+    f"Photographic style only."
+)
 
     async def _gen_copy():
         try:
@@ -528,10 +530,10 @@ offer: {offer or "N/A"}
         try:
             # ✅ NEW: negative prompt strongly discourages text/logos + common “ad overlay” artifacts
             negative_prompt = (
-                "text, typography, letters, words, numbers, discount text, sale text, "
-                "logos, brand marks, labels, stickers, watermarks, QR codes, barcodes, slogans, badges, "
-                "faces, hands, fingers, posters, signage, clutter, surreal, cartoon, illustration"
-            )
+                 "text, typography, words, letters, numbers, readable text, headline, paragraph, menu, flyer, poster, brochure, "
+                "qr code, barcode, label, sticker, stamp, seal, badge, price tag, discount badge, watermark, logo, brand mark, "
+                "packaging text, product label text, signage, billboard, UI, app interface"
+)
 
             paths = await asyncio.to_thread(
                 lambda: generate_ideogram(
