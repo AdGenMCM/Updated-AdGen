@@ -468,29 +468,24 @@ offer: {offer or "N/A"}
 
     # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
-    f"{style_hint}. "
-    f"Create a high-end, photorealistic social media ad image.\n"
-    f"Product name (concept): {product_name}. Description: {description}.\n"
-    f"Depict: {subject}.\n"
-    f"Target audience: {audience}. Platform: {platform}. Tone: {tone}.\n"
-    f"Goal: {goal}. "
-    #f"{'Offer: ' + offer + '. ' if offer else ''}"
-    f"\n"
-
-    f"Everything must be brand-neutral and unbranded. "
-    f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-    f"No readable text anywhere in the scene (including background, packaging, screens): "
-    f"no letters, no words, no numbers, no fake writing, no glyphs. "
-
-    f"Clean composition with generous negative space reserved for headline placement. "
-    f"Professional commercial lighting, realistic proportions, natural shadows. "
-
-    f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
-    f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
-    f"distorted products, warped shapes, melted surfaces, extra random objects, "
-    f"surreal elements, cartoon style, illustration, heavy CGI look, "
-    f"faces, hands, fingers, posters or signs with text."
-)
+        f"{style_hint}. "
+        f"High-end ad photography of {subject}. "
+        f"Everything must be brand-neutral and unbranded: "
+        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
+        f"No readable text anywhere in the scene (including background, packaging, screens): "
+        f"no letters, no words, no numbers, no fake writing, no glyphs. "
+        f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
+        f"Goal: {goal}. "
+        f"{'Offer: ' + offer + '. ' if offer else ''}"
+        f"Clean composition with generous negative space reserved for headline placement. "
+        f"Professional commercial lighting, realistic proportions, natural shadows. "
+        f"No embossed text, no engraved markings. "
+        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
+        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
+        f"distorted products, warped shapes, melted surfaces, extra random objects, "
+        f"surreal elements, cartoon style, illustration, heavy CGI look, "
+        f"faces, hands, fingers, posters or signs with text."
+    )
 
 
     async def _gen_copy():
