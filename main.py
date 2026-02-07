@@ -469,27 +469,27 @@ offer: {offer or "N/A"}
     # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
     f"{style_hint}. "
-    f"Create a high-end photorealistic product photograph suitable for a social ad. "
-    f"Image must contain ZERO text overlays.\n"
-    f"Product concept: {product_name}. {description}\n"
-    f"Depict: {subject}.\n"
-    f"Target audience: {audience}. Platform: {platform}. Tone: {tone}. Goal: {goal}. "
-    #f"{'Offer: ' + offer + '. ' if offer else ''}\n"
+    f"Photorealistic product photograph (NOT an advertisement layout). "
+    f"NO graphic design elements.\n"
 
-    f"IMPORTANT: Do NOT create a poster, flyer, menu, brochure, label design, or typography layout. "
-    f"Do NOT add headline blocks, paragraphs, price tags, discount badges, seals, stamps, "
-    f"QR codes, barcodes, UI panels, or any graphic text elements.\n"
+    f"Depict ONLY: {subject}. "
+    f"Set the scene to match: {description}. "
+    f"Show the product clearly as the hero.\n"
 
-    f"Everything must be brand-neutral and unbranded. "
-    f"NO logos, NO brand marks, NO labels with text, NO icons, NO trademarks. "
-    f"No readable text anywhere (including packaging, background, props): "
-    f"no letters, no words, no numbers, no fake writing, no glyphs.\n"
+    f"Hard rules:\n"
+    f"- Absolutely NO text of any kind (no letters, no words, no numbers, no fake writing).\n"
+    f"- Do NOT create posters, flyers, menus, brochures, magazine covers, side panels, "
+    f"headline areas, text boxes, captions, banners, frames, borders, or layout columns.\n"
+    f"- Do NOT include QR codes, barcodes, watermarks, stamps, seals, badges, labels, stickers.\n"
+    f"- Do NOT include packaging with readable or fake text.\n"
+    f"- Do NOT include logos, brand marks, icons, trademarks.\n"
 
-    f"Composition: clean product hero shot on the right side with generous empty negative space on the left side "
-    f"(blank background) reserved for later text placement by the marketer. "
-    f"Professional commercial lighting, realistic proportions, natural shadows. "
-    f"Photographic style only."
+    f"Composition:\n"
+    f"- Full-bleed photo (edge-to-edge), no split panels.\n"
+    f"- Clean background, shallow depth of field, professional studio lighting.\n"
+    f"- Leave natural negative space only by using an empty background, not a text panel.\n"
 )
+
 
     async def _gen_copy():
         try:
@@ -530,10 +530,13 @@ offer: {offer or "N/A"}
         try:
             # ✅ NEW: negative prompt strongly discourages text/logos + common “ad overlay” artifacts
             negative_prompt = (
-                 "text, typography, words, letters, numbers, readable text, headline, paragraph, menu, flyer, poster, brochure, "
-                "qr code, barcode, label, sticker, stamp, seal, badge, price tag, discount badge, watermark, logo, brand mark, "
-                "packaging text, product label text, signage, billboard, UI, app interface"
+    "text, typography, words, letters, numbers, readable text, fake text, misspelled text, "
+    "poster, flyer, brochure, menu, magazine cover, banner, headline, caption, subtitle, "
+    "text box, text panel, layout column, split layout, frame, border, "
+    "qr code, barcode, watermark, logo, brand mark, icon, label, sticker, badge, stamp, seal, "
+    "signage, placard, screen UI"
 )
+
 
             paths = await asyncio.to_thread(
                 lambda: generate_ideogram(
