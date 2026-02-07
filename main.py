@@ -469,25 +469,27 @@ offer: {offer or "N/A"}
     # ✅ UPDATED: anchor the image to the user inputs up front (keeps Ideogram on-topic)
     visual_prompt = (
     f"{style_hint}. "
-    f"Photorealistic product photograph (NOT an advertisement layout). "
-    f"NO graphic design elements.\n"
+    f"Create a high-end, photorealistic social media ad image.\n"
+    f"Product name (concept): {product_name}. Description: {description}.\n"
+    f"Depict: {subject}.\n"
+    f"Target audience: {audience}. Platform: {platform}. Tone: {tone}.\n"
+    f"Goal: {goal}. "
+    #f"{'Offer: ' + offer + '. ' if offer else ''}"
+    f"\n"
 
-    f"Depict ONLY: {subject}. "
-    f"Set the scene to match: {description}. "
-    f"Show the product clearly as the hero.\n"
+    f"Everything must be brand-neutral and unbranded. "
+    f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
+    f"No readable text anywhere in the scene (including background, packaging, screens): "
+    f"no letters, no words, no numbers, no fake writing, no glyphs. "
 
-    f"Hard rules:\n"
-    f"- Absolutely NO text of any kind (no letters, no words, no numbers, no fake writing).\n"
-    f"- Do NOT create posters, flyers, menus, brochures, magazine covers, side panels, "
-    f"headline areas, text boxes, captions, banners, frames, borders, or layout columns.\n"
-    f"- Do NOT include QR codes, barcodes, watermarks, stamps, seals, badges, labels, stickers.\n"
-    f"- Do NOT include packaging with readable or fake text.\n"
-    f"- Do NOT include logos, brand marks, icons, trademarks.\n"
+    f"Clean composition with generous negative space reserved for headline placement. "
+    f"Professional commercial lighting, realistic proportions, natural shadows. "
 
-    f"Composition:\n"
-    f"- Full-bleed photo (edge-to-edge), no split panels.\n"
-    f"- Clean background, shallow depth of field, professional studio lighting.\n"
-    f"- Leave natural negative space only by using an empty background, not a text panel.\n"
+    f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
+    f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
+    f"distorted products, warped shapes, melted surfaces, extra random objects, "
+    f"surreal elements, cartoon style, illustration, heavy CGI look, "
+    f"faces, hands, fingers, posters or signs with text."
 )
 
 
