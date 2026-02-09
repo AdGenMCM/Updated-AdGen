@@ -23,4 +23,5 @@ requests
 Pillow
 stripe==14.3.0
 firebase-admin==7.1.0
+python-multipart==0.0.9
 

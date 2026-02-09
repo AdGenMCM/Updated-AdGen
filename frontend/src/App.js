@@ -10,13 +10,15 @@ import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
 
-
 // NEW: Public pages
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Pricing from "./pages/Pricing";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+
+// ✅ NEW: Optimizer page (create this file)
+import Optimizer from "./pages/Optimizer";
 
 export default function App() {
   return (
@@ -28,17 +30,21 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<AuthForm />} />
 
-          {/* NEW: Public informational + legal pages */}
+          {/* Public informational + legal pages */}
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
 
-          {/* Auth-only route to start/see subscription */}
+          {/* Auth-only */}
           <Route element={<ProtectedRoute />}>
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
+
+            {/* Optimizer should be reachable even if user is capped
+                Backend will gate Pro/Business */}
+            <Route path="/optimizer" element={<Optimizer />} />
           </Route>
 
           {/* Paid features (require active sub) */}
@@ -54,6 +60,7 @@ export default function App() {
     </>
   );
 }
+
 
 
 

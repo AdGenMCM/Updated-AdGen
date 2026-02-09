@@ -1,0 +1,196 @@
+.opt-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 16px 60px;
+}
+
+.opt-title {
+  margin: 0 0 12px;
+  font-size: 34px;
+  text-align: center;
+}
+
+.opt-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  padding: 16px;
+  margin-top: 14px;
+}
+
+.opt-h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.opt-h3 {
+  margin: 14px 0 8px;
+  font-size: 15px;
+}
+
+.opt-text {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.opt-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+@media (min-width: 760px) {
+  .opt-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.opt-grid input,
+.opt-grid select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  outline: none;
+}
+
+.opt-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  outline: none;
+  margin-top: 8px;
+}
+
+.opt-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.opt-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.opt-error {
+  margin-top: 10px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.opt-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ===========================
+   Drag & Drop Upload UI
+   =========================== */
+
+.opt-dropzone {
+  margin-top: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.opt-dropzone.dragging {
+  border-color: #0f172a;
+  background: #eef2ff;
+}
+
+.opt-dropzone-title {
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: #0f172a;
+}
+
+.opt-dropzone-sub {
+  color: #475569;
+  font-size: 14px;
+}
+
+/* Selected files list */
+.opt-upload-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.opt-upload-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.opt-upload-name {
+  font-size: 14px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Secondary button style (still full width) */
+.opt-btn.opt-btn-secondary {
+  background: #334155;
+}
+
+.opt-actions {
+  margin-top: 10px;
+}
+
+/* ===========================
+   NEW: Regenerate block helpers
+   =========================== */
+
+.opt-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 14px 0;
+}
+
+.opt-callout {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.opt-card.opt-inner {
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.opt-image-wrap {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.opt-image {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  display: block;
+}
+
+

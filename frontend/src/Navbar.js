@@ -91,6 +91,14 @@ export default function Navbar() {
     { to: "/pricing", label: "Products & Pricing" },
     { to: "/contact", label: "Contact Us" },
 
+    // ✅ Optimizer link for any logged-in user (Pro/Business enforced in-page + backend)
+    ...(user
+      ? [
+          { divider: true, mobileOnly: true },
+          { to: "/optimizer", label: "Ad Optimizer", mobileOnly: true },
+        ]
+      : []),
+
     // ✅ Mobile-only paid links inside dropdown
     ...(canAccessPaid
       ? [
@@ -141,9 +149,7 @@ export default function Navbar() {
                   if (item.divider) {
                     return (
                       <div
-                        className={`dropdown-divider ${
-                          item.mobileOnly ? "mobile-only" : ""
-                        }`}
+                        className={`dropdown-divider ${item.mobileOnly ? "mobile-only" : ""}`}
                         key={`div-${idx}`}
                       />
                     );
@@ -153,9 +159,7 @@ export default function Navbar() {
                     <Link
                       key={`${item.to}-${idx}`}
                       to={item.to}
-                      className={`dropdown-item ${
-                        item.mobileOnly ? "mobile-only" : ""
-                      }`}
+                      className={`dropdown-item ${item.mobileOnly ? "mobile-only" : ""}`}
                       role="menuitem"
                       onClick={() => setInfoOpen(false)}
                     >
@@ -166,6 +170,17 @@ export default function Navbar() {
               </div>
             )}
           </div>
+
+          {/* ✅ Optimizer (desktop) — shown when logged in */}
+          {user && (
+            <NavLink
+              to="/optimizer"
+              className="nav-link"
+              onClick={() => setInfoOpen(false)}
+            >
+              Ad Optimizer
+            </NavLink>
+          )}
 
           {/* Paid features links (desktop only via CSS) */}
           {canAccessPaid && (
@@ -212,6 +227,7 @@ export default function Navbar() {
     </nav>
   );
 }
+
 
 
 
