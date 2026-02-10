@@ -1,11 +1,13 @@
 # optimizer_schemas.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, Literal, List
 
 AudienceTemp = Literal["cold", "warm", "retargeting"]
 Platform = Literal["meta", "google", "tiktok", "linkedin", "other"]
+Confidence = Literal["low", "medium", "high"]
 
 class OptimizationMetrics(BaseModel):
+    # percent (e.g., 1.2 for 1.2%)
     ctr: Optional[float] = None
     cpc: Optional[float] = None
     cpa: Optional[float] = None
@@ -29,9 +31,9 @@ class OptimizeAdRequest(BaseModel):
     audience_temp: AudienceTemp = "cold"
     notes: Optional[str] = None
 
-    # Extra optimizer inputs (match Optimizer.js)
-    flight_start: Optional[str] = None
-    flight_end: Optional[str] = None
+    # Extra optimization inputs
+    flight_start: Optional[str] = None  # "YYYY-MM-DD"
+    flight_end: Optional[str] = None    # "YYYY-MM-DD"
     placements: Optional[str] = None
     objective: Optional[str] = None
     audience_size: Optional[int] = None
@@ -40,17 +42,16 @@ class OptimizeAdRequest(BaseModel):
     geo: Optional[str] = None
     device: Optional[str] = None
 
-    # Current creative (paste)
+    # Current creative
     current_headline: Optional[str] = None
     current_primary_text: Optional[str] = None
     current_cta: Optional[str] = None
     current_image_prompt: Optional[str] = None
 
-    # Uploaded creatives (URLs from /upload-creatives)
+    # Uploaded creative(s) (Firebase Storage URLs)
     creative_image_urls: Optional[List[str]] = None
 
-    # Metrics
-    metrics: OptimizationMetrics = Field(default_factory=OptimizationMetrics)
+    metrics: OptimizationMetrics = OptimizationMetrics()
 
 class OptimizeAdResponse(BaseModel):
     summary: str
@@ -60,7 +61,9 @@ class OptimizeAdResponse(BaseModel):
     improved_primary_text: str
     improved_cta: str
     improved_image_prompt: str
-    confidence: Literal["low", "medium", "high"] = "medium"
+    confidence: Confidence = "medium"
+
+
 
 
 

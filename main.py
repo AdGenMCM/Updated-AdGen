@@ -1,8 +1,6 @@
 # main.py
 from urllib.parse import quote
 import os
-from dotenv import load_dotenv
-load_dotenv(override=True)
 import re
 import json
 import uuid
@@ -10,6 +8,7 @@ import asyncio
 import requests
 from typing import List, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -25,10 +24,11 @@ from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_statu
 # admin dependency
 from admin_guard import admin_required
 
-# Feature gating + optimizer schemas
+# feature gating + optimizer schemas
 from entitlements import require_pro_or_business
 from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 
+load_dotenv(override=True)
 
 app = FastAPI()
 
@@ -58,11 +58,9 @@ app.add_middleware(
 def root():
     return {"status": "ok", "service": "AdGen backend"}
 
-
 @app.get("/admin/health", dependencies=[Depends(admin_required)])
 def admin_health():
     return {"ok": True, "admin": True}
-
 
 # ---------------- OpenAI + Ideogram ----------------
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
@@ -70,7 +68,6 @@ IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
 
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing.")
-# Keep this check because your ideogram.py likely needs it
 if not IDEOGRAM_API_KEY:
     raise RuntimeError("IDEOGRAM_API_KEY is missing.")
 
@@ -81,7 +78,6 @@ try:
 except Exception:
     from ideogram import generate_ideogram  # type: ignore
 
-
 # ---------------- Models ----------------
 class AdRequest(BaseModel):
     product_name: str
@@ -91,20 +87,18 @@ class AdRequest(BaseModel):
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
 
-    # ✅ optional so older clients won't break
-    offer: str | None = None
-    goal: str | None = None
-    stylePreset: str | None = None
-
-    # ✅ optional
-    productType: str | None = None
-
+    offer: Optional[str] = None
+    goal: Optional[str] = None
+    stylePreset: Optional[str] = None
+    productType: Optional[str] = None
 
 class ContactForm(BaseModel):
     name: str
     email: str
     message: str
 
+class UploadCreativesResponse(BaseModel):
+    urls: List[str]
 
 class GenerateFromOptimizerRequest(BaseModel):
     improved_headline: str
@@ -121,17 +115,13 @@ def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> str:
     Upload PNG bytes to Firebase Storage and return a direct download URL.
     Uses firebaseStorageDownloadTokens so the URL can be fetched without auth.
     """
-    # ✅ Lazy import (prevents early/default bucket behavior)
-    from firebase_admin import storage
+    from firebase_admin import storage  # type: ignore (lazy import)
 
     bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
     if not bucket_name:
         raise RuntimeError("FIREBASE_STORAGE_BUCKET is missing.")
 
     bucket = storage.bucket(bucket_name)
-
-    # ✅ quick proof (temporary) - remove after it works
-    print("🔥 USING STORAGE BUCKET:", bucket.name)
 
     object_id = f"generated_ads/{uid}/{uuid.uuid4().hex}.png"
     token = uuid.uuid4().hex
@@ -145,13 +135,18 @@ def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> str:
         f"{quote(object_id, safe='')}?alt=media&token={token}"
     )
 
-
-def upload_bytes_to_firebase_storage(data: bytes, uid: str, content_type: str, folder: str = "uploaded_creatives") -> str:
+def upload_bytes_to_firebase_storage(
+    data: bytes,
+    uid: str,
+    content_type: str,
+    folder: str = "uploaded_creatives",
+    filename_hint: Optional[str] = None,
+) -> str:
     """
     Upload arbitrary bytes to Firebase Storage and return a direct download URL.
     Uses firebaseStorageDownloadTokens so the URL can be fetched without auth.
     """
-    from firebase_admin import storage  # ✅ lazy import
+    from firebase_admin import storage  # type: ignore (lazy import)
 
     bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
     if not bucket_name:
@@ -167,6 +162,8 @@ def upload_bytes_to_firebase_storage(data: bytes, uid: str, content_type: str, f
         ext = "jpg"
     elif ct == "image/webp":
         ext = "webp"
+    elif filename_hint and "." in filename_hint:
+        ext = filename_hint.split(".")[-1].lower()[:8]
 
     bucket = storage.bucket(bucket_name)
 
@@ -182,6 +179,58 @@ def upload_bytes_to_firebase_storage(data: bytes, uid: str, content_type: str, f
         f"{quote(object_id, safe='')}?alt=media&token={token}"
     )
 
+async def analyze_uploaded_creatives(urls: List[str]) -> str:
+    """
+    Best-effort creative analysis for uploaded creative images.
+    Uses a vision-capable model if available; safe fallback otherwise.
+    Output is injected as HIGH PRIORITY context.
+    """
+    urls = [u for u in (urls or []) if isinstance(u, str) and u.startswith("http")]
+    if not urls:
+        return ""
+
+    urls = urls[:4]
+
+    prompt = (
+        "Analyze these ad creative images for performance.\n"
+        "Return concise bullet points ONLY:\n"
+        "- What the creative shows (product/scene)\n"
+        "- Hook/message clarity\n"
+        "- Visual hierarchy (what stands out first)\n"
+        "- Likely friction points\n"
+        "- 3 concrete improvement ideas\n"
+        "Be decisive and practical."
+    )
+
+    try:
+        vision_model = (os.getenv("OPENAI_VISION_MODEL") or "gpt-4o-mini").strip()
+
+        messages = [
+            {"role": "system", "content": "You are a direct-response creative strategist."},
+            {
+                "role": "user",
+                "content": (
+                    [{"type": "text", "text": prompt}]
+                    + [{"type": "image_url", "image_url": {"url": u}} for u in urls]
+                ),
+            },
+        ]
+
+        resp = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=vision_model,
+                messages=messages,
+                max_tokens=450,
+            )
+        )
+        out = (resp.choices[0].message.content or "").strip()
+        return out[:2000]
+    except Exception:
+        return (
+            "Uploaded creatives were provided. Prioritize what is actually shown in the creative: "
+            "clarify the hook, strengthen the focal point, reduce clutter, align the visual story "
+            "to the offer/goal, keep clean hierarchy, avoid text-heavy designs."
+        )
 
 def _extract_json_object(text: str) -> dict:
     """Best-effort extraction of a JSON object from model output."""
@@ -202,7 +251,6 @@ def _extract_json_object(text: str) -> dict:
             pass
     return {}
 
-
 def size_to_aspect_ratio(size: str) -> str:
     s = (size or "").lower().replace(" ", "")
     if s in ("1024x1792", "720x1280", "1080x1920"):
@@ -211,10 +259,8 @@ def size_to_aspect_ratio(size: str) -> str:
         return "16x9"
     return "1x1"
 
-
 def is_admin(claims: dict) -> bool:
     return claims.get("role") == "admin"
-
 
 def require_user(authorization: str | None):
     token = get_bearer_token(authorization)
@@ -232,8 +278,6 @@ def require_user(authorization: str | None):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired auth token.")
 
-
-# Style presets (image “look”)
 STYLE_HINTS = {
     "Minimal": "studio product hero shot, clean background, minimal props, crisp soft lighting",
     "Premium": "luxury editorial product hero shot, dramatic lighting, premium materials, high-end look",
@@ -381,8 +425,6 @@ def infer_visual_subject(product_name: str, description: str, product_type: str 
 
     return "a clean hero product photo of a generic item that represents the product, with no logos and no readable text"
 
-
-
 # ---------------- Usage ----------------
 @app.get("/usage")
 def get_usage(authorization: str | None = Header(default=None)):
@@ -395,8 +437,6 @@ def get_usage(authorization: str | None = Header(default=None)):
 
     return peek_usage(db, uid, tier)
 
-
-# basic user info (tier/status) for frontend gating
 @app.get("/me")
 def me(authorization: str | None = Header(default=None)):
     uid, email, claims = require_user(authorization)
@@ -413,7 +453,6 @@ def me(authorization: str | None = Header(default=None)):
         "status": status,
         "isAdmin": is_admin(claims),
     }
-
 
 # ---------------- Contact ----------------
 @app.post("/contact")
@@ -436,10 +475,7 @@ def send_contact_email(payload: ContactForm):
     )
 
     sendgrid_url = "https://api.sendgrid.com/v3/mail/send"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
         "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
         "from": {"email": from_email, "name": "AdGen MCM"},
@@ -450,23 +486,70 @@ def send_contact_email(payload: ContactForm):
     try:
         response = requests.post(sendgrid_url, headers=headers, json=data, timeout=15)
         if response.status_code != 202:
-            raise HTTPException(
-                status_code=500,
-                detail=f"SendGrid error: {response.status_code} {response.text}",
-            )
+            raise HTTPException(status_code=500, detail=f"SendGrid error: {response.status_code} {response.text}")
         return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
 
-
-# ---------------- Upload Creatives (Pro/Business only, does NOT consume usage) ----------------
-@app.post("/upload-creatives")
+# ---------------- Upload creatives ----------------
+@app.post("/upload-creatives", response_model=UploadCreativesResponse)
 async def upload_creatives(
-    authorization: str | None = Header(default=None),
     files: List[UploadFile] = File(...),
+    authorization: str | None = Header(default=None),
 ):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+
+    # Pro/Business only (admin bypass)
+    if not admin:
+        db = get_db()
+        user_snap = db.collection("users").document(uid).get()
+        user_doc = user_snap.to_dict() or {}
+        tier, status = get_tier_and_status(user_doc)
+
+        allowed_statuses = {"active", "trialing"}
+        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+        require_pro_or_business(tier)
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    if len(files) > 6:
+        raise HTTPException(status_code=400, detail="Too many files. Max 6 images.")
+
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    urls: List[str] = []
+
+    for f in files[:6]:
+        ct = (f.content_type or "").lower().strip()
+        if ct not in allowed_types:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}")
+
+        data = await f.read()
+        if not data:
+            continue
+        if len(data) > 8 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File too large. Max 8MB per image.")
+
+        url = upload_bytes_to_firebase_storage(
+            data,
+            uid,
+            content_type=ct,
+            folder="uploaded_creatives",
+            filename_hint=f.filename or None,
+        )
+        urls.append(url)
+
+    if not urls:
+        raise HTTPException(status_code=400, detail="No valid files uploaded.")
+
+    return {"urls": urls}
+
+# ---------------- Generate Ad ----------------
+@app.post("/generate-ad")
+async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
@@ -480,57 +563,6 @@ async def upload_creatives(
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
 
-        require_pro_or_business(tier)
-
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
-
-    if len(files) > 6:
-        raise HTTPException(status_code=400, detail="Too many files. Max 6 images.")
-
-    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
-    urls: List[str] = []
-
-    for f in files:
-        ct = (f.content_type or "").lower().strip()
-        if ct not in allowed_types:
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}")
-
-        data = await f.read()
-        if not data:
-            continue
-        if len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="File too large. Max 8MB per image.")
-
-        url = upload_bytes_to_firebase_storage(data, uid, content_type=ct, folder="uploaded_creatives")
-        urls.append(url)
-
-    return {"urls": urls}
-
-
-# ---------------- Generate Ad ----------------
-@app.post("/generate-ad")
-async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
-    # 1) Auth
-    uid, _email, claims = require_user(authorization)
-    admin = is_admin(claims)
-
-    # 2) Load tier/status from Firestore
-    db = get_db()
-    user_snap = db.collection("users").document(uid).get()
-    user_doc = user_snap.to_dict() or {}
-    tier, status = get_tier_and_status(user_doc)
-
-    # ✅ Admin bypasses subscription gating
-    if not admin:
-        allowed_statuses = {"active", "trialing"}
-        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(
-                status_code=402,
-                detail="Subscription inactive. Please subscribe to continue.",
-            )
-
-        # 3) Cap enforcement (transactional)
         cap_result = check_and_increment_usage(db, uid, tier)
         if not cap_result["allowed"]:
             raise HTTPException(
@@ -546,12 +578,11 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     else:
         cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
-    # 4) Normalize inputs
     product_name = (payload.product_name or "").strip()[:80]
     description = (payload.description or "").strip()[:800]
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
-    platform = (payload.platform or "Instagram").strip()[:40]  # used for COPY only
+    platform = (payload.platform or "Instagram").strip()[:40]
 
     offer = (payload.offer or "").strip()[:80]
     goal = (payload.goal or "Sales").strip()[:30]
@@ -559,8 +590,9 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     product_type = (payload.productType or "").strip()[:40] or None
 
     style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
+    aspect_ratio = size_to_aspect_ratio(payload.imageSize)
+    subject = infer_visual_subject(product_name, description, product_type)
 
-    # 5) Copy prompt (structured JSON)
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
 
 Return one JSON object with:
@@ -580,12 +612,8 @@ goal: {goal}
 offer: {offer or "N/A"}
 """
 
-    # 6) Visual prompt
-    aspect_ratio = size_to_aspect_ratio(payload.imageSize)
-    subject = infer_visual_subject(product_name, description, product_type)
-
     visual_prompt = (
-        f"{style_hint}. "
+         f"{style_hint}. "
         f"High-end ad photography of {subject}. "
         f"Everything must be brand-neutral and unbranded: "
         f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
@@ -614,10 +642,7 @@ offer: {offer or "N/A"}
                 lambda: client.chat.completions.create(
                     model="gpt-4-turbo",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert direct-response ad copywriter. Output ONLY valid JSON.",
-                        },
+                        {"role": "system", "content": "You are an expert direct-response ad copywriter. Output ONLY valid JSON."},
                         {"role": "user", "content": copy_prompt},
                     ],
                     max_tokens=450,
@@ -625,7 +650,6 @@ offer: {offer or "N/A"}
             )
             raw = (resp.choices[0].message.content or "").strip()
             obj = _extract_json_object(raw)
-
             if not obj or "headline" not in obj:
                 return {
                     "headline": product_name or "Ad Headline",
@@ -635,7 +659,6 @@ offer: {offer or "N/A"}
                     "variants": [],
                     "_raw": raw,
                 }
-
             obj.setdefault("headline", product_name or "Ad Headline")
             obj.setdefault("primary_text", "")
             obj.setdefault("cta", "Learn More")
@@ -664,7 +687,6 @@ offer: {offer or "N/A"}
 
             url = upload_png_to_firebase_storage(img_bytes, uid)
 
-            # best-effort cleanup
             try:
                 os.remove(image_path)
             except Exception:
@@ -688,12 +710,7 @@ offer: {offer or "N/A"}
         "text": legacy_text,
         "copy": copy_obj,
         "imageUrl": image_url,
-        "meta": {
-            "goal": goal,
-            "stylePreset": style,
-            "offer": offer,
-            "productType": product_type,
-        },
+        "meta": {"goal": goal, "stylePreset": style, "offer": offer, "productType": product_type},
         "usage": {
             "used": cap_result.get("used"),
             "cap": cap_result.get("cap"),
@@ -702,26 +719,21 @@ offer: {offer or "N/A"}
         },
     }
 
-
-# ---------------- Optimize Ad (Pro/Business only) ----------------
+# ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
 async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = Header(default=None)):
-    # 1) Auth
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
-    # 2) Load tier/status from Firestore
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
-    # ✅ Admin bypasses subscription + entitlement gating
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
-
         require_pro_or_business(tier)
 
     product_name = (payload.product_name or "").strip()[:80]
@@ -733,6 +745,22 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     platform = (payload.platform or "meta").strip()[:20]
 
     metrics = payload.metrics.dict() if payload.metrics else {}
+
+    creative_urls = payload.creative_image_urls or []
+    creative_analysis = await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
+
+    # include extra context fields (even if model ignores, it’s useful)
+    extra = {
+        "flight_start": payload.flight_start,
+        "flight_end": payload.flight_end,
+        "placements": payload.placements,
+        "objective": payload.objective,
+        "audience_size": payload.audience_size,
+        "budget_type": payload.budget_type,
+        "conversion_event": payload.conversion_event,
+        "geo": payload.geo,
+        "device": payload.device,
+    }
 
     optimizer_prompt = f"""
 You are an expert direct-response performance marketer.
@@ -756,7 +784,14 @@ goal: {goal}
 offer: {offer or "N/A"}
 audience_temp: {payload.audience_temp}
 notes: {payload.notes or ""}
-creative_image_urls: {getattr(payload, 'creative_image_urls', None) or []}
+
+EXTRA CONTEXT JSON:
+{json.dumps(extra)}
+
+creative_image_urls: {creative_urls}
+
+CREATIVE ANALYSIS (HIGH PRIORITY):
+{creative_analysis or "No uploaded creatives."}
 
 CURRENT CREATIVE:
 headline: {payload.current_headline or ""}
@@ -808,29 +843,24 @@ confidence ("low"|"medium"|"high")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Optimization failed: {e}")
 
-
 # ---------------- Generate New Creative from Optimizer (Pro/Business only, CONSUMES usage) ----------------
 @app.post("/generate-from-optimizer")
 async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authorization: str | None = Header(default=None)):
-    # 1) Auth
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
-    # 2) Load tier/status
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
-    # ✅ Admin bypasses subscription + entitlement + caps
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
-
         require_pro_or_business(tier)
 
-        # ✅ This action COUNTS toward monthly usage
+        # ✅ counts toward monthly usage
         cap_result = check_and_increment_usage(db, uid, tier)
         if not cap_result["allowed"]:
             raise HTTPException(
@@ -846,7 +876,6 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     else:
         cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
-    # 3) Generate image based on improved_image_prompt
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
     visual_prompt = (
@@ -856,8 +885,22 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         f"No readable text anywhere in the scene: no letters, no words, no numbers, no fake writing, no glyphs. "
         f"Clean composition with generous negative space reserved for headline placement. "
         f"Professional commercial lighting, realistic proportions, natural shadows. "
-        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, watermarks, "
-        f"QR codes, barcodes, slogans, badges, seals."
+        f"Everything must be brand-neutral and unbranded: "
+        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
+        f"No readable text anywhere in the scene (including background, packaging, screens): "
+        f"no letters, no words, no numbers, no fake writing, no glyphs. "
+        f"Clean composition with generous negative space reserved for headline placement. "
+        f"Professional commercial lighting, realistic proportions, natural shadows. "
+        f"No embossed text, no engraved markings. "
+        f"No letter-shaped, word-shaped, or symbol-shaped geometry. "
+        f"No raised, carved, cut-out, debossed, engraved, or embossed shapes "
+        f"no margins that imply text placement, no headline areas, no text boxes, no patterns that resemble writing or symbols, no callout areas. "
+        f"that resemble letters, numbers, or symbols. "
+        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
+        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
+        f"distorted products, warped shapes, text on the product, melted surfaces, extra random objects, "
+        f"surreal elements, cartoon style, illustration, heavy CGI look, "
+        f"faces, hands, fingers, posters or signs with text."
     )
 
     try:
@@ -876,7 +919,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         with open(image_path, "rb") as f:
             img_bytes = f.read()
 
-        url = upload_png_to_firebase_storage(img_bytes, uid)
+        image_url = upload_png_to_firebase_storage(img_bytes, uid)
 
         try:
             os.remove(image_path)
@@ -889,7 +932,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
                 "primary_text": payload.improved_primary_text,
                 "cta": payload.improved_cta,
             },
-            "imageUrl": url,
+            "imageUrl": image_url,
             "usage": {
                 "used": cap_result.get("used"),
                 "cap": cap_result.get("cap"),
@@ -901,11 +944,12 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Generate-from-optimizer failed: {e}")
-
+        raise HTTPException(status_code=502, detail=f"Generation failed: {e}")
 
 # ---------------- Stripe routes ----------------
 app.include_router(stripe_router)
+
+
 
 
 
