@@ -10,6 +10,7 @@ import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
 
+
 // NEW: Public pages
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -17,8 +18,12 @@ import Pricing from "./pages/Pricing";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 
-// ✅ NEW: Optimizer page (create this file)
 import Optimizer from "./pages/Optimizer";
+
+//Admin Imports 
+import AdminRoute from "./AdminRoute";
+import AdminUsers from "./pages/AdminUsers";
+
 
 export default function App() {
   return (
@@ -52,6 +57,12 @@ export default function App() {
             <Route path="/adgenerator" element={<AdGenerator />} />
             <Route path="/texteditor" element={<TextEditor />} />
           </Route>
+
+          {/* Admin */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/users" element={<AdminUsers />} />
+          </Route>
+
 
           {/* Fallback */}
           <Route path="*" element={<Home />} />

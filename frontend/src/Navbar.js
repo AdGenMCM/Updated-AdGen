@@ -109,11 +109,17 @@ export default function Navbar() {
       : []),
 
     ...(user
-      ? [
-          { divider: true },
-          { to: "/account", label: "My Account" },
-        ]
-      : []),
+  ? [
+      ...(isAdmin
+        ? [
+            { divider: true },
+            { to: "/admin/users", label: "Admin" },
+          ]
+        : []),
+      { divider: true },
+      { to: "/account", label: "My Account" },
+    ]
+  : []),
 
     { divider: true },
     { to: "/terms", label: "Terms of Service" },
@@ -181,6 +187,17 @@ export default function Navbar() {
               Ad Optimizer
             </NavLink>
           )}
+
+          {/* ✅ Admin (desktop) — admin only */}
+          {isAdmin && (
+            <NavLink
+              to="/admin/users"
+              className="nav-link"
+              onClick={() => setInfoOpen(false)}
+            >
+              Admin
+            </NavLink>
+    )}
 
           {/* Paid features links (desktop only via CSS) */}
           {canAccessPaid && (

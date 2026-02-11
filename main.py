@@ -24,6 +24,24 @@ from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_statu
 # admin dependency
 from admin_guard import admin_required
 
+#Amdin Page Imports
+from fastapi import Header, HTTPException, Query
+from typing import Any, Optional
+from datetime import datetime, timezone
+
+import firebase_admin
+from firebase_admin import auth as admin_auth
+from usage_caps import utc_month_key
+
+import traceback
+from fastapi.responses import JSONResponse
+
+from pydantic import BaseModel
+from google.cloud import firestore as gc_firestore
+from usage_caps import peek_usage, get_tier_and_status
+
+
+
 # feature gating + optimizer schemas
 from entitlements import require_pro_or_business
 from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
@@ -31,6 +49,9 @@ from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 load_dotenv(override=True)
 
 app = FastAPI()
+
+class AdminRequestTierBody(BaseModel):
+    requestedTier: str  # e.g. "starter_monthly", "pro_monthly", etc.
 
 # ---------------- CORS ----------------
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "").rstrip("/")
@@ -945,6 +966,256 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Generation failed: {e}")
+
+# ---------------- Creation of Admin Page Routes ----------------
+
+@app.get("/admin/users")
+def admin_list_users(
+    authorization: str | None = Header(default=None),
+    q: str = Query(default=""),                     # search (email/name)
+    tier: str = Query(default="all"),               # filter by tier (Firestore)
+    status: str = Query(default="all"),             # filter by stripe status (Firestore)
+    limit: int = Query(default=50, ge=1, le=200),
+    page_token: str = Query(default=""),            # pagination cursor from Firebase Auth
+) -> dict[str, Any]:
+    try:
+        uid, _email, claims = require_user(authorization)
+        if not is_admin(claims):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        db = get_db()
+
+        q_norm = (q or "").strip().lower()
+        tier_norm = (tier or "all").strip().lower()
+        status_norm = (status or "all").strip().lower()
+
+        # ✅ Some SDKs don't like empty string page_token
+        pt = page_token or None
+
+        # Firebase Auth list_users pagination
+        page = admin_auth.list_users(page_token=pt, max_results=limit)
+
+        results = []
+
+        for u in page.users:
+            # Auth fields
+            auth_uid = u.uid
+            auth_email = u.email or ""
+            display_name = (u.display_name or "").strip()
+
+            # Signup date from Auth (milliseconds since epoch)
+            created_iso = None
+            try:
+                ms = u.user_metadata.creation_timestamp
+                if ms:
+                    created_iso = datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+            except Exception:
+                created_iso = None
+
+            # Firestore profile (optional)
+            prof = {}
+            try:
+                snap = db.collection("users").document(auth_uid).get()
+                if snap.exists:
+                    prof = snap.to_dict() or {}
+            except Exception:
+                prof = {}
+
+            first = (prof.get("firstName") or "").strip()
+            last = (prof.get("lastName") or "").strip()
+
+            # Fallback: split displayName if first/last missing
+            if (not first and not last) and display_name:
+                parts = display_name.split()
+                if len(parts) >= 2:
+                    first = first or parts[0]
+                    last = last or " ".join(parts[1:])
+                else:
+                    first = first or display_name
+
+            # ✅ Prefer tier/status from your canonical helper (reads prof["stripe"].tier/status)
+            tier_for_caps, stripe_status_from_helper = get_tier_and_status(prof)
+
+            # For display/filtering: try stripe.tier first, then fallback
+            stripe_obj = (prof.get("stripe") or {})
+            requested_tier = (stripe_obj.get("requestedTier") or "").strip()
+            customer_id = (stripe_obj.get("customerId") or "").strip()
+
+
+            user_tier = (stripe_obj.get("tier") or stripe_obj.get("requestedTier") or prof.get("tier") or "-")
+            user_tier = str(user_tier).strip() or "-"
+
+            stripe_status = (stripe_obj.get("status") or stripe_status_from_helper or "inactive")
+            stripe_status = str(stripe_status).strip().lower()
+
+            # ✅ Usage + cap from your real system (usage/{uid} + tier caps)
+            usage_info = peek_usage(db, auth_uid, tier_for_caps)
+            used = int(usage_info.get("used") or 0)
+            cap = int(usage_info.get("cap") or 0)
+            remaining = int(usage_info.get("remaining") or max(0, cap - used))
+            usage_pct = 0 if cap <= 0 else round((used / cap) * 100)
+
+            # Filters
+            if tier_norm != "all" and user_tier.lower() != tier_norm:
+                continue
+            if status_norm != "all" and stripe_status.lower() != status_norm:
+                continue
+
+            # Search across merged fields
+            if q_norm:
+                hay = f"{first} {last} {auth_email} {display_name}".lower()
+                if q_norm not in hay:
+                    continue
+
+            results.append({
+                "uid": auth_uid,
+                "firstName": first,
+                "lastName": last,
+                "email": auth_email,
+                "createdAt": created_iso,          # Auth creation timestamp
+
+                "tier": user_tier,
+                "requestedTier": requested_tier,   # ✅ included for admin tier-request UI
+                "stripeStatus": stripe_status,
+                "customerId": customer_id,
+
+                # ✅ fields for UI usage display + highlighting
+                "used": used,
+                "cap": cap,
+                "remaining": remaining,
+                "usagePct": usage_pct,
+
+                # ✅ backwards compatibility
+                "monthlyUsage": used,
+
+                "hasProfile": bool(prof),
+            })
+
+        next_token = page.next_page_token or ""
+        return {"users": results, "nextCursor": next_token}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("ADMIN USERS ERROR:", repr(e))
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"detail": str(e)})
+    
+
+from fastapi import Header, HTTPException, Query
+from google.cloud import firestore as gc_firestore
+
+@app.post("/admin/users/{target_uid}/usage/grant")
+def admin_grant_usage_credits(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    credits: int = Query(default=5, ge=1, le=100),
+):
+    uid, _email, claims = require_user(authorization)
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    db = get_db()
+    month = utc_month_key()
+    usage_ref = db.collection("usage").document(target_uid)
+
+    @gc_firestore.transactional
+    def _tx(transaction: gc_firestore.Transaction):
+        snap = usage_ref.get(transaction=transaction)
+        data = snap.to_dict() or {}
+
+        current_month = data.get("month")
+        used = int(data.get("used") or 0)
+
+        if current_month != month:
+            used = 0
+
+        # Grant credits = reduce used count
+        new_used = max(0, used - credits)
+
+        transaction.set(
+            usage_ref,
+            {"month": month, "used": new_used, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+            merge=True,
+        )
+        return {"ok": True, "uid": target_uid, "month": month, "used": new_used, "granted": credits}
+
+    tx = db.transaction()
+    return _tx(tx)
+
+@app.post("/admin/users/{target_uid}/usage/reset")
+def admin_reset_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    db = get_db()
+    month = utc_month_key()
+    usage_ref = db.collection("usage").document(target_uid)
+
+    usage_ref.set(
+        {"month": month, "used": 0, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+        merge=True,
+    )
+    return {"ok": True, "uid": target_uid, "month": month, "used": 0}
+
+@app.post("/admin/users/{target_uid}/tier/request")
+def admin_request_tier_change(
+    target_uid: str,
+    body: AdminRequestTierBody,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    requested = (body.requestedTier or "").strip()
+    allowed = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly", "early_access"}
+    if requested not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid requestedTier. Allowed: {sorted(allowed)}")
+
+    db = get_db()
+    user_ref = db.collection("users").document(target_uid)
+
+    # Store on stripe object (matches your existing stripe metadata pattern)
+    user_ref.set(
+        {
+            "stripe": {
+                "requestedTier": requested,
+                "requestedTierAt": gc_firestore.SERVER_TIMESTAMP,
+            }
+        },
+        merge=True,
+    )
+
+    return {"ok": True, "uid": target_uid, "requestedTier": requested}
+
+@app.post("/users/me/tier/clear-request")
+def clear_requested_tier(
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, _claims = require_user(authorization)
+
+    db = get_db()
+    user_ref = db.collection("users").document(uid)
+
+    user_ref.set(
+        {
+            "stripe": {
+                "requestedTier": gc_firestore.DELETE_FIELD
+            }
+        },
+        merge=True,
+    )
+
+    return {"ok": True}
+
+
+
+
 
 # ---------------- Stripe routes ----------------
 app.include_router(stripe_router)

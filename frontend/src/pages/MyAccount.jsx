@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthProvider";
 import { createPortalSession } from "../api/payments";
-import { auth } from "../firebaseConfig"; // adjust ONLY if your firebaseConfig path differs
+import { auth } from "../firebaseConfig";
 import "./MyAccount.css";
 
 export default function MyAccount() {
@@ -17,8 +17,22 @@ export default function MyAccount() {
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
 
+  // ✅ Dismiss state
+  const [dismissing, setDismissing] = useState(false);
+
   // API base
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
+
+  const TIER_LABELS = useMemo(
+    () => ({
+      trial_monthly: "Trial",
+      early_access: "Early Access",
+      starter_monthly: "Starter",
+      pro_monthly: "Pro",
+      business_monthly: "Business",
+    }),
+    []
+  );
 
   async function fetchUsage() {
     setUsageError("");
@@ -66,7 +80,6 @@ export default function MyAccount() {
 
   useEffect(() => {
     if (!currentUser) return;
-    // Fetch usage when account page loads
     fetchUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
@@ -85,20 +98,17 @@ export default function MyAccount() {
     );
   }
 
-  const status = stripe?.status ?? "inactive";
+  const status = (stripe?.status ?? "inactive").toLowerCase();
   const tier = stripe?.tier ?? "—";
   const customerId = stripe?.customerId ?? null;
 
-  const TIER_LABELS = {
-  trial_monthly: "Trial",
-  early_access: "Early Access",
-  starter_monthly: "Starter",
-  pro_monthly: "Pro",
-  business_monthly: "Business",
-};
+  const requestedTier = (stripe?.requestedTier || "").trim();
+  const hasRequestedTier = !!requestedTier;
+  const requestedLabel = TIER_LABELS[requestedTier] || requestedTier;
+  const currentLabel = TIER_LABELS[tier] || tier;
 
-const tierLabel = TIER_LABELS[tier] || tier;
-
+  const isActiveOrTrial = status === "active" || status === "trialing";
+  const shouldShowRequestBanner = hasRequestedTier && requestedTier !== tier;
 
   async function openBillingPortal() {
     setError("");
@@ -119,6 +129,59 @@ const tierLabel = TIER_LABELS[tier] || tier;
       setLoadingPortal(false);
     }
   }
+
+  const confirmRequestedTier = async () => {
+    if (isActiveOrTrial) {
+      await openBillingPortal();
+    } else {
+      navigate(`/subscribe?tier=${encodeURIComponent(requestedTier)}`);
+    }
+  };
+
+  // ✅ NEW: Dismiss + clear requestedTier server-side
+  const dismissRequestedTier = async () => {
+    setError("");
+
+    try {
+      if (!apiBase) {
+        throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
+      }
+
+      if (!window.confirm("Dismiss this plan change request?")) return;
+
+      setDismissing(true);
+
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not logged in.");
+
+      const token = await user.getIdToken(true);
+
+      const res = await fetch(`${apiBase}/users/me/tier/clear-request`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        // ignore parse error
+      }
+
+      if (!res.ok) {
+        const detail = data?.detail || data?.message || `Failed to dismiss request (${res.status})`;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+
+      // ✅ No reload necessary. Firestore onSnapshot will update stripe.requestedTier and hide the banner.
+    } catch (e) {
+      setError(e?.message || "Failed to dismiss request.");
+    } finally {
+      setDismissing(false);
+    }
+  };
 
   return (
     <div className="acctPage">
@@ -147,6 +210,61 @@ const tierLabel = TIER_LABELS[tier] || tier;
         <div className="acctSection">
           <h2 className="acctH2">Subscription</h2>
 
+          {/* ✅ Admin-requested plan change banner */}
+          {shouldShowRequestBanner && (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "rgba(15,23,42,0.04)",
+                padding: 12,
+                borderRadius: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Plan change requested</div>
+
+              <div style={{ marginBottom: 10 }}>
+                An admin requested that your plan be changed to <b>{requestedLabel}</b>.
+                {tier && tier !== "—" ? (
+                  <>
+                    {" "}
+                    Your current plan is <b>{currentLabel}</b>.
+                  </>
+                ) : null}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  className="acctBtn acctBtnPrimary"
+                  type="button"
+                  onClick={confirmRequestedTier}
+                  disabled={!requestedTier || loadingPortal || dismissing}
+                >
+                  {isActiveOrTrial ? "Confirm in Billing (Stripe)" : "Confirm & Subscribe"}
+                </button>
+
+                <button
+                  className="acctBtn"
+                  type="button"
+                  onClick={dismissRequestedTier}
+                  disabled={dismissing || loadingPortal}
+                >
+                  {dismissing ? "Dismissing..." : "Dismiss"}
+                </button>
+
+                <button className="acctBtn" type="button" onClick={() => navigate("/pricing")}>
+                  View Plans
+                </button>
+              </div>
+
+              <p className="acctTiny" style={{ marginTop: 8 }}>
+                {isActiveOrTrial
+                  ? "This opens the Stripe billing portal so you can confirm the change."
+                  : "You’ll be taken to the subscribe page with the requested plan pre-selected."}
+              </p>
+            </div>
+          )}
+
           <div className="acctRow">
             <span className="acctLabel">Status</span>
             <span className="acctValue">{status}</span>
@@ -154,7 +272,7 @@ const tierLabel = TIER_LABELS[tier] || tier;
 
           <div className="acctRow">
             <span className="acctLabel">Tier</span>
-            <span className="acctValue">{tierLabel}</span>
+            <span className="acctValue">{currentLabel}</span>
           </div>
 
           <div className="acctRow">
@@ -178,7 +296,9 @@ const tierLabel = TIER_LABELS[tier] || tier;
           </div>
 
           <p className="acctTiny">Billing portal opens in a new tab.</p>
-           <p className="acctTiny"><i>* May need to allow pop-ups in your browser settings. Last case scenario, try a different browser *</i></p>
+          <p className="acctTiny">
+            <i>* May need to allow pop-ups in your browser settings. Last case scenario, try a different browser *</i>
+          </p>
         </div>
 
         {/* ✅ Usage section from GET /usage */}
@@ -213,9 +333,10 @@ const tierLabel = TIER_LABELS[tier] || tier;
               </div>
 
               <div className="acctRow">
-                <span className="acctLabel"><i>* Usage resets on the first of each month *</i></span>
+                <span className="acctLabel">
+                  <i>* Usage resets on the first of each month *</i>
+                </span>
               </div>
-
 
               {usage.remaining === 0 && (
                 <p className="acctTiny">
@@ -224,15 +345,15 @@ const tierLabel = TIER_LABELS[tier] || tier;
               )}
             </>
           ) : (
-            <p className="acctTiny">
-              {usageLoading ? "Loading usage…" : "Usage data not available yet."}
-            </p>
+            <p className="acctTiny">{usageLoading ? "Loading usage…" : "Usage data not available yet."}</p>
           )}
         </div>
       </div>
     </div>
   );
 }
+
+
 
 
 

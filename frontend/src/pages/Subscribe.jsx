@@ -2,14 +2,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../AuthProvider";
 import { doc, onSnapshot, getFirestore } from "firebase/firestore";
-import {
-  createCheckoutSession,
-  createPortalSession,
-  syncSubscription,
-} from "../api/payments";
+import { createCheckoutSession, createPortalSession, syncSubscription } from "../api/payments";
 import { useNavigate, useLocation } from "react-router-dom";
 
 const db = getFirestore();
+
+const ALLOWED_TIERS = new Set([
+  "trial_monthly",
+  "early_access",
+  "starter_monthly",
+  "pro_monthly",
+  "business_monthly",
+]);
 
 export default function Subscribe() {
   const { currentUser } = useAuth();
@@ -18,7 +22,7 @@ export default function Subscribe() {
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
 
-  // ✅ NEW: selected plan tier
+  // selected plan tier
   const [tier, setTier] = useState("starter_monthly");
 
   const navigate = useNavigate();
@@ -28,6 +32,14 @@ export default function Subscribe() {
   const success = params.get("success") === "1";
   const from = location.state?.from?.pathname || "/adgenerator";
   const pollRef = useRef(null);
+
+  // ✅ NEW: if /subscribe?tier=pro_monthly, pre-select it
+  useEffect(() => {
+    const t = (params.get("tier") || "").trim();
+    if (t && ALLOWED_TIERS.has(t)) {
+      setTier(t);
+    }
+  }, [params]);
 
   // Cache session_id if user isn't logged in yet
   useEffect(() => {
@@ -43,8 +55,11 @@ export default function Subscribe() {
     const sid = localStorage.getItem("pending_session_id");
     if (sid) {
       (async () => {
-        try { await syncSubscription({ uid: currentUser.uid, sessionId: sid }); }
-        finally { localStorage.removeItem("pending_session_id"); }
+        try {
+          await syncSubscription({ uid: currentUser.uid, sessionId: sid });
+        } finally {
+          localStorage.removeItem("pending_session_id");
+        }
       })();
     }
   }, [currentUser]);
@@ -123,15 +138,14 @@ export default function Subscribe() {
   if (!currentUser) return <p>Please log in first.</p>;
 
   const openInNewTab = (url) => {
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-};
-
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
   const startSubscription = async () => {
     setError("");
@@ -139,7 +153,7 @@ export default function Subscribe() {
       const { url } = await createCheckoutSession({
         uid: currentUser.uid,
         email: currentUser.email,
-        tier, // ✅ required by backend
+        tier,
       });
       openInNewTab(url);
     } catch (e) {
@@ -212,11 +226,17 @@ export default function Subscribe() {
         )}
 
         {showSpinner ? (
-          <button type="button" disabled>Processing…</button>
+          <button type="button" disabled>
+            Processing…
+          </button>
         ) : !isActive ? (
-          <button type="button" onClick={startSubscription}>Subscribe with Stripe</button>
+          <button type="button" onClick={startSubscription}>
+            Subscribe with Stripe
+          </button>
         ) : (
-          <button type="button" onClick={openBilling}>Manage Billing</button>
+          <button type="button" onClick={openBilling}>
+            Manage Billing
+          </button>
         )}
 
         {status === "pending" && !showSpinner && (
@@ -225,7 +245,6 @@ export default function Subscribe() {
           </button>
         )}
 
-        {/* Debug (safe to remove) */}
         <div style={{ marginTop: 16, fontSize: 12, opacity: 0.7 }}>
           <div>UID: {currentUser.uid}</div>
           <div>Status: {status}</div>
@@ -238,6 +257,7 @@ export default function Subscribe() {
     </div>
   );
 }
+
 
 
 

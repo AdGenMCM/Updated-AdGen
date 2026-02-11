@@ -413,7 +413,7 @@ export default function Optimizer() {
         </div>
       ) : !canUseOptimizer ? (
         <div className="opt-card">
-          <h2 className="opt-h2">🔒 Pro & Business only</h2>
+          <h2 className="opt-h2">🔒 Early Access, Pro, & Business only</h2>
           <p className="opt-text">Upgrade to unlock Ad Performance Optimization.</p>
           <button className="opt-btn" onClick={() => navigate("/account")}>Upgrade</button>
           {err && <p className="opt-error">{err}</p>}
