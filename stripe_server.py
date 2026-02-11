@@ -50,7 +50,7 @@ def _load_settings_from_env() -> None:
     except Exception:
         raise RuntimeError("STRIPE_PRICE_MAP_JSON must be valid JSON")
 
-    required = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
+    required = {"trial_monthly", "early_access", "starter_monthly", "pro_monthly", "business_monthly"}
     missing = required - set(PRICE_MAP.keys())
     if missing:
         raise RuntimeError(f"STRIPE_PRICE_MAP_JSON missing keys: {sorted(missing)}")
@@ -79,7 +79,7 @@ def get_db():
 class CheckoutPayload(BaseModel):
     uid: str
     email: Optional[str] = None
-    tier: str  # trial_monthly | starter_monthly | pro_monthly | business_monthly
+    tier: str  # trial_monthly | early_access | starter_monthly | pro_monthly | business_monthly
 
 
 class PortalPayload(BaseModel):

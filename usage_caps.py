@@ -11,6 +11,7 @@ TIER_CAPS: Dict[str, int] = {
     "starter_monthly": 25,
     "pro_monthly": 60,
     "business_monthly": 175,
+    "early_access": 10,
 }
 
 

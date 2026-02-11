@@ -203,6 +203,7 @@ export default function Subscribe() {
               disabled={showSpinner}
             >
               <option value="trial_monthly">Trial Monthly - $4.99</option>
+              <option value="early_access">Early Access - $14.99</option>
               <option value="starter_monthly">Starter Monthly - $24.99</option>
               <option value="pro_monthly">Pro Monthly - $49.99</option>
               <option value="business_monthly">Business Monthly - $124.99</option>

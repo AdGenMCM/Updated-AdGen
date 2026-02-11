@@ -14,6 +14,16 @@ const TIERS = [
     highlighted: false,
   },
   {
+    id: "early_access",
+    name: "Early Access",
+    price: "$14.99",
+    badge: "Founding",
+    description: "Early plan with full optimizer access and limited generations.",
+    usesPerMonth: 10,
+    ctaText: "Choose Early Access",
+    highlighted: false,
+  },
+  {
     id: "starter",
     name: "Starter",
     price: "$24.99",
@@ -54,7 +64,7 @@ function formatUSD(n) {
 }
 
 function hasOptimizer(tierId) {
-  return tierId === "pro" || tierId === "business";
+  return tierId === "early_access" || tierId === "pro" || tierId === "business";
 }
 
 export default function Pricing() {

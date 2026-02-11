@@ -89,6 +89,17 @@ export default function MyAccount() {
   const tier = stripe?.tier ?? "—";
   const customerId = stripe?.customerId ?? null;
 
+  const TIER_LABELS = {
+  trial_monthly: "Trial",
+  early_access: "Early Access",
+  starter_monthly: "Starter",
+  pro_monthly: "Pro",
+  business_monthly: "Business",
+};
+
+const tierLabel = TIER_LABELS[tier] || tier;
+
+
   async function openBillingPortal() {
     setError("");
     setLoadingPortal(true);
@@ -143,7 +154,7 @@ export default function MyAccount() {
 
           <div className="acctRow">
             <span className="acctLabel">Tier</span>
-            <span className="acctValue">{tier}</span>
+            <span className="acctValue">{tierLabel}</span>
           </div>
 
           <div className="acctRow">
@@ -208,7 +219,7 @@ export default function MyAccount() {
 
               {usage.remaining === 0 && (
                 <p className="acctTiny">
-                  You’ve reached your limit. Upgrade to continue generating ads this month.
+                  You’ve reached your limit. Upgrade your plan to continue generating ads this month.
                 </p>
               )}
             </>
