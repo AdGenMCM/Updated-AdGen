@@ -219,7 +219,7 @@ export default function Navbar() {
               className="btn primary"
               onClick={() => setInfoOpen(false)}
             >
-              Login
+              Login/Register
             </NavLink>
           )}
         </div>

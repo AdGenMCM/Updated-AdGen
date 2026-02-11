@@ -1,6 +1,6 @@
 // src/AuthForm.js
 import "./AuthForm.css";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { auth } from "./firebaseConfig";
 import {
@@ -8,7 +8,12 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   sendEmailVerification,
+  updateProfile,
 } from "firebase/auth";
+
+import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+
+const db = getFirestore();
 
 /**
  * After a successful login, this navigates back to the EXACT route
@@ -17,6 +22,11 @@ import {
 const AuthForm = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // ✅ NEW: names for registration
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+
   const [isRegistering, setIsRegistering] = useState(false);
   const [message, setMessage] = useState("");
   const [unverifiedUser, setUnverifiedUser] = useState(null);
@@ -31,9 +41,42 @@ const AuthForm = ({ onLogin }) => {
 
     try {
       if (isRegistering) {
+        // basic validation (optional)
+        if (!firstName.trim() || !lastName.trim()) {
+          setMessage("Please enter your first and last name.");
+          return;
+        }
+
         const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+        // ✅ Optional but nice: set displayName in Firebase Auth user profile
+        await updateProfile(cred.user, {
+          displayName: `${firstName.trim()} ${lastName.trim()}`,
+        });
+
+        // ✅ Create user profile doc in Firestore
+        // NOTE: your PaidRoute/AuthProvider already read users/{uid} for stripe data
+        // This will coexist with stripe fields (later you can add merge writes elsewhere as needed).
+        await setDoc(
+          doc(db, "users", cred.user.uid),
+          {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            email: cred.user.email,
+            createdAt: serverTimestamp(),
+
+            // Optional defaults (safe to keep even if you don't use them yet)
+            tier: "trial",
+            subscriptionStatus: "inactive",
+            monthlyUsage: 0,
+          },
+          { merge: true }
+        );
+
         await sendEmailVerification(cred.user);
-        setMessage("Account created! Verification email sent. Please check your inbox.");
+        setMessage(
+          "Account created! Verification email sent. Please check your inbox."
+        );
         return;
       }
 
@@ -84,6 +127,27 @@ const AuthForm = ({ onLogin }) => {
       <form onSubmit={handleSubmit}>
         <h2>{isRegistering ? "Register" : "Log In"}</h2>
 
+        {/* ✅ NEW: show name fields only on Register */}
+        {isRegistering && (
+          <>
+            <input
+              type="text"
+              placeholder="First Name"
+              value={firstName}
+              required
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+
+            <input
+              type="text"
+              placeholder="Last Name"
+              value={lastName}
+              required
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </>
+        )}
+
         <input
           type="email"
           placeholder="Email"
@@ -123,6 +187,7 @@ const AuthForm = ({ onLogin }) => {
 };
 
 export default AuthForm;
+
 
 
 

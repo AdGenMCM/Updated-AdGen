@@ -9,10 +9,18 @@ const db = getFirestore();
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [stripe, setStripe] = useState(null); // users/{uid}.stripe
+
+  // ✅ NEW: full Firestore user document
+  const [userDoc, setUserDoc] = useState(null);
+
+  // existing stripe state (kept for PaidRoute)
+  const [stripe, setStripe] = useState(null);
+
   const [loading, setLoading] = useState(true);
 
-  // Auth listener
+  // -----------------------------
+  // 1️⃣ Firebase Auth listener
+  // -----------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -21,27 +29,49 @@ export function AuthProvider({ children }) {
     return () => unsub();
   }, []);
 
-  // Stripe (Firestore) listener
+  // -----------------------------------
+  // 2️⃣ Firestore users/{uid} listener
+  // -----------------------------------
   useEffect(() => {
     if (!currentUser) {
+      setUserDoc(null);
       setStripe(null);
       return;
     }
 
     const ref = doc(db, "users", currentUser.uid);
+
     const unsub = onSnapshot(
       ref,
       (snap) => {
-        const s = snap.data()?.stripe ?? null;
-        setStripe(s);
+        const data = snap.data() || null;
+
+        // ✅ store entire user document
+        setUserDoc(data);
+
+        // ✅ keep stripe logic working
+        setStripe(data?.stripe ?? null);
       },
-      () => setStripe(null)
+      () => {
+        setUserDoc(null);
+        setStripe(null);
+      }
     );
 
     return () => unsub();
   }, [currentUser]);
 
-  const value = useMemo(() => ({ currentUser, stripe }), [currentUser, stripe]);
+  // -----------------------------------
+  // 3️⃣ Context value
+  // -----------------------------------
+  const value = useMemo(
+    () => ({
+      currentUser,
+      stripe,
+      userDoc, // ✅ now accessible everywhere
+    }),
+    [currentUser, stripe, userDoc]
+  );
 
   return (
     <AuthContext.Provider value={value}>
@@ -53,5 +83,6 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+
 
 
