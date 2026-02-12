@@ -53,6 +53,82 @@ app = FastAPI()
 class AdminRequestTierBody(BaseModel):
     requestedTier: str  # e.g. "starter_monthly", "pro_monthly", etc.
 
+# -------------- visual prompt for image generation -----------------
+def build_visual_prompt(
+    *,
+    product_name: str,
+    subject: str,
+    tone: str,
+    goal: str,
+    style_hint: str,
+    extra_instructions: str = "",
+) -> str:
+    """
+    Shared image prompt builder used by both /generate-ad and /generate-from-optimizer.
+
+    Goals:
+    - HARD anchor requested product_name (prevents category drift)
+    - Great product photography composition
+    - Aggressively prevent ANY text artifacts by banning text-carrying props + printed surfaces
+    - Allow route-specific instructions via extra_instructions
+    """
+
+    product_name = (product_name or "").strip()
+    subject = (subject or "").strip()
+    extra = (extra_instructions or "").strip()
+
+
+    base = (
+        f"{style_hint}. "
+        f"Ultra-realistic commercial product photography. "
+        f"PRIMARY SUBJECT (must be depicted exactly): {product_name}. "
+        f"Depict: {subject}. "
+        f"The {product_name} must be the single primary hero object in the frame. "
+        f"ONLY ONE product total: exactly 1 {product_name}. "
+        f"No duplicates, no multiples, no sets, no bundles, no lineup, no collection. "
+        f"Do not show more than one unit of the product. "
+        f"If multiple items are shown, they must be identical variations of the same product model only. "
+        f"Do NOT substitute with other product categories. "
+        f"{(extra + ' ') if extra else ''}"
+
+        # ✅ Composition that does NOT invite text
+        f"Plain seamless studio backdrop, clean and minimal. "
+        f"Single hero product shot, centered, with empty BLANK background space. "
+        f"No lifestyle scene. No marketing set. No product showcase boards. No collages. "
+        f"Professional commercial lighting, realistic proportions, natural shadows. "
+        f"Create an ad-ready social media image in a {tone.lower()} tone. "
+        f"Goal: {goal}. "
+
+        # Background variety
+        f"Background must be a solid seamless backdrop with a SINGLE smooth color (no gradients, no textures). "
+        f"Vary the backdrop color across generations and choose a color that complements the product. "
+        f"Pick ONE of these backdrop colors (rotate between them over multiple generations): "
+        f"cool white, soft light gray, slate gray, charcoal, pale blue, muted navy, sage green, "
+        f"forest green, blush pink, muted terracotta, lavender, sand-white."
+        f"AVOID beige/tan unless explicitly requested. "
+
+        # ✅ Hard “no text” + hard ban on props that usually contain text
+        f"Brand-neutral and unbranded. "
+        f"ABSOLUTELY NO TEXT OR WRITING ANYWHERE: "
+        f"no words, no letters, no numbers, no symbols, no glyphs, no fake writing. "
+        f"NO logos, NO brand marks, NO trademarks, NO icons. "
+        f"NO packaging, NO boxes, NO labels, NO stickers, NO tags, NO instruction cards, "
+        f"NO posters, NO signage, NO billboards, NO magazines, NO brochures, NO placards, "
+        f"NO screens or UI, NO QR codes, NO barcodes, NO watermarks. "
+        f"No printed graphics or printed textures anywhere in the scene. "
+        f"Background must be smooth and blank: no embossing, no engraving, no debossing, "
+        f"no letter-shaped or symbol-shaped geometry, no patterns that resemble writing. "
+        f"NO textures or materials that resemble writing surfaces (e.g. paper, cardboard). "
+
+        # ✅ General avoid list (keep shorter + focused)
+        f"AVOID: distorted products, warped shapes, melted surfaces, extra random objects, "
+        f"surreal elements, cartoon/illustration style, heavy CGI look, faces, hands, fingers."
+    )
+
+    return " ".join(base.split())
+
+
+
 # ---------------- CORS ----------------
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "").rstrip("/")
 origins = [
@@ -309,142 +385,55 @@ STYLE_HINTS = {
 
 
 # ✅ UPDATED: keyword-first + many more categories + productType normalized
+import re
+
 def infer_visual_subject(product_name: str, description: str, product_type: str | None = None) -> str:
-    pn = (product_name or "").lower()
-    desc = (description or "").lower()
-    text = f"{pn} {desc}".strip()
+    """
+    Generic subject builder:
+    - NEVER swaps the user's product for something else
+    - Uses description to extract helpful visual attributes (materials/colors/features)
+    """
+    pn = (product_name or "").strip()
+    desc = (description or "").strip()
 
-    def has_any(keys: list[str]) -> bool:
-        return any(k in text for k in keys)
+    # Basic attribute extraction (lightweight + safe)
+    text = f"{pn}. {desc}".lower()
 
-    # --- Food / Candy / Snacks (specific first) ---
-    if has_any(["candy", "candies", "sweet", "sweets", "gummy", "gummies", "lollipop", "lollipops",
-                "chocolate", "taffy", "caramel", "marshmallow", "sour candy"]):
-        return "a colorful assortment of unbranded wrapped candies and gummies on a clean tabletop (no readable text)"
+    # common materials/colors/finishes to help the model stay on target
+    materials = []
+    for m in ["leather", "faux leather", "mesh", "fabric", "wood", "metal", "plastic", "glass", "ceramic", "steel", "aluminum"]:
+        if m in text:
+            materials.append(m)
 
-    if has_any(["ice cream", "gelato", "frozen yogurt", "sundae"]):
-        return "a premium dessert hero shot featuring a generic ice cream cup or bowl (no readable text)"
+    colors = []
+    for c in ["black", "white", "gray", "grey", "beige", "tan", "brown", "silver", "gold", "blue", "green", "red"]:
+        if re.search(rf"\b{c}\b", text):
+            colors.append(c)
 
-    if has_any(["cookie", "cookies", "brownie", "cake", "cupcake", "donut", "doughnut", "pastry", "dessert"]):
-        return "a premium dessert hero shot featuring generic baked goods on a clean surface (no readable text)"
+    features = []
+    for f in [
+        "adjustable", "ergonomic", "wireless", "portable", "waterproof", "rechargeable",
+        "lightweight", "compact", "premium", "minimal", "modern"
+    ]:
+        if f in text:
+            features.append(f)
 
-    if has_any(["chips", "nachos", "pretzel", "popcorn", "snack", "snacks", "cracker", "crackers",
-                "granola bar", "protein bar", "trail mix", "nuts"]):
-        return "a premium snack hero shot featuring unbranded packaging or a snack assortment (no readable text)"
+    # Build an attribute string that helps but doesn't override the object
+    attr_bits = []
+    if materials:
+        attr_bits.append("materials: " + ", ".join(sorted(set(materials))))
+    if colors:
+        attr_bits.append("colors: " + ", ".join(sorted(set(colors))))
+    if features:
+        attr_bits.append("features: " + ", ".join(sorted(set(features))))
 
-    if has_any(["pizza", "burger", "sandwich", "taco", "sushi", "salad", "meal", "restaurant", "takeout", "delivery"]):
-        return "a delicious food hero shot plated on a clean tabletop scene (no readable text)"
+    attrs = ("; ".join(attr_bits)).strip()
 
-    # --- Beverages ---
-    if has_any(["coffee", "latte", "espresso", "cappuccino", "tea", "matcha"]):
-        return "a premium café-style beverage scene with a generic cup and no branding (no readable text)"
+    # ✅ Hard anchor: the subject is ALWAYS the user's product name
+    if attrs:
+        return f"{pn} ({attrs})"
+    return pn
 
-    if has_any(["soda", "sparkling water", "soft drink", "energy drink", "beverage", "drink", "juice",
-                "smoothie", "sports drink"]):
-        return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
-
-    if has_any(["beer", "wine", "whiskey", "vodka", "tequila", "cocktail"]):
-        return "a premium beverage hero shot featuring generic glassware and unbranded bottle silhouettes (no readable text)"
-
-    # --- Beauty / Personal Care ---
-    if has_any(["skincare", "serum", "moisturizer", "cleanser", "toner", "sunscreen", "spf", "face mask"]):
-        return "a minimalist skincare product set with blank labels (no readable text)"
-
-    if has_any(["shampoo", "conditioner", "haircare", "hair", "styling", "pomade"]):
-        return "a premium haircare bottle set with blank labels (no readable text)"
-
-    if has_any(["makeup", "mascara", "lipstick", "foundation", "concealer", "blush", "eyeliner", "palette"]):
-        return "a premium cosmetics flat-lay with unbranded items (no readable text)"
-
-    if has_any(["perfume", "cologne", "fragrance"]):
-        return "a luxury fragrance bottle silhouette with no branding (no readable text)"
-
-    # --- Apparel / Accessories ---
-    if has_any(["shirt", "tshirt", "t-shirt", "hoodie", "jacket", "dress", "apparel", "clothing"]):
-        return "a clean apparel product hero shot with no logos (no readable text)"
-
-    if has_any(["shoes", "sneakers", "boots", "footwear"]):
-        return "a premium footwear product shot with no logos (no readable text)"
-
-    if has_any(["watch", "jewelry", "necklace", "bracelet", "ring", "earrings"]):
-        return "a luxury jewelry product shot (no branding, no readable text)"
-
-    if has_any(["bag", "handbag", "backpack", "wallet", "purse"]):
-        return "a premium accessory product shot with no logos and no readable text"
-
-    # --- Tech / Electronics ---
-    if has_any(["phone", "smartphone", "tablet", "laptop", "computer"]):
-        return "a modern device mockup on a clean desk scene with blank, non-readable UI (no readable text)"
-
-    if has_any(["headphones", "earbuds", "speaker", "audio"]):
-        return "a clean product shot of generic audio gear with no logos (no readable text)"
-
-    if has_any(["camera", "lens", "microphone", "mic"]):
-        return "a premium product hero shot of generic creator gear with no logos (no readable text)"
-
-    if has_any(["charger", "charging", "power bank", "usb", "cable"]):
-        return "a clean product shot of generic charging accessories with no logos (no readable text)"
-
-    # --- Home / Household ---
-    if has_any(["candle", "diffuser", "essential oil", "home scent"]):
-        return "a cozy home fragrance scene with unbranded candles/diffusers (no readable text)"
-
-    if has_any(["cleaning", "detergent", "soap", "dish", "laundry", "disinfectant", "spray"]):
-        return "a clean home cleaning product set with blank labels (no readable text)"
-
-    if has_any(["furniture", "sofa", "chair", "table", "desk", "mattress"]):
-        return "a bright interior lifestyle scene featuring generic furniture (no branding, no readable text)"
-
-    if has_any(["kitchen", "cookware", "pan", "pot", "knife", "blender", "air fryer", "toaster"]):
-        return "a clean kitchen product hero shot featuring generic cookware/appliance with no logos (no readable text)"
-
-    # --- Fitness / Wellness ---
-    if has_any(["supplement", "vitamin", "protein", "creatine", "preworkout", "pre-workout"]):
-        return "a generic supplement jar with a completely blank label (no readable text)"
-
-    if has_any(["gym", "fitness", "workout", "yoga", "pilates", "dumbbell", "kettlebell"]):
-        return "a lifestyle fitness scene with generic gear and no branding (no readable text)"
-
-    # --- Pets ---
-    if has_any(["pet", "dog", "cat", "puppy", "kitten", "pet food", "kibble", "pet treats"]):
-        return "a pet product hero shot with a generic bag/container with blank label and pet bowl (no readable text)"
-
-    # --- Automotive ---
-    if has_any(["car", "auto", "automotive", "tire", "oil", "wax", "detail", "detailing"]):
-        return "a premium automotive product shot with generic car-care bottle silhouettes (no readable text)"
-
-    # --- Tools / DIY ---
-    if has_any(["tool", "drill", "hammer", "screwdriver", "wrench", "hardware", "diy"]):
-        return "a clean product hero shot of generic tools on a workshop tabletop (no logos, no readable text)"
-
-    # --- SaaS / App / Service ---
-    if has_any(["app", "software", "saas", "website", "dashboard", "mobile app", "analytics", "platform"]):
-        return "a modern smartphone or laptop mockup showing a generic dashboard UI with no readable text"
-
-    if has_any(["course", "ebook", "book", "pdf", "guide", "workshop"]):
-        return "a clean book/ebook cover mockup with abstract shapes (no readable text)"
-
-    # --- productType fallback (only if keyword detection didn’t match) ---
-    if product_type:
-        pt = product_type.lower().strip()
-
-        # normalize dropdown values like "Beverage / Food"
-        if "beverage" in pt or "drink" in pt:
-            return "a generic beverage container (can or bottle) with a completely blank label (no readable text)"
-        if "food" in pt or "snack" in pt:
-            return "a premium food/snack hero shot with unbranded packaging and no readable text"
-        if "skincare" in pt or "cosmetic" in pt or "beauty" in pt:
-            return "a minimalist cosmetic container set with blank labels (no readable text)"
-        if "app" in pt or "software" in pt or "saas" in pt:
-            return "a modern smartphone mockup showing a generic app interface with blank UI (no readable text)"
-        if "electronics" in pt or "device" in pt or "tech" in pt:
-            return "a clean product shot of a generic consumer device with no logos or text"
-        if "apparel" in pt or "clothing" in pt:
-            return "a clean product shot of apparel with no logos or text"
-
-        return f"a clean hero product photo of a generic {pt} with no logos and no readable text"
-
-    return "a clean hero product photo of a generic item that represents the product, with no logos and no readable text"
 
 # ---------------- Usage ----------------
 @app.get("/usage")
@@ -600,6 +589,9 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
         cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
     product_name = (payload.product_name or "").strip()[:80]
+    if not product_name:
+        raise HTTPException(status_code=400, detail="product_name is required.")
+
     description = (payload.description or "").strip()[:800]
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
@@ -612,6 +604,8 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
 
     style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
+
+    # IMPORTANT: subject should not override product_name — prompt builder anchors product_name regardless.
     subject = infer_visual_subject(product_name, description, product_type)
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
@@ -633,28 +627,22 @@ goal: {goal}
 offer: {offer or "N/A"}
 """
 
-    visual_prompt = (
-         f"{style_hint}. "
-        f"High-end ad photography of {subject}. "
-        f"Everything must be brand-neutral and unbranded: "
-        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-        f"No readable text anywhere in the scene (including background, packaging, screens): "
-        f"no letters, no words, no numbers, no fake writing, no glyphs. "
-        f"Create an ad-ready social media advertisement image in a {tone.lower()} tone. "
-        f"Goal: {goal}. "
-        #f"{'Offer: ' + offer + '. ' if offer else ''}"
-        f"Clean composition with generous negative space reserved for headline placement. "
-        f"Professional commercial lighting, realistic proportions, natural shadows. "
-        f"No embossed text, no engraved markings. "
-        f"No letter-shaped, word-shaped, or symbol-shaped geometry. "
-        f"No raised, carved, cut-out, debossed, engraved, or embossed shapes "
-        f"no margins that imply text placement, no headline areas, no text boxes, no patterns that resemble writing or symbols, no callout areas. "
-        f"that resemble letters, numbers, or symbols. "
-        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
-        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
-        f"distorted products, warped shapes, text on the product, melted surfaces, extra random objects, "
-        f"surreal elements, cartoon style, illustration, heavy CGI look, "
-        f"faces, hands, fingers, posters or signs with text."
+    # ✅ NEW: shared builder w/ hard product anchor
+    visual_prompt = build_visual_prompt(
+        product_name=product_name,
+        subject=subject,
+        tone=tone,
+        goal=goal,
+        style_hint=style_hint,
+        extra_instructions=(
+            "Plain seamless studio setup. "
+             "Single hero product shot. "
+             "No packaging, no posters, no signage, no printed materials."
+             "Absolutely no visible text of any kind. "
+             "No logos, no labels, no packaging, no brand names, no symbols, "
+             "no typography, no engraved markings, no embossed markings. "
+             "All surfaces must be completely blank and smooth. "
+        ),
     )
 
     async def _gen_copy():
@@ -739,6 +727,7 @@ offer: {offer or "N/A"}
             "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
         },
     }
+
 
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
@@ -881,7 +870,6 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
         require_pro_or_business(tier)
 
-        # ✅ counts toward monthly usage
         cap_result = check_and_increment_usage(db, uid, tier)
         if not cap_result["allowed"]:
             raise HTTPException(
@@ -899,29 +887,43 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
-    visual_prompt = (
-        f"{payload.improved_image_prompt}. "
-        f"Everything must be brand-neutral and unbranded: "
-        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-        f"No readable text anywhere in the scene: no letters, no words, no numbers, no fake writing, no glyphs. "
-        f"Clean composition with generous negative space reserved for headline placement. "
-        f"Professional commercial lighting, realistic proportions, natural shadows. "
-        f"Everything must be brand-neutral and unbranded: "
-        f"NO logos, NO brand marks, NO labels with text, NO icons, NO symbols, NO trademarks. "
-        f"No readable text anywhere in the scene (including background, packaging, screens): "
-        f"no letters, no words, no numbers, no fake writing, no glyphs. "
-        f"Clean composition with generous negative space reserved for headline placement. "
-        f"Professional commercial lighting, realistic proportions, natural shadows. "
-        f"No embossed text, no engraved markings. "
-        f"No letter-shaped, word-shaped, or symbol-shaped geometry. "
-        f"No raised, carved, cut-out, debossed, engraved, or embossed shapes "
-        f"no margins that imply text placement, no headline areas, no text boxes, no patterns that resemble writing or symbols, no callout areas. "
-        f"that resemble letters, numbers, or symbols. "
-        f"AVOID: typography, text, letters, numbers, fake logos, fake brands, labels, stickers, "
-        f"watermarks, QR codes, barcodes, slogans, badges, seals, app icons, platform logos, "
-        f"distorted products, warped shapes, text on the product, melted surfaces, extra random objects, "
-        f"surreal elements, cartoon style, illustration, heavy CGI look, "
-        f"faces, hands, fingers, posters or signs with text."
+    # --- Pull optional fields safely (won't break if not in model yet) ---
+    product_name = (getattr(payload, "product_name", None) or getattr(payload, "productName", None) or "").strip()[:80]
+    description = (getattr(payload, "description", None) or "").strip()[:800]
+    product_type = (getattr(payload, "productType", None) or "").strip()[:40] or None
+    style = (getattr(payload, "stylePreset", None) or "Minimal").strip()[:30]
+    tone = (getattr(payload, "tone", None) or "confident").strip()[:40]
+    goal = (getattr(payload, "goal", None) or "Performance optimization").strip()[:60]
+
+    style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
+
+    # If not provided yet, fallback is still better than nothing
+    if not product_name:
+        product_name = "the same product as the reference creative"
+
+    subject = infer_visual_subject(product_name, description, product_type)
+
+    regen_extra = (
+        "This is a regeneration of an existing ad creative. "
+        "Match the reference creative’s product identity and overall composition/camera angle. "
+        "Do NOT recreate any text-bearing elements (no posters, no packaging, no signage, no boards). "
+        "Only improve ad quality (lighting, clarity, composition, realism). "
+        "Absolutely no visible text of any kind. "
+        "No logos, no labels, no packaging, no brand names, no symbols, "
+        "no typography, no engraved markings, no embossed markings. "
+        "All surfaces must be completely blank and smooth. "
+        f"Apply these improvements: {payload.improved_image_prompt}."
+    )
+
+
+    # ✅ NEW: shared builder w/ hard product anchor + regen instructions
+    visual_prompt = build_visual_prompt(
+        product_name=product_name,
+        subject=subject,
+        tone=tone,
+        goal=goal,
+        style_hint=style_hint,
+        extra_instructions=regen_extra,
     )
 
     try:
@@ -966,6 +968,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Generation failed: {e}")
+
 
 # ---------------- Creation of Admin Page Routes ----------------
 
