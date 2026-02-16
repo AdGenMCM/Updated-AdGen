@@ -1,6 +1,7 @@
 import "./App.css";
 import Navbar from "./Navbar";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import Home from "./pages/Home";
 import AdGenerator from "./pages/AdGenerator";
 import TextEditor from "./pages/TextEditor";
@@ -24,12 +25,26 @@ import Optimizer from "./pages/Optimizer";
 import AdminRoute from "./AdminRoute";
 import AdminUsers from "./pages/AdminUsers";
 
+// Meta Pixel tracking component
+function MetaPixelPageView() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (window.fbq) {
+      window.fbq("track", "PageView");
+    }
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 
 export default function App() {
   return (
     <>
       <Navbar />
       <div className="container">
+        <MetaPixelPageView />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />

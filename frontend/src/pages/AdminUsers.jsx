@@ -33,7 +33,14 @@ export default function AdminUsers() {
   const [nextCursor, setNextCursor] = useState("");
   const [pageStack, setPageStack] = useState([]);
 
-  const API_BASE = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
+  const PROD_API = "https://updated-adgen.onrender.com";
+
+// Use either env var name (so you don’t get burned by mismatch)
+const envApi =
+  (process.env.REACT_APP_API_URL || "").trim() ||
+  (process.env.REACT_APP_API_BASE_URL || "").trim();
+
+const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
 
   const authedFetch = useCallback(
     async (path, options = {}) => {

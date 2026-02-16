@@ -72,6 +72,10 @@ const AuthForm = ({ onLogin }) => {
           },
           { merge: true }
         );
+        
+        if (window.fbq) {
+          window.fbq("track", "CompleteRegistration");
+        }
 
         await sendEmailVerification(cred.user);
         setMessage(

@@ -15,6 +15,7 @@ const ALLOWED_TIERS = new Set([
   "business_monthly",
 ]);
 
+
 export default function Subscribe() {
   const { currentUser } = useAuth();
   const [status, setStatus] = useState("checking"); // checking | inactive | pending | active
@@ -32,6 +33,19 @@ export default function Subscribe() {
   const success = params.get("success") === "1";
   const from = location.state?.from?.pathname || "/adgenerator";
   const pollRef = useRef(null);
+
+  const purchaseFiredRef = useRef(false);
+
+  const tierToPrice = (t) => {
+    switch (t) {
+      case "trial_monthly": return 4.99;
+      case "early_access": return 14.99;
+      case "starter_monthly": return 24.99;
+      case "pro_monthly": return 49.99;
+      case "business_monthly": return 124.99;
+      default: return 0;
+    }
+  };
 
   // ✅ NEW: if /subscribe?tier=pro_monthly, pre-select it
   useEffect(() => {
@@ -92,6 +106,16 @@ export default function Subscribe() {
         setStripeInfo(data?.stripe || null);
 
         if (s === "active") {
+          // ✅ Meta conversion event: subscription active (fire once)
+          if (!purchaseFiredRef.current && window.fbq) {
+            purchaseFiredRef.current = true;
+
+            const value = tierToPrice(tier); // uses currently selected tier as best-available
+            window.fbq("track", "Purchase", {
+              currency: "USD",
+              value,
+            });
+          }
           navigate(from, { replace: true });
         }
       },
@@ -102,7 +126,7 @@ export default function Subscribe() {
       }
     );
     return () => unsub && unsub();
-  }, [currentUser, navigate, from]);
+  }, [currentUser, navigate, from, tier]);
 
   // Poll sync while status is pending
   useEffect(() => {
