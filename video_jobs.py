@@ -96,9 +96,10 @@ def mux_voiceover(video_path: str, audio_path: str, out_path: str) -> None:
         "ffmpeg", "-y",
         "-i", video_path,
         "-i", audio_path,
+        "-map", "0:v:0",   # ✅ keep video from first input
+        "-map", "1:a:0",   # ✅ take audio from second input
         "-c:v", "copy",
         "-c:a", "aac",
-        "-shortest",
         out_path,
     ]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -486,7 +487,7 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                 normalized_video = os.path.join(td, "runway_norm.mp4")
                 normalize_video_with_ffmpeg(raw_video, normalized_video)
 
-                # ✅ enforce exact length even if Runway returns short
+                # ✅ enforce exact length only ONCE (before mux)
                 target_seconds = int(job.get("duration") or 6)
                 enforced_video = os.path.join(td, "runway_enforced.mp4")
                 enforce_exact_duration(normalized_video, enforced_video, target_seconds)
@@ -522,12 +523,12 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                     await download_to_file(tts_url, audio_path)
 
                     muxed = os.path.join(td, "final_muxed.mp4")
+
+                    # ✅ mux WITHOUT -shortest so short audio does NOT cut video
                     mux_voiceover(enforced_video, audio_path, muxed)
 
-                    # ✅ after mux, enforce exact duration again (keeps 6/10 strict)
-                    muxed_enforced = os.path.join(td, "final_muxed_enforced.mp4")
-                    enforce_exact_duration(muxed, muxed_enforced, target_seconds)
-                    final_path = muxed_enforced
+                    # ✅ DO NOT enforce duration again here (avoids frozen tail)
+                    final_path = muxed
 
                 with open(final_path, "rb") as f:
                     data = f.read()
