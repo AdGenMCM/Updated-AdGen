@@ -10,6 +10,7 @@ import PaidRoute from "./PaidRoute"; // auth + active sub
 import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
+import VideoAds from "./pages/VideoAds";
 
 
 // NEW: Public pages
@@ -61,9 +62,6 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
-
-            {/* Optimizer should be reachable even if user is capped
-                Backend will gate Pro/Business */}
             <Route path="/optimizer" element={<Optimizer />} />
           </Route>
 
@@ -71,6 +69,7 @@ export default function App() {
           <Route element={<PaidRoute />}>
             <Route path="/adgenerator" element={<AdGenerator />} />
             <Route path="/texteditor" element={<TextEditor />} />
+            <Route path="/video-ads" element={<VideoAds />} />
           </Route>
 
           {/* Admin */}

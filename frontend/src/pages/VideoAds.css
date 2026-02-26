@@ -1,0 +1,426 @@
+/* VideoAds.css — FULLY SCOPED (no global leakage)
+   Keeps your current class names exactly the same.
+*/
+
+.videoAds{
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 18px 80px;
+  color: #0f172a;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.videoAds .videoAdsHeader h1{
+  margin: 0;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+}
+
+.videoAds .videoAdsHeader p{
+  margin: 8px 0 18px;
+  color: #475569;
+  font-size: 14px;
+}
+
+/* Tabs */
+.videoAds .videoTabs{
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 14px;
+}
+
+.videoAds .videoTabs button{
+  appearance: none;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.videoAds .videoTabs button:hover{
+  background: #f8fafc;
+}
+
+.videoAds .videoTabs button.active{
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+/* Panel */
+.videoAds .videoPanel{
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* Rows + grids */
+.videoAds .row{
+  display: grid;
+  grid-template-columns: 190px 1fr 170px 190px;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.videoAds .grid2{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 900px){
+  .videoAds .row{ grid-template-columns: 1fr; }
+  .videoAds .grid2{ grid-template-columns: 1fr; }
+}
+
+/* Checkbox pill */
+.videoAds .checkbox{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-weight: 800;
+  user-select: none;
+}
+
+.videoAds .checkbox input{
+  margin: 0;
+}
+
+/* Field */
+.videoAds .field label{
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+/* IMPORTANT: scoped inputs only */
+.videoAds .field input,
+.videoAds .field select,
+.videoAds .field textarea,
+.videoAds textarea,
+.videoAds select,
+.videoAds input{
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.videoAds textarea{
+  resize: vertical;
+}
+
+.videoAds .field input:focus,
+.videoAds .field select:focus,
+.videoAds .field textarea:focus,
+.videoAds textarea:focus,
+.videoAds select:focus,
+.videoAds input:focus{
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.35);
+}
+
+/* Box cards */
+.videoAds .box{
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+/* Small headings used in voice box */
+.videoAds .boxTitle{
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.videoAds .hint{
+  font-size: 13px;
+  opacity: 0.80;
+  margin-top: 2px;
+}
+
+/* Buttons (scoped) */
+.videoAds .primary,
+.videoAds .secondary{
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.videoAds .primary{
+  background: #0f172a;
+  color: #ffffff;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.videoAds .primary:hover{
+  background: #111c33;
+}
+
+.videoAds .primary:disabled{
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.videoAds .secondary{
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e5e7eb;
+}
+
+.videoAds .secondary:hover{
+  background: #f1f5f9;
+}
+
+.videoAds .miniBtn{
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+/* Voice header row */
+.videoAds .voiceHeader{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+
+/* Audio preview row */
+.videoAds .audioPreview{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  margin-top:10px;
+}
+
+.videoAds .audioPreview audio{
+  width: 100%;
+  max-width: 520px;
+}
+
+/* Disabled voice UX (dim + lock feel) */
+.videoAds .voBox{
+  position: relative;
+}
+
+.videoAds .voBoxDisabled{
+  opacity: 0.72;
+}
+
+.videoAds .voBoxDisabled textarea{
+  background:#f1f5f9;
+  color:#64748b;
+}
+
+.videoAds .voBoxDisabled .secondary{
+  opacity:0.55;
+  cursor:not-allowed;
+}
+
+.videoAds .voOverlay{
+  position:absolute;
+  inset:0;
+  border-radius:14px;
+  background: rgba(248,250,252,0.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+}
+
+.videoAds .voOverlayCard{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  border:1px solid #e5e7eb;
+  background: rgba(255,255,255,0.9);
+  padding:10px 12px;
+  border-radius:12px;
+  box-shadow: 0 8px 20px rgba(15,23,42,0.08);
+  max-width:520px;
+}
+
+.videoAds .voOverlayTitle{ font-weight:900; color:#0f172a; }
+.videoAds .voOverlaySub{ font-size:13px; color:#64748b; margin-top:2px; }
+
+/* Dropzone */
+.videoAds .dropzone{
+  border: 2px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 18px;
+  background: #fbfdff;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.videoAds .dropzone.dragOver{
+  border-color: #0f172a;
+  background: #f1f5f9;
+}
+
+.videoAds .hiddenFile{ display: none; }
+
+.videoAds .dzTitle{
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.videoAds .dzSub{
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Image preview */
+.videoAds .previewWrap{
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.videoAds .previewImg{
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.videoAds .previewMeta{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.videoAds .previewName{
+  font-weight: 900;
+}
+
+/* Status / Errors / Result */
+.videoAds .statusBlock{
+  margin-top: 16px;
+}
+
+.videoAds .statusLine{
+  color: #334155;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.videoAds .error{
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.videoAds .result{
+  margin-top: 12px;
+}
+
+.videoAds .videoPlayer{
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  background: #000;
+}
+
+/* Link button */
+.videoAds .linkBtn{
+  display: inline-block;
+  margin-top: 10px;
+  text-decoration: none;
+  text-align: center;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.videoAds .linkBtn:hover{
+  background: #111c33;
+}
+
+/* ===== VideoAds loading overlay (scoped) ===== */
+.videoAds .videoLoadingOverlay{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 9999;
+}
+
+.videoAds .videoLoadingOverlay.show{
+  display: flex;
+}
+
+.videoAds .videoSpinner{
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 6px solid rgba(255,255,255,0.35);
+  border-top-color: rgba(255,255,255,0.95);
+  animation: videoSpin 0.9s linear infinite;
+}
+
+.videoAds .videoLoadingText{
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: center;
+}
+
+@keyframes videoSpin{
+  to { transform: rotate(360deg); }
+}
+
+/* Disabled states */
+.videoAds button:disabled{
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.videoAds .videoTabs button:disabled{
+  opacity: 0.55;
+}
+
+/* Make status anchor scroll nicely under sticky headers (if any) */
+.videoAds .statusBlock{
+  scroll-margin-top: 90px;
+}

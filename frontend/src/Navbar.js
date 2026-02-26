@@ -91,7 +91,7 @@ export default function Navbar() {
     { to: "/pricing", label: "Products & Pricing" },
     { to: "/contact", label: "Contact Us" },
 
-    // ✅ Optimizer link for any logged-in user (Pro/Business enforced in-page + backend)
+    // ✅ Optimizer link for any logged-in user (tier enforced in-page + backend)
     ...(user
       ? [
           { divider: true, mobileOnly: true },
@@ -105,21 +105,24 @@ export default function Navbar() {
           { divider: true, mobileOnly: true },
           { to: "/adgenerator", label: "Ad Generator", mobileOnly: true },
           { to: "/texteditor", label: "Text Editor", mobileOnly: true },
+
+          // ✅ NEW: Video Ads (page will show upgrade if tier not eligible)
+          { to: "/video-ads", label: "Video Ads", mobileOnly: true },
         ]
       : []),
 
     ...(user
-  ? [
-      ...(isAdmin
-        ? [
-            { divider: true },
-            { to: "/admin/users", label: "Admin" },
-          ]
-        : []),
-      { divider: true },
-      { to: "/account", label: "My Account" },
-    ]
-  : []),
+      ? [
+          ...(isAdmin
+            ? [
+                { divider: true },
+                { to: "/admin/users", label: "Admin" },
+              ]
+            : []),
+          { divider: true },
+          { to: "/account", label: "My Account" },
+        ]
+      : []),
 
     { divider: true },
     { to: "/terms", label: "Terms of Service" },
@@ -197,7 +200,7 @@ export default function Navbar() {
             >
               Admin
             </NavLink>
-    )}
+          )}
 
           {/* Paid features links (desktop only via CSS) */}
           {canAccessPaid && (
@@ -209,12 +212,22 @@ export default function Navbar() {
               >
                 Ad Generator
               </NavLink>
+
               <NavLink
                 to="/texteditor"
                 className="nav-link"
                 onClick={() => setInfoOpen(false)}
               >
                 Text Editor
+              </NavLink>
+
+              {/* ✅ NEW: Video Ads */}
+              <NavLink
+                to="/video-ads"
+                className="nav-link"
+                onClick={() => setInfoOpen(false)}
+              >
+                Video Ads
               </NavLink>
             </>
           )}

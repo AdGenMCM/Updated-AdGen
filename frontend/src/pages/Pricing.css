@@ -54,7 +54,8 @@
 
 .tier-card.highlighted {
   border-color: #0f172a;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  transform: translateY(-2px);
 }
 
 .tier-top {
@@ -123,6 +124,10 @@
   background: #0f172a;
   color: #fff;
   border-color: #0f172a;
+}
+
+.tier-cta:hover {
+  opacity: 0.9;
 }
 
 .tier-divider {
@@ -445,4 +450,11 @@
   font-size: inherit;
 }
 
+/* Cost per generation */
+.tier-cost {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.75;
+}
 

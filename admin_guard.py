@@ -40,3 +40,13 @@ def admin_required(user: Dict[str, Any] = Depends(get_current_user_claims)) -> D
         )
     return user
 
+def is_admin(claims: Dict[str, Any]) -> bool:
+    """
+    Lightweight admin check (no dependency injection).
+    Admin users must have Firebase custom claim: role=admin
+    """
+    try:
+        return (claims or {}).get("role") == "admin"
+    except Exception:
+        return False
+
