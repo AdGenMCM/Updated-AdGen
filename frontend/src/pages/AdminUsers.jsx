@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { auth } from "../firebaseConfig";
+import "./AdminUsers.css";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -35,12 +36,12 @@ export default function AdminUsers() {
 
   const PROD_API = "https://updated-adgen.onrender.com";
 
-// Use either env var name (so you don’t get burned by mismatch)
-const envApi =
-  (process.env.REACT_APP_API_URL || "").trim() ||
-  (process.env.REACT_APP_API_BASE_URL || "").trim();
+  // Use either env var name (so you don’t get burned by mismatch)
+  const envApi =
+    (process.env.REACT_APP_API_URL || "").trim() ||
+    (process.env.REACT_APP_API_BASE_URL || "").trim();
 
-const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
+  const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
 
   const authedFetch = useCallback(
     async (path, options = {}) => {
@@ -129,31 +130,43 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
       const last = u.lastName || "";
       const fullName = `${first} ${last}`.trim() || "-";
 
-      const used =
+      const imgUsed =
         typeof u.used === "number"
           ? u.used
           : typeof u.monthlyUsage === "number"
           ? u.monthlyUsage
           : 0;
 
-      const cap = typeof u.cap === "number" ? u.cap : 0;
-
-      const usagePct =
+      const imgCap = typeof u.cap === "number" ? u.cap : 0;
+      const imgPct =
         typeof u.usagePct === "number"
           ? u.usagePct
-          : cap > 0
-          ? Math.round((used / cap) * 100)
+          : imgCap > 0
+          ? Math.round((imgUsed / imgCap) * 100)
           : 0;
 
-      const createdAtPretty = formatDate(u.createdAt);
+      const vidUsed = typeof u.videoUsed === "number" ? u.videoUsed : 0;
+      const vidCap = typeof u.videoCap === "number" ? u.videoCap : 0;
+      const vidPct =
+        typeof u.videoUsagePct === "number"
+          ? u.videoUsagePct
+          : vidCap > 0
+          ? Math.round((vidUsed / vidCap) * 100)
+          : 0;
 
       return {
         ...u,
         fullName,
-        createdAtPretty,
-        usedSafe: used,
-        capSafe: cap,
-        usagePctSafe: usagePct,
+        createdAtPretty: formatDate(u.createdAt),
+
+        imgUsedSafe: imgUsed,
+        imgCapSafe: imgCap,
+        imgPctSafe: imgPct,
+
+        vidUsedSafe: vidUsed,
+        vidCapSafe: vidCap,
+        vidPctSafe: vidPct,
+
         requestedTierSafe: u.requestedTier || "",
         customerIdSafe: u.customerId || "",
       };
@@ -170,10 +183,10 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
     }
   };
 
-  const usageCellStyle = (pct) => {
-    if (pct >= 100) return { background: "rgba(255,0,0,0.10)", fontWeight: 700 };
-    if (pct >= 80) return { background: "rgba(255,200,0,0.18)", fontWeight: 700 };
-    return {};
+  const usageCellClass = (pct) => {
+    if (pct >= 100) return "usageCell usageHard";
+    if (pct >= 80) return "usageCell usageWarn";
+    return "usageCell";
   };
 
   const setRequestedTierLocal = (uid, val) => {
@@ -202,28 +215,54 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
     alert("Requested tier saved.");
   };
 
-  return (
-    <div style={{ padding: 16 }}>
-      <h2>Admin: Users</h2>
+  const grantImageCredits = async (u) => {
+    if (!window.confirm(`Grant +5 image credits to ${u.email || u.uid}?`)) return;
+    await authedFetch(`/admin/users/${u.uid}/usage/grant?credits=5`, { method: "POST" });
+    await fetchUsers({ cursor });
+  };
 
-      <form
-        onSubmit={onApply}
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
+  const resetImageUsage = async (u) => {
+    if (!window.confirm(`Reset image usage for ${u.email || u.uid}?`)) return;
+    await authedFetch(`/admin/users/${u.uid}/usage/reset`, { method: "POST" });
+    await fetchUsers({ cursor });
+  };
+
+  const grantVideoCredits = async (u) => {
+    if (!window.confirm(`Grant +1 video credit to ${u.email || u.uid}?`)) return;
+    await authedFetch(`/admin/users/${u.uid}/video/usage/grant?credits=1`, { method: "POST" });
+    await fetchUsers({ cursor });
+  };
+
+  const resetVideoUsage = async (u) => {
+    if (!window.confirm(`Reset video usage for ${u.email || u.uid}?`)) return;
+    await authedFetch(`/admin/users/${u.uid}/video/usage/reset`, { method: "POST" });
+    await fetchUsers({ cursor });
+  };
+
+  return (
+    <div className="adminUsers">
+      <div className="adminHeader">
+        <h2>Admin: Users</h2>
+
+        <div className="pager">
+          <button type="button" onClick={onPrev} disabled={pageStack.length === 0 || loading}>
+            Prev
+          </button>
+          <button type="button" onClick={onNext} disabled={!nextCursor || loading}>
+            Next
+          </button>
+        </div>
+      </div>
+
+      <form className="filters" onSubmit={onApply}>
         <input
+          className="input"
           placeholder="Search name or email…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ padding: 8, minWidth: 240 }}
         />
 
-        <select value={tier} onChange={(e) => setTier(e.target.value)} style={{ padding: 8 }}>
+        <select className="select" value={tier} onChange={(e) => setTier(e.target.value)}>
           <option value="all">All tiers</option>
           <option value="trial_monthly">trial_monthly</option>
           <option value="starter_monthly">starter_monthly</option>
@@ -232,7 +271,7 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
           <option value="early_access">early_access</option>
         </select>
 
-        <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: 8 }}>
+        <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All statuses</option>
           <option value="active">active</option>
           <option value="trialing">trialing</option>
@@ -241,17 +280,18 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
           <option value="past_due">past_due</option>
         </select>
 
-        <select value={limit} onChange={(e) => setLimit(Number(e.target.value))} style={{ padding: 8 }}>
+        <select className="select" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
           <option value={25}>25 / page</option>
           <option value={50}>50 / page</option>
           <option value={100}>100 / page</option>
         </select>
 
-        <button type="submit" style={{ padding: "8px 12px" }} disabled={loading}>
+        <button className="btn btnPrimary" type="submit" disabled={loading}>
           Apply
         </button>
 
         <button
+          className="btn"
           type="button"
           onClick={() => {
             setQ("");
@@ -263,35 +303,26 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
             setPageStack([]);
             fetchUsers({ cursor: "", q: "", tier: "all", status: "all", limit: 50 });
           }}
-          style={{ padding: "8px 12px" }}
           disabled={loading}
         >
           Reset
         </button>
       </form>
 
-      {err && <div style={{ marginBottom: 12 }}>Error: {err}</div>}
-      {loading && <div style={{ marginBottom: 12 }}>Loading…</div>}
+      {err && <div className="notice error">Error: {err}</div>}
+      {loading && <div className="notice">Loading…</div>}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button type="button" onClick={onPrev} disabled={pageStack.length === 0 || loading}>
-          Prev
-        </button>
-        <button type="button" onClick={onNext} disabled={!nextCursor || loading}>
-          Next
-        </button>
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table cellPadding="10" style={{ width: "100%", borderCollapse: "collapse" }}>
+      <div className="tableWrap">
+        <table className="tbl">
           <thead>
-            <tr style={{ textAlign: "left" }}>
+            <tr>
               <th>Name</th>
               <th>Email</th>
               <th>Signed Up</th>
               <th>Tier</th>
               <th>Status</th>
-              <th>Usage</th>
+              <th>Image Usage</th>
+              <th>Video Usage</th>
               <th>Requested Tier</th>
               <th>Customer ID</th>
               <th>UID</th>
@@ -301,29 +332,35 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
 
           <tbody>
             {displayRows.map((u) => (
-              <tr key={u.uid} style={{ borderTop: "1px solid #eee" }}>
+              <tr key={u.uid}>
                 <td>{u.fullName}</td>
                 <td>{u.email || "-"}</td>
                 <td>{u.createdAtPretty}</td>
                 <td>{u.tier || "-"}</td>
                 <td>{u.stripeStatus || "-"}</td>
 
-                <td style={usageCellStyle(u.usagePctSafe)}>
-                  {u.capSafe > 0 ? (
-                    <>
-                      {u.usedSafe} / {u.capSafe} ({u.usagePctSafe}%)
-                    </>
-                  ) : (
-                    u.usedSafe
-                  )}
+                <td className={usageCellClass(u.imgPctSafe)}>
+                  {u.imgCapSafe > 0 ? `${u.imgUsedSafe} / ${u.imgCapSafe} (${u.imgPctSafe}%)` : u.imgUsedSafe}
+                </td>
+
+                <td
+                  className={
+                    u.vidCapSafe > 0
+                      ? usageCellClass(u.vidPctSafe)
+                      : "usageCell usageOff"
+                  }
+                >
+                  {u.vidCapSafe > 0
+                    ? `${u.vidUsedSafe} / ${u.vidCapSafe} (${u.vidPctSafe}%)`
+                    : "Not Available"}
                 </td>
 
                 <td>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div className="inline">
                     <select
+                      className="select"
                       value={u.requestedTierSafe}
                       onChange={(e) => setRequestedTierLocal(u.uid, e.target.value)}
-                      style={{ padding: 6 }}
                     >
                       {TIER_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -332,53 +369,42 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
                       ))}
                     </select>
 
-                    <button type="button" onClick={() => requestTier(u)}>
+                    <button className="btn" type="button" onClick={() => requestTier(u)}>
                       Request
                     </button>
                   </div>
                 </td>
 
-                <td style={{ fontFamily: "monospace" }}>
+                <td className="mono">
                   {u.customerIdSafe || "-"}
                   {u.customerIdSafe ? (
-                    <button
-                      type="button"
-                      style={{ marginLeft: 8 }}
-                      onClick={() => copy(u.customerIdSafe)}
-                    >
+                    <button className="btn btnTiny" type="button" onClick={() => copy(u.customerIdSafe)}>
                       Copy
                     </button>
                   ) : null}
                 </td>
 
-                <td style={{ fontFamily: "monospace" }}>{u.uid}</td>
+                <td className="mono">
+                  {u.uid}
+                  <button className="btn btnTiny" type="button" onClick={() => copy(u.uid)}>
+                    Copy
+                  </button>
+                </td>
 
                 <td>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!window.confirm(`Grant +5 credits to ${u.email || u.uid}?`)) return;
-                        await authedFetch(`/admin/users/${u.uid}/usage/grant?credits=5`, { method: "POST" });
-                        await fetchUsers({ cursor });
-                      }}
-                    >
-                      +5 Credits
+                  <div className="actions">
+                    <button className="btn" type="button" onClick={() => grantImageCredits(u)}>
+                      +5 Img
+                    </button>
+                    <button className="btn" type="button" onClick={() => resetImageUsage(u)}>
+                      Reset Img
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!window.confirm(`Reset usage for ${u.email || u.uid}?`)) return;
-                        await authedFetch(`/admin/users/${u.uid}/usage/reset`, { method: "POST" });
-                        await fetchUsers({ cursor });
-                      }}
-                    >
-                      Reset Usage
+                    <button className="btn btnPrimary" type="button" onClick={() => grantVideoCredits(u)}>
+                      +1 Vid
                     </button>
-
-                    <button type="button" onClick={() => copy(u.uid)}>
-                      Copy UID
+                    <button className="btn" type="button" onClick={() => resetVideoUsage(u)}>
+                      Reset Vid
                     </button>
                   </div>
                 </td>
@@ -387,7 +413,7 @@ const API_BASE = envApi || PROD_API || "http://127.0.0.1:8000";
 
             {!loading && displayRows.length === 0 && (
               <tr>
-                <td colSpan={10} style={{ padding: 16 }}>
+                <td colSpan={11} className="empty">
                   No users found.
                 </td>
               </tr>

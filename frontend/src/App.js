@@ -11,6 +11,7 @@ import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
 import VideoAds from "./pages/VideoAds";
+import Library from "./pages/Library";
 
 
 // NEW: Public pages
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
             <Route path="/optimizer" element={<Optimizer />} />
+            <Route path="/library" element={<Library />} />
           </Route>
 
           {/* Paid features (require active sub) */}

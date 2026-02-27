@@ -96,6 +96,7 @@ export default function Navbar() {
       ? [
           { divider: true, mobileOnly: true },
           { to: "/optimizer", label: "Ad Optimizer", mobileOnly: true },
+          { to: "/library", label: "Creative Library", mobileOnly: true },
         ]
       : []),
 
@@ -188,6 +189,15 @@ export default function Navbar() {
               onClick={() => setInfoOpen(false)}
             >
               Ad Optimizer
+            </NavLink>
+          )}
+          {user && (
+            <NavLink
+              to="/library"
+              className="nav-link"
+              onClick={() => setInfoOpen(false)}
+            >
+              Library
             </NavLink>
           )}
 

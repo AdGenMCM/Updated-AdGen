@@ -6,6 +6,7 @@ import json
 import uuid
 import asyncio
 import requests
+import time
 from typing import List, Optional
 
 from dotenv import load_dotenv
@@ -600,12 +601,12 @@ offer: {offer or "N/A"}
         style_hint=style_hint,
         extra_instructions=(
             "Plain seamless studio setup. "
-             "Single hero product shot. "
-             "No packaging, no posters, no signage, no printed materials."
-             "Absolutely no visible text of any kind. "
-             "No logos, no labels, no packaging, no brand names, no symbols, "
-             "no typography, no engraved markings, no embossed markings. "
-             "All surfaces must be completely blank and smooth. "
+            "Single hero product shot. "
+            "No packaging, no posters, no signage, no printed materials."
+            "Absolutely no visible text of any kind. "
+            "No logos, no labels, no packaging, no brand names, no symbols, "
+            "no typography, no engraved markings, no embossed markings. "
+            "All surfaces must be completely blank and smooth. "
         ),
     )
 
@@ -673,6 +674,39 @@ offer: {offer or "N/A"}
 
     copy_obj, image_url = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
 
+    # ✅ NEW: Save a Firestore "image job" record for the Library
+    image_job_id = uuid.uuid4().hex
+    try:
+        db.collection("image_jobs").document(image_job_id).set({
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "status": "succeeded",
+            "source": "ad_generator",
+            "productName": product_name,
+            "description": description,
+            "audience": audience,
+            "tone": tone,
+            "platform": platform,
+            "goal": goal,
+            "offer": offer,
+            "stylePreset": style,
+            "productType": product_type,
+            "aspectRatio": aspect_ratio,
+            "visualPrompt": visual_prompt,
+            "imageUrl": image_url,
+            "copy": copy_obj,
+            "error": None,
+            "usage": {
+                "used": cap_result.get("used"),
+                "cap": cap_result.get("cap"),
+                "month": cap_result.get("month"),
+                "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
+            },
+        })
+    except Exception:
+        # Don't break generation if logging fails
+        pass
+
     legacy_text = (
         f"{copy_obj.get('headline','')}\n\n"
         f"{copy_obj.get('primary_text','')}\n\n"
@@ -683,6 +717,7 @@ offer: {offer or "N/A"}
         "text": legacy_text,
         "copy": copy_obj,
         "imageUrl": image_url,
+        "imageJobId": image_job_id,  # ✅ NEW
         "meta": {"goal": goal, "stylePreset": style, "offer": offer, "productType": product_type},
         "usage": {
             "used": cap_result.get("used"),
@@ -879,7 +914,6 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         f"Apply these improvements: {payload.improved_image_prompt}."
     )
 
-
     # ✅ NEW: shared builder w/ hard product anchor + regen instructions
     visual_prompt = build_visual_prompt(
         product_name=product_name,
@@ -913,6 +947,39 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
         except Exception:
             pass
 
+        # ✅ NEW: Save a Firestore "image job" record for the Library
+        image_job_id = uuid.uuid4().hex
+        try:
+            db.collection("image_jobs").document(image_job_id).set({
+                "uid": uid,
+                "createdAt": int(time.time()),
+                "status": "succeeded",
+                "source": "optimizer_generate",
+                "productName": product_name,
+                "description": description,
+                "tone": tone,
+                "goal": goal,
+                "stylePreset": style,
+                "productType": product_type,
+                "aspectRatio": aspect_ratio,
+                "visualPrompt": visual_prompt,
+                "imageUrl": image_url,
+                "copy": {
+                    "headline": payload.improved_headline,
+                    "primary_text": payload.improved_primary_text,
+                    "cta": payload.improved_cta,
+                },
+                "error": None,
+                "usage": {
+                    "used": cap_result.get("used"),
+                    "cap": cap_result.get("cap"),
+                    "month": cap_result.get("month"),
+                    "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
+                },
+            })
+        except Exception:
+            pass
+
         return {
             "copy": {
                 "headline": payload.improved_headline,
@@ -920,6 +987,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
                 "cta": payload.improved_cta,
             },
             "imageUrl": image_url,
+            "imageJobId": image_job_id,  # ✅ NEW
             "usage": {
                 "used": cap_result.get("used"),
                 "cap": cap_result.get("cap"),
@@ -1022,6 +1090,21 @@ def admin_list_users(
             remaining = int(usage_info.get("remaining") or max(0, cap - used))
             usage_pct = 0 if cap <= 0 else round((used / cap) * 100)
 
+                        # ✅ Video usage (stored on users/{uid})
+            VIDEO_CAPS = {"early_access": 3, "pro_monthly": 15, "business_monthly": 50}
+            month_key = utc_month_key()
+
+            video_cap = int(VIDEO_CAPS.get(tier_for_caps) or 0)
+
+            video_used = int(prof.get("video_used") or 0)
+            video_month_key = prof.get("video_month_key")
+
+            if video_month_key != month_key:
+                video_used = 0
+
+            video_remaining = max(0, video_cap - video_used) if video_cap else 0
+            video_usage_pct = 0 if video_cap <= 0 else round((video_used / video_cap) * 100)
+
             # Filters
             if tier_norm != "all" and user_tier.lower() != tier_norm:
                 continue
@@ -1056,6 +1139,11 @@ def admin_list_users(
                 "monthlyUsage": used,
 
                 "hasProfile": bool(prof),
+                
+                "videoUsed": video_used,
+                "videoCap": video_cap,
+                "videoRemaining": video_remaining,
+                "videoUsagePct": video_usage_pct,
             })
 
         next_token = page.next_page_token or ""
@@ -1180,7 +1268,156 @@ def clear_requested_tier(
 
     return {"ok": True}
 
+# --- Video Usage (My Account) ---
+@app.get("/video/usage")
+def get_video_usage(authorization: str | None = Header(default=None)):
+    uid, _email, _claims = require_user(authorization)
+    db = get_db()
 
+    user_snap = db.collection("users").document(uid).get()
+    user_doc = user_snap.to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+
+    # Match your video caps
+    VIDEO_CAPS = {
+        "early_access": 3,
+        "pro_monthly": 15,
+        "business_monthly": 50,
+    }
+
+    # Month key uses the same helper as image usage
+    month_key = utc_month_key()
+
+    video_used = int(user_doc.get("video_used", 0) or 0)
+    video_month_key = user_doc.get("video_month_key")
+
+    # Reset for a new month
+    if video_month_key != month_key:
+        video_used = 0
+
+    cap = VIDEO_CAPS.get(tier, 0)
+    remaining = max(0, int(cap) - int(video_used)) if cap else 0
+
+    return {
+        "month": month_key,
+        "used": video_used,
+        "cap": cap,
+        "remaining": remaining,
+        "enabled": tier in VIDEO_CAPS,  # handy for UI
+        "tier": tier,
+    }
+
+@app.post("/admin/users/{target_uid}/video/usage/grant")
+def admin_grant_video_credits(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    credits: int = Query(default=1, ge=1, le=10),
+):
+    uid, _email, claims = require_user(authorization)
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    db = get_db()
+    month = utc_month_key()
+    user_ref = db.collection("users").document(target_uid)
+
+    @gc_firestore.transactional
+    def _tx(transaction: gc_firestore.Transaction):
+        snap = user_ref.get(transaction=transaction)
+        doc = snap.to_dict() or {}
+
+        used = int(doc.get("video_used") or 0)
+        month_key = doc.get("video_month_key")
+
+        if month_key != month:
+            used = 0
+
+        # Grant credits = reduce used count
+        new_used = max(0, used - credits)
+
+        transaction.set(
+            user_ref,
+            {"video_used": new_used, "video_month_key": month, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+            merge=True,
+        )
+        return {"ok": True, "uid": target_uid, "month": month, "video_used": new_used, "granted": credits}
+
+    tx = db.transaction()
+    return _tx(tx)
+
+
+@app.post("/admin/users/{target_uid}/video/usage/reset")
+def admin_reset_video_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    db = get_db()
+    month = utc_month_key()
+    user_ref = db.collection("users").document(target_uid)
+
+    user_ref.set(
+        {"video_used": 0, "video_month_key": month, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+        merge=True,
+    )
+    return {"ok": True, "uid": target_uid, "month": month, "video_used": 0}
+
+@app.get("/image/jobs")
+async def list_image_jobs(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(24, ge=1, le=100),
+    cursor: int | None = Query(None, description="createdAt cursor (unix seconds)"),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    q = (
+        db.collection("image_jobs")
+        .where("uid", "==", uid)
+        .order_by("createdAt", direction=gc_firestore.Query.DESCENDING)
+        .limit(limit)
+    )
+
+    if cursor is not None:
+        q = q.start_after({"createdAt": cursor})
+
+    items = []
+    last_created_at = None
+    for snap in q.stream():
+        data = snap.to_dict() or {}
+        if not admin and data.get("uid") != uid:
+            continue
+        data["id"] = snap.id
+        items.append(data)
+        last_created_at = data.get("createdAt")
+
+    return {"items": items, "nextCursor": last_created_at}
+
+
+@app.get("/image/jobs/{job_id}")
+async def get_image_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    ref = db.collection("image_jobs").document(job_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    data = snap.to_dict() or {}
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    data["id"] = snap.id
+    return data
 
 
 

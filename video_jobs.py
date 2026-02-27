@@ -27,6 +27,10 @@ from auth_helpers import get_db, require_user
 from usage_caps import get_tier_and_status, utc_month_key
 from admin_guard import is_admin
 
+from fastapi import APIRouter, Header, HTTPException, Query
+from google.cloud import firestore as gc_firestore
+
+
 # -----------------------------
 # Env / defaults
 # -----------------------------
@@ -632,3 +636,60 @@ async def tts_preview(req: TTSPreviewRequest, authorization: str | None = Header
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/video/jobs")
+async def list_video_jobs(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(24, ge=1, le=100),
+    cursor: int | None = Query(None, description="createdAt cursor (unix seconds)"),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    # Admin could optionally list their own only; keep consistent:
+    q = (
+        db.collection("video_jobs")
+        .where("uid", "==", uid)
+        .order_by("createdAt", direction=gc_firestore.Query.DESCENDING)
+        .limit(limit)
+    )
+
+    # Simple cursor pagination based on createdAt
+    if cursor is not None:
+        q = q.start_after({"createdAt": cursor})
+
+    items = []
+    last_created_at = None
+    for snap in q.stream():
+        data = snap.to_dict() or {}
+        # extra safety
+        if not admin and data.get("uid") != uid:
+            continue
+        data["id"] = snap.id
+        items.append(data)
+        last_created_at = data.get("createdAt")
+
+    return {"items": items, "nextCursor": last_created_at}
+
+
+@router.get("/video/jobs/{job_id}")
+async def get_video_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    ref = db.collection("video_jobs").document(job_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    data = snap.to_dict() or {}
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    data["id"] = snap.id
+    return data

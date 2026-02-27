@@ -12,10 +12,15 @@ export default function MyAccount() {
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [error, setError] = useState("");
 
-  // Usage state
+  // Image usage state
   const [usage, setUsage] = useState(null); // { used, cap, month, remaining }
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
+
+  // ✅ Video usage state
+  const [videoUsage, setVideoUsage] = useState(null); // { used, cap, month, remaining, enabled, tier }
+  const [videoUsageLoading, setVideoUsageLoading] = useState(false);
+  const [videoUsageError, setVideoUsageError] = useState("");
 
   // ✅ Dismiss state
   const [dismissing, setDismissing] = useState(false);
@@ -39,30 +44,20 @@ export default function MyAccount() {
     setUsageLoading(true);
 
     try {
-      if (!apiBase) {
-        throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
-      }
+      if (!apiBase) throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
 
       const user = auth.currentUser;
-      if (!user) {
-        throw new Error("Not logged in.");
-      }
+      if (!user) throw new Error("Not logged in.");
 
       const token = await user.getIdToken();
 
       const res = await fetch(`${apiBase}/usage`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        // ignore parse error
-      }
+      try { data = await res.json(); } catch {}
 
       if (!res.ok) {
         const detail = data?.detail || data?.message || `Failed to load usage (${res.status})`;
@@ -78,9 +73,44 @@ export default function MyAccount() {
     }
   }
 
+  async function fetchVideoUsage() {
+    setVideoUsageError("");
+    setVideoUsageLoading(true);
+
+    try {
+      if (!apiBase) throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
+
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not logged in.");
+
+      const token = await user.getIdToken();
+
+      const res = await fetch(`${apiBase}/video/usage`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      let data = null;
+      try { data = await res.json(); } catch {}
+
+      if (!res.ok) {
+        const detail = data?.detail || data?.message || `Failed to load video usage (${res.status})`;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+
+      setVideoUsage(data);
+    } catch (e) {
+      setVideoUsage(null);
+      setVideoUsageError(e?.message || "Failed to load video usage.");
+    } finally {
+      setVideoUsageLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!currentUser) return;
     fetchUsage();
+    fetchVideoUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
@@ -110,19 +140,41 @@ export default function MyAccount() {
   const isActiveOrTrial = status === "active" || status === "trialing";
   const shouldShowRequestBanner = hasRequestedTier && requestedTier !== tier;
 
+  // ✅ FIXED: Works with BOTH createPortalSession(customerId) and createPortalSession(apiBase, token)
   async function openBillingPortal() {
     setError("");
     setLoadingPortal(true);
 
     try {
-      if (!customerId) {
-        throw new Error(
-          "No Stripe customer found yet. If you just subscribed, refresh in 10 seconds or visit Pricing."
-        );
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not logged in.");
+
+      const token = await user.getIdToken(true);
+
+      let url;
+
+      // Detect signature:
+      // - old: createPortalSession(customerId) -> {url}
+      // - new: createPortalSession(apiBase, token) -> url OR {url}
+      const arity = typeof createPortalSession === "function" ? createPortalSession.length : 0;
+
+      if (arity >= 2) {
+        const resp = await createPortalSession(apiBase, token);
+        url = resp?.url || resp;
+      } else {
+        if (!customerId) {
+          throw new Error(
+            "No Stripe customer found yet. If you just subscribed, refresh in 10 seconds or visit Pricing."
+          );
+        }
+        const resp = await createPortalSession(customerId);
+        url = resp?.url || resp;
       }
 
-      const { url } = await createPortalSession(customerId);
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (!url) throw new Error("No billing portal URL returned.");
+
+      // ✅ Use same-tab navigation (avoids popup blockers)
+      window.location.href = url;
     } catch (e) {
       setError(e?.message || "Could not open billing portal.");
     } finally {
@@ -138,15 +190,12 @@ export default function MyAccount() {
     }
   };
 
-  // ✅ NEW: Dismiss + clear requestedTier server-side
+  // ✅ Dismiss + clear requestedTier server-side
   const dismissRequestedTier = async () => {
     setError("");
 
     try {
-      if (!apiBase) {
-        throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
-      }
-
+      if (!apiBase) throw new Error("Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend.");
       if (!window.confirm("Dismiss this plan change request?")) return;
 
       setDismissing(true);
@@ -158,24 +207,16 @@ export default function MyAccount() {
 
       const res = await fetch(`${apiBase}/users/me/tier/clear-request`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        // ignore parse error
-      }
+      try { data = await res.json(); } catch {}
 
       if (!res.ok) {
         const detail = data?.detail || data?.message || `Failed to dismiss request (${res.status})`;
         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       }
-
-      // ✅ No reload necessary. Firestore onSnapshot will update stripe.requestedTier and hide the banner.
     } catch (e) {
       setError(e?.message || "Failed to dismiss request.");
     } finally {
@@ -210,7 +251,6 @@ export default function MyAccount() {
         <div className="acctSection">
           <h2 className="acctH2">Subscription</h2>
 
-          {/* ✅ Admin-requested plan change banner */}
           {shouldShowRequestBanner && (
             <div
               style={{
@@ -289,27 +329,24 @@ export default function MyAccount() {
               className="acctBtn acctBtnPrimary"
               onClick={openBillingPortal}
               disabled={loadingPortal}
-              title={!customerId ? "Subscribe first to create a customer" : ""}
+              title={!customerId ? "Subscribe first to create a customer (if you’re on the old portal flow)." : ""}
             >
               {loadingPortal ? "Opening..." : "Manage Billing (Stripe)"}
             </button>
           </div>
 
-          <p className="acctTiny">Billing portal opens in a new tab.</p>
-          <p className="acctTiny">
-            <i>* May need to allow pop-ups in your browser settings. Last case scenario, try a different browser *</i>
-          </p>
+          <p className="acctTiny">Billing portal opens in this tab.</p>
         </div>
 
-        {/* ✅ Usage section from GET /usage */}
+        {/* ✅ Image usage */}
         <div className="acctSection">
-          <h2 className="acctH2">Usage</h2>
+          <h2 className="acctH2">Image Generation Usage</h2>
 
           {usageError && <div className="acctErr">{usageError}</div>}
 
           <div className="acctActions">
             <button className="acctBtn" onClick={fetchUsage} disabled={usageLoading}>
-              {usageLoading ? "Refreshing..." : "Refresh Usage"}
+              {usageLoading ? "Refreshing..." : "Refresh Image Usage"}
             </button>
           </div>
 
@@ -337,15 +374,102 @@ export default function MyAccount() {
                   <i>* Usage resets on the first of each month *</i>
                 </span>
               </div>
+            </>
+          ) : (
+            <p className="acctTiny">{usageLoading ? "Loading usage…" : "Usage data not available yet."}</p>
+          )}
+        </div>
 
-              {usage.remaining === 0 && (
+        {/* ✅ Video usage */}
+        <div className="acctSection">
+          <h2 className="acctH2">Video Generation Usage</h2>
+
+          {videoUsageError && <div className="acctErr">{videoUsageError}</div>}
+
+          <div className="acctActions">
+            <button className="acctBtn" onClick={fetchVideoUsage} disabled={videoUsageLoading}>
+              {videoUsageLoading ? "Refreshing..." : "Refresh Video Usage"}
+            </button>
+          </div>
+
+          {videoUsage ? (
+            <>
+              <div className="acctRow">
+                <span className="acctLabel">This month</span>
+                <span className="acctValue">{videoUsage.month || "—"}</span>
+              </div>
+
+              <div className="acctRow">
+                <span className="acctLabel">Used</span>
+                <span className="acctValue">
+                  {videoUsage ? (
+                  <>
+                    {videoUsage.enabled ? (
+                      <>
+                        <div className="acctRow">
+                          <span className="acctLabel">This month</span>
+                          <span className="acctValue">{videoUsage.month || "—"}</span>
+                        </div>
+
+                        <div className="acctRow">
+                          <span className="acctLabel">Used</span>
+                          <span className="acctValue">
+                            {videoUsage.used}/{videoUsage.cap}
+                          </span>
+                        </div>
+
+                        <div className="acctRow">
+                          <span className="acctLabel">Remaining</span>
+                          <span className="acctValue">{videoUsage.remaining}</span>
+                        </div>
+
+                        <div className="acctRow">
+                          <span className="acctLabel">
+                            <i>* Usage resets on the first of each month *</i>
+                          </span>
+                        </div>
+
+                        {videoUsage.remaining === 0 && (
+                          <p className="acctTiny">
+                            You’ve reached your video limit. Upgrade to generate more this month.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="acctTiny" style={{ marginTop: 8 }}>
+                        Video Ads are available on Early Access, Pro, and Business plans.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="acctTiny">
+                    {videoUsageLoading ? "Loading video usage…" : "Video usage data not available yet."}
+                  </p>
+                )}
+                </span>
+              </div>
+
+              <div className="acctRow">
+                <span className="acctLabel">Remaining</span>
+                <span className="acctValue">{videoUsage.remaining ?? 0}</span>
+              </div>
+
+              <div className="acctRow">
+                <span className="acctLabel">
+                  <i>* Usage resets on the first of each month *</i>
+                </span>
+              </div>
+
+              {!videoUsage.enabled && (
                 <p className="acctTiny">
-                  You’ve reached your limit. Upgrade your plan to continue generating ads this month.
+                  Video Ads are available on Early Access, Pro, and Business plans.
                 </p>
               )}
             </>
           ) : (
-            <p className="acctTiny">{usageLoading ? "Loading usage…" : "Usage data not available yet."}</p>
+            <p className="acctTiny">
+              {videoUsageLoading ? "Loading video usage…" : "Video usage data not available yet."}
+            </p>
           )}
         </div>
       </div>
