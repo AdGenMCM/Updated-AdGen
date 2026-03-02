@@ -324,5 +324,117 @@ body { background: var(--bg); }
   width: 100%;
 }
 
+/* ===== Winners guidance (scoped) ===== */
+.adgenPage .winnersBox{
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+}
 
+.adgenPage .winnersToggle{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  user-select: none;
+}
+
+.adgenPage .winnersToggle input{
+  margin: 0;
+}
+
+.adgenPage .winnersMeta{
+  margin-top: 10px;
+}
+
+.adgenPage .winnersGuidance{
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.adgenPage .winnersError{
+  font-size: 13px;
+  color: #991b1b;
+  font-weight: 800;
+}
+
+/* =========================
+   "Use my winners" card
+   ========================= */
+
+.winnersCard{
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 16px;
+  align-items: center;
+
+  padding: 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.winnersPill{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-2);
+
+  cursor: pointer;
+  user-select: none;
+}
+
+.winnersPill input{
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.winnersPillText{
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.winnersPillTitle{
+  font-weight: 800;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.winnersPillSub{
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.winnersDesc{
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+/* Mobile: stack pill on top of description */
+@media (max-width: 520px){
+  .winnersCard{
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .winnersPill{
+    width: fit-content;
+  }
+}
 

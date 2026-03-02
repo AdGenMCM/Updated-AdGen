@@ -96,6 +96,7 @@ export default function Navbar() {
       ? [
           { divider: true, mobileOnly: true },
           { to: "/optimizer", label: "Ad Optimizer", mobileOnly: true },
+          { to: "/insights", label: "Insights", mobileOnly: true },
           { to: "/library", label: "Creative Library", mobileOnly: true },
         ]
       : []),
@@ -191,6 +192,11 @@ export default function Navbar() {
               Ad Optimizer
             </NavLink>
           )}
+          {user && (
+            <NavLink to="/insights" className="nav-link" onClick={() => setInfoOpen(false)}>
+                Insights
+            </NavLink>
+            )}
           {user && (
             <NavLink
               to="/library"

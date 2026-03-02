@@ -26,3 +26,151 @@
 
 .lib-buttons { display:flex; gap: 8px; margin-top: 10px; }
 .lib-linkBtn { padding: 8px 10px; border-radius: 10px; border: 1px solid #e5e7eb; text-decoration: none; color: #0f172a; font-size: 14px; }
+/* Controls */
+.lib-controls { display:flex; gap: 8px; flex-wrap: wrap; justify-content:flex-end; }
+.lib-pill {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.lib-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+
+.lib-hint {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 14px;
+}
+
+/* Performance */
+.lib-perf {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+.lib-perfTitle { font-weight: 700; font-size: 14px; margin-bottom: 10px; color: #0f172a; }
+
+.lib-perfGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lib-field { display:flex; flex-direction:column; gap: 6px; }
+.lib-field span { font-size: 12px; color: #64748b; }
+
+.lib-field input,
+.lib-field select,
+.lib-field textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  outline: none;
+  font-size: 14px;
+  background: #fff;
+}
+
+.lib-field textarea { resize: vertical; }
+
+.lib-fieldWide { grid-column: 1 / -1; }
+
+.lib-perfActions { display:flex; align-items:center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+
+.lib-saveBtn {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #fff;
+  cursor: pointer;
+}
+.lib-saveBtn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.lib-perfNotice { font-size: 13px; color: #334155; }
+
+/* Read-only computed fields (e.g., ROAS) */
+.lib-field input[readonly] {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #e2e8f0;
+  cursor: default;
+}
+
+.lib-sortRow{
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.lib-inline{
+  display:flex;
+  gap: 8px;
+  align-items:center;
+  font-size: 14px;
+  color: #334155;
+}
+
+.lib-inline select{
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.lib-check{
+  display:flex;
+  gap: 8px;
+  align-items:center;
+  font-size: 14px;
+  color: #334155;
+}
+
+.lib-check input{
+  width: 16px;
+  height: 16px;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .lib-header {
+    display: block;
+  }
+
+  .lib-title {
+    margin-bottom: 10px;
+  }
+
+  .lib-controls {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .lib-sortRow {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .lib-inline {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lib-inline select {
+    width: 160px;
+  }
+
+  .lib-check {
+    width: auto;
+  }
+}

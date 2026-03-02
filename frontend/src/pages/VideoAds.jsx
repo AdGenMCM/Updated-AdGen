@@ -56,6 +56,32 @@ function estimateSpeechSeconds(text) {
   return Math.round(((words / 2.5) + 0.6) * 10) / 10;
 }
 
+// --- helpers for winners guidance ---
+function compactGuidanceString(insights) {
+  if (!insights || typeof insights !== "object") return "";
+
+  const parts = [];
+
+  if (typeof insights.guidance === "string" && insights.guidance.trim()) {
+    parts.push(insights.guidance.trim());
+  }
+
+  // Add top pattern winners lightly
+  const patterns = insights.patterns || {};
+  const bestPlatform = patterns?.platform?.best?.value;
+  const bestTone = patterns?.tone?.best?.value;
+  const bestStyle = patterns?.image_stylePreset?.best?.value;
+  const bestRatio = patterns?.ratio?.best?.value;
+
+  if (bestPlatform) parts.push(`Preferred platform: ${bestPlatform}`);
+  if (bestTone) parts.push(`Preferred tone: ${bestTone}`);
+  if (bestStyle) parts.push(`Preferred image style: ${bestStyle}`);
+  if (bestRatio) parts.push(`Preferred ratio: ${bestRatio}`);
+
+  // Hard cap so we don’t overwhelm the prompt
+  return parts.join(" • ").slice(0, 900);
+}
+
 export default function VideoAds() {
   const navigate = useNavigate();
 
@@ -104,6 +130,11 @@ export default function VideoAds() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const audioRef = useRef(null);
 
+  // ========== Winners guidance (NEW) ==========
+  const [useWinners, setUseWinners] = useState(false);
+  const [winnersLoading, setWinnersLoading] = useState(false);
+  const [winnerGuidance, setWinnerGuidance] = useState("");
+
   // ========== Job state ==========
   const [loading, setLoading] = useState(false);
   const [jobId, setJobId] = useState(null);
@@ -118,6 +149,13 @@ export default function VideoAds() {
     if (me.isAdmin) return true;
     const t = String(me.tier || "").toLowerCase();
     return t === "early_access" || t === "pro_monthly" || t === "business_monthly";
+  }, [me]);
+
+  // ✅ winners guidance should be Pro/Business only (admin allowed)
+  const canUseWinners = useMemo(() => {
+    if (me.isAdmin) return true;
+    const t = String(me.tier || "").toLowerCase();
+    return t === "pro_monthly" || t === "business_monthly";
   }, [me]);
 
   const isGenerating =
@@ -227,6 +265,65 @@ export default function VideoAds() {
     return url;
   };
 
+  // -------- Winners fetch (NEW) --------
+  const fetchWinnersGuidance = React.useCallback(async () => {
+  const token = await getIdToken();
+
+  const res = await fetch(`${API_BASE}/creative-insights?limit=200&min_spend=0`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await safeJson(res);
+  if (!res.ok) {
+    throw new Error(
+      data?.detail?.message ||
+      safeDetailMessage(data?.detail) ||
+      "Failed to load winners insights"
+    );
+  }
+
+  const g = compactGuidanceString(data);
+  return g;
+}, []);  // no dynamic dependencies here
+
+  // If user toggles on, load guidance once (NEW)
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (!useWinners) {
+        setWinnerGuidance("");
+        return;
+      }
+      if (!canUseWinners) {
+        // If user somehow toggled on without entitlement
+        setWinnerGuidance("");
+        return;
+      }
+
+      setWinnersLoading(true);
+      setError(null);
+
+      try {
+        const g = await fetchWinnersGuidance();
+        if (cancelled) return;
+        setWinnerGuidance(g || "");
+      } catch (e) {
+        if (cancelled) return;
+        setWinnerGuidance("");
+        setError(e?.message || "Failed to load winners insights.");
+        // auto turn off if it fails
+        setUseWinners(false);
+      } finally {
+        if (!cancelled) setWinnersLoading(false);
+      }
+    };
+
+    run();
+
+    return () => { cancelled = true; };
+  }, [useWinners, canUseWinners, fetchWinnersGuidance]); // intentionally depends on entitlement
+
   // Voice preview
   const previewVoice = async () => {
     setPreviewLoading(true);
@@ -322,6 +419,9 @@ export default function VideoAds() {
           enabled: voiceEnabled,
           presetVoice,
         },
+
+        // ✅ NEW: winners guidance injected lightly (Pro/Business only)
+        winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
       };
 
       const res = await fetch(`${API_BASE}/video/start-image`, {
@@ -384,6 +484,9 @@ export default function VideoAds() {
           enabled: voiceEnabled,
           presetVoice,
         },
+
+        // ✅ NEW: winners guidance injected lightly (Pro/Business only)
+        winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
       };
 
       const res = await fetch(`${API_BASE}/video/start-prompt`, {
@@ -574,6 +677,41 @@ export default function VideoAds() {
               ))}
             </select>
           </div>
+        </div>
+
+        {/* ✅ NEW: Use my winners (Pro/Business only) */}
+        <div className="box" style={{ marginTop: 14 }}>
+          <div className="row" style={{ alignItems: "center" }}>
+            <label className="checkbox" style={{ marginRight: 12 }}>
+              <input
+                type="checkbox"
+                checked={useWinners}
+                onChange={(e) => setUseWinners(e.target.checked)}
+                disabled={!canUseWinners || isGenerating || winnersLoading}
+              />
+              Use my winners (Pro/Business)
+            </label>
+
+            {winnersLoading ? (
+              <div className="hint">Loading winners…</div>
+            ) : (
+              <div className="hint">
+                Adds light guidance from your best-performing creatives (no metric text).
+              </div>
+            )}
+          </div>
+
+          {!canUseWinners && (
+            <div className="hint" style={{ marginTop: 6 }}>
+              Available on <strong>Pro & Business</strong>. (Early Access can generate videos, but won’t use winners guidance.)
+            </div>
+          )}
+
+          {!!winnerGuidance && useWinners && canUseWinners && (
+            <div className="hint" style={{ marginTop: 8 }}>
+              <strong>Applied guidance:</strong> {winnerGuidance}
+            </div>
+          )}
         </div>
 
         {/* Voiceover script + preview */}

@@ -1,3 +1,4 @@
+// src/pages/AdGenerator.js
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
@@ -19,6 +20,10 @@ function AdGenerator() {
     productType: "auto",
   });
 
+  // ✅ NEW: “Use my winners” toggle (Pro/Business only)
+  const [useWinners, setUseWinners] = useState(false);
+  const [winnersLoading, setWinnersLoading] = useState(false);
+
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uiError, setUiError] = useState(null);
@@ -32,6 +37,40 @@ function AdGenerator() {
     if (typeof detail === "string") return detail;
     if (typeof detail === "object") return detail.message || detail.error || JSON.stringify(detail);
     return String(detail);
+  };
+
+  const safeJson = async (res) => {
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
+  };
+
+  // ✅ NEW: fetch guidance from your insights endpoint
+  const fetchWinnersGuidance = async () => {
+    if (!apiBase) throw new Error("Config error: API URL is missing. App must be rebuilt.");
+
+    const user = auth.currentUser;
+    if (!user) throw new Error("You must be logged in.");
+
+    const token = await user.getIdToken(true);
+
+    const res = await fetch(`${apiBase}/creative-insights?limit=200&min_spend=0`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await safeJson(res);
+
+    if (!res.ok) {
+      // Backend gating will likely return 402/403 for non Pro/Business
+      const msg = safeDetailMessage(data?.detail) || `Insights request failed (${res.status})`;
+      throw new Error(msg);
+    }
+
+    // Your backend returns { guidance: "..." }
+    const g = (data?.guidance || "").trim();
+    return g;
   };
 
   const handleSubmit = async (e) => {
@@ -61,10 +100,37 @@ function AdGenerator() {
       // Force refresh so claims/tier changes reflect immediately
       const token = await user.getIdToken(true);
 
+      // Base payload (unchanged)
       const payload = {
         ...form,
         productType: form.productType === "auto" ? null : form.productType,
       };
+
+      // ✅ NEW: inject winners guidance (lightly)
+      if (useWinners) {
+        setWinnersLoading(true);
+        try {
+          const guidance = await fetchWinnersGuidance();
+          // only send if non-empty
+          if (guidance) {
+            payload.winnerGuidance = guidance.slice(0, 1000);
+          }
+        } catch (err) {
+          // Don’t hard-fail generation; just surface helpful message
+          setUiError({
+            type: "sub",
+            message:
+              err?.message ||
+              "Winners guidance is available on Pro & Business plans. Upgrade to use this feature.",
+            upgradePath: "/account",
+          });
+          // If you want to allow continuing WITHOUT winners, comment out this return.
+          // Right now, we stop so the user understands why the toggle didn’t work.
+          return;
+        } finally {
+          setWinnersLoading(false);
+        }
+      }
 
       const response = await fetch(`${apiBase}/generate-ad`, {
         method: "POST",
@@ -121,6 +187,15 @@ function AdGenerator() {
           return;
         }
 
+        if (response.status === 403) {
+          setUiError({
+            type: "sub",
+            message: safeDetailMessage(detail) || "This feature requires Pro or Business.",
+            upgradePath: "/account",
+          });
+          return;
+        }
+
         const msg = safeDetailMessage(detail) || `Request failed (${response.status})`;
         alert(msg);
         return;
@@ -142,6 +217,7 @@ function AdGenerator() {
       alert("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
+      setWinnersLoading(false);
     }
   };
 
@@ -247,8 +323,29 @@ function AdGenerator() {
           </div>
         </div>
 
+        {/* Use winners toggle */}
+        {/* Use my winners (Pro/Business) */}
+        <div className="winnersCard">
+          <label className="winnersPill">
+            <input
+              type="checkbox"
+              checked={useWinners}
+              onChange={(e) => setUseWinners(e.target.checked)}
+              disabled={loading /* or whatever lock state you use */}
+            />
+            <span className="winnersPillText">
+              <span className="winnersPillTitle">Use my winners</span>
+              <span className="winnersPillSub">(Pro/Business)</span>
+            </span>
+          </label>
+
+          <div className="winnersDesc">
+            Adds light guidance from your best-performing creatives (no metric text).
+          </div>
+        </div>
+
         <div className="button-row">
-          <button type="submit" disabled={loading}>
+          <button type="submit" disabled={loading || winnersLoading}>
             {loading ? "Generating..." : "Generate Ad"}
           </button>
         </div>
@@ -323,6 +420,7 @@ function AdGenerator() {
 }
 
 export default AdGenerator;
+
 
 
 

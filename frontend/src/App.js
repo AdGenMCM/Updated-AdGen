@@ -12,6 +12,7 @@ import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
 import VideoAds from "./pages/VideoAds";
 import Library from "./pages/Library";
+import Insights from "./pages/Insights";
 
 
 // NEW: Public pages
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/account" element={<MyAccount />} />
             <Route path="/optimizer" element={<Optimizer />} />
             <Route path="/library" element={<Library />} />
+            <Route path="/insights" element={<Insights />} />
           </Route>
 
           {/* Paid features (require active sub) */}

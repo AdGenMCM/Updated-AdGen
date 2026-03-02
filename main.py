@@ -51,6 +51,12 @@ from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 from video_jobs import router as video_router
 from storage_utils import upload_bytes_to_firebase_storage
 
+#Library Performace Schemas
+from typing import Optional
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+from fastapi import Query
+
 
 
 load_dotenv(override=True)
@@ -198,6 +204,8 @@ class AdRequest(BaseModel):
     stylePreset: Optional[str] = None
     productType: Optional[str] = None
 
+    winnerGuidance: Optional[str] = None
+
 class ContactForm(BaseModel):
     name: str
     email: str
@@ -213,6 +221,23 @@ class GenerateFromOptimizerRequest(BaseModel):
     improved_image_prompt: str
     imageSize: str = "1024x1024"
     creative_image_urls: Optional[List[str]] = None
+
+class PerformanceUpdate(BaseModel):
+    ctr: Optional[float] = None
+    cpc: Optional[float] = None
+    cpa: Optional[float] = None
+
+    spend: Optional[float] = None      # $
+    revenue: Optional[float] = None    # $  (used to compute ROAS)
+
+    thumb_stop_rate: Optional[float] = None
+    view_3s: Optional[float] = None
+    view_6s: Optional[float] = None
+    hold_rate: Optional[float] = None
+    conversion_rate: Optional[float] = None
+
+    marked_successful: Optional[bool] = None
+    notes: Optional[str] = None
 
 
 # ---------------- Helpers ----------------
@@ -339,6 +364,27 @@ def require_user(authorization: str | None):
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired auth token.")
+    
+def require_pro_or_business_for_performance(db, uid: str, claims: dict):
+    """
+    Performance tracking is Pro & Business only.
+    Admins bypass.
+    """
+    if is_admin(claims):
+        return {"tier": "admin", "status": "active", "admin": True}
+
+    user_snap = db.collection("users").document(uid).get()
+    user_doc = user_snap.to_dict() or {}
+    tier, status = get_tier_and_status(user_doc)
+
+    allowed_statuses = {"active", "trialing"}
+    if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+        raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+
+    # ✅ Pro & Business only
+    require_pro_or_business(tier)
+
+    return {"tier": tier, "status": status, "admin": False}
 
 STYLE_HINTS = {
     "Minimal": "studio product hero shot, clean background, minimal props, crisp soft lighting",
@@ -399,6 +445,155 @@ def infer_visual_subject(product_name: str, description: str, product_type: str 
         return f"{pn} ({attrs})"
     return pn
 
+# ---------------- Library Performance ----------------
+def _safe_num(x):
+    try:
+        if x is None:
+            return None
+        n = float(x)
+        if n != n:  # NaN
+            return None
+        return n
+    except Exception:
+        return None
+
+def _pick(doc: dict, keys: List[str], default=None):
+    for k in keys:
+        v = doc.get(k)
+        if v is not None and v != "":
+            return v
+    return default
+
+def _get_perf(doc: dict) -> dict:
+    p = doc.get("performance") or {}
+    return p if isinstance(p, dict) else {}
+
+def _has_perf(doc: dict) -> bool:
+    p = _get_perf(doc)
+    # consider it “has perf” if any of the key metrics exist
+    for k in ("ctr", "cpc", "cpa", "spend", "revenue", "roas"):
+        if p.get(k) is not None:
+            return True
+    return False
+
+def _creative_snapshot(kind: str, doc_id: str, doc: dict) -> dict:
+    p = _get_perf(doc)
+
+    # For display fields, try multiple likely locations safely
+    product_name = _pick(doc, ["productName", "product_name"], default=None)
+    title = f"{kind.capitalize()} Ad" if not product_name else f"{kind.capitalize()}: {product_name}"
+
+    # URLs
+    if kind == "video":
+        url = _pick(doc, ["finalVideoUrl", "videoUrl"], default=None)
+        thumb = _pick(doc, ["thumbnailUrl"], default=None)
+        ratio = _pick(doc, ["ratio", "aspectRatio"], default=None)
+    else:
+        url = _pick(doc, ["imageUrl"], default=None)
+        thumb = url
+        ratio = _pick(doc, ["aspectRatio", "ratio"], default=None)
+
+    created_at = doc.get("createdAt")
+    status = doc.get("status")
+
+    return {
+        "id": doc_id,
+        "kind": kind,
+        "title": title,
+        "createdAt": created_at,
+        "status": status,
+        "url": url,
+        "thumbnailUrl": thumb,
+        "ratio": ratio,
+        "performance": {
+            "ctr": _safe_num(p.get("ctr")),
+            "cpc": _safe_num(p.get("cpc")),
+            "cpa": _safe_num(p.get("cpa")),
+            "spend": _safe_num(p.get("spend")),
+            "revenue": _safe_num(p.get("revenue")),
+            "roas": _safe_num(p.get("roas")),
+            "marked_successful": p.get("marked_successful") if isinstance(p.get("marked_successful"), bool) else None,
+        },
+        # helpful context for “best averages”
+        "meta": {
+            "platform": _pick(doc, ["platform", "platformStyle"], default=None),
+            "tone": _pick(doc, ["tone"], default=None),
+            "stylePreset": _pick(doc, ["stylePreset", "style"], default=None),
+            "model": _pick(doc, ["model"], default=None),
+        },
+    }
+
+def _avg(nums: List[float]) -> Optional[float]:
+    vals = [x for x in nums if isinstance(x, (int, float))]
+    return round(sum(vals) / len(vals), 4) if vals else None
+
+def _weighted_roas(items: List[dict]) -> Optional[float]:
+    # weighted by spend when available: sum(revenue)/sum(spend)
+    total_spend = 0.0
+    total_revenue = 0.0
+    for it in items:
+        p = it.get("performance") or {}
+        s = _safe_num(p.get("spend"))
+        r = _safe_num(p.get("revenue"))
+        if s is None or r is None or s <= 0:
+            continue
+        total_spend += s
+        total_revenue += r
+    if total_spend <= 0:
+        return None
+    return round(total_revenue / total_spend, 4)
+
+def _rank(items: List[dict], key: str, desc: bool = True) -> List[dict]:
+    def k(it):
+        v = _safe_num((it.get("performance") or {}).get(key))
+        return v if v is not None else (-1e18 if desc else 1e18)
+    return sorted(items, key=k, reverse=desc)
+
+def _rank_low(items: List[dict], key: str) -> List[dict]:
+    # lowest first
+    def k(it):
+        v = _safe_num((it.get("performance") or {}).get(key))
+        return v if v is not None else 1e18
+    return sorted(items, key=k)
+
+def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str, Any]:
+    groups = defaultdict(list)
+    for it in items:
+        meta = it.get("meta") or {}
+        g = meta.get(group_key)
+        if not g:
+            continue
+        p = it.get("performance") or {}
+        spend = _safe_num(p.get("spend")) or 0.0
+        if spend < min_spend:
+            continue
+        groups[g].append(it)
+
+    # compute summary per group
+    out = []
+    for g, arr in groups.items():
+        roas = _weighted_roas(arr)
+        ctrs = [_safe_num((x.get("performance") or {}).get("ctr")) for x in arr]
+        cpas = [_safe_num((x.get("performance") or {}).get("cpa")) for x in arr]
+        spends = [_safe_num((x.get("performance") or {}).get("spend")) for x in arr]
+
+        out.append({
+            "value": g,
+            "count": len(arr),
+            "avg_ctr": _avg([x for x in ctrs if x is not None]),
+            "avg_cpa": _avg([x for x in cpas if x is not None]),
+            "total_spend": round(sum([x for x in spends if x is not None]), 4),
+            "weighted_roas": roas,
+        })
+
+    # sort by weighted_roas desc, fallback to avg_ctr
+    out.sort(key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18,
+                           r["avg_ctr"] if r["avg_ctr"] is not None else -1e18),
+             reverse=True)
+    return {
+        "best": out[0] if out else None,
+        "rows": out[:10],
+    }
 
 # ---------------- Usage ----------------
 @app.get("/usage")
@@ -533,6 +728,10 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
+    winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
+    if winner_guidance and not admin:
+        require_pro_or_business(tier)
+
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
@@ -590,7 +789,25 @@ tone: {tone}
 platform: {platform}
 goal: {goal}
 offer: {offer or "N/A"}
+{"\nPast winners guidance (use lightly; do NOT mention metrics): " + winner_guidance if winner_guidance else ""}
 """
+    
+    extra = (
+        "Plain seamless studio setup. "
+        "Single hero product shot. "
+        "No packaging, no posters, no signage, no printed materials."
+        "Absolutely no visible text of any kind. "
+        "No logos, no labels, no packaging, no brand names, no symbols, "
+        "no typography, no engraved markings, no embossed markings. "
+        "All surfaces must be completely blank and smooth. "
+    )
+
+    if winner_guidance:
+        extra += (
+            "Use this guidance from the user's past best performers as subtle direction "
+            "(do NOT mention metrics and do NOT copy verbatim): "
+            f"{winner_guidance}. "
+        )
 
     # ✅ NEW: shared builder w/ hard product anchor
     visual_prompt = build_visual_prompt(
@@ -599,15 +816,7 @@ offer: {offer or "N/A"}
         tone=tone,
         goal=goal,
         style_hint=style_hint,
-        extra_instructions=(
-            "Plain seamless studio setup. "
-            "Single hero product shot. "
-            "No packaging, no posters, no signage, no printed materials."
-            "Absolutely no visible text of any kind. "
-            "No logos, no labels, no packaging, no brand names, no symbols, "
-            "no typography, no engraved markings, no embossed markings. "
-            "All surfaces must be completely blank and smooth. "
-        ),
+        extra_instructions=extra,
     )
 
     async def _gen_copy():
@@ -1419,6 +1628,210 @@ async def get_image_job(
     data["id"] = snap.id
     return data
 
+@app.post("/creative/performance/{kind}/{job_id}")
+async def update_creative_performance(
+    kind: str,
+    job_id: str,
+    payload: PerformanceUpdate,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+
+    gate = require_pro_or_business_for_performance(db, uid, claims)
+    admin = gate["admin"]
+
+    kind = (kind or "").strip().lower()
+    if kind not in {"image", "video"}:
+        raise HTTPException(status_code=400, detail="kind must be 'image' or 'video'.")
+
+    collection = "image_jobs" if kind == "image" else "video_jobs"
+
+    ref = db.collection(collection).document(job_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Creative not found.")
+
+    doc = snap.to_dict() or {}
+    if not admin and doc.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    perf = payload.model_dump(exclude_none=True)
+
+    # Percent validation (0-100)
+    pct_fields = {"ctr", "thumb_stop_rate", "view_3s", "view_6s", "hold_rate", "conversion_rate"}
+    for k in list(perf.keys()):
+        if k in pct_fields and perf[k] is not None:
+            if perf[k] < 0 or perf[k] > 100:
+                raise HTTPException(status_code=400, detail=f"{k} must be between 0 and 100.")
+
+    # Money validation
+    spend = perf.get("spend")
+    revenue = perf.get("revenue")
+    if spend is not None and spend < 0:
+        raise HTTPException(status_code=400, detail="spend must be >= 0.")
+    if revenue is not None and revenue < 0:
+        raise HTTPException(status_code=400, detail="revenue must be >= 0.")
+
+    # Notes cleanup
+    if "notes" in perf and perf["notes"] is not None:
+        perf["notes"] = perf["notes"].strip()[:800]
+
+    # ✅ Auto-calc ROAS from spend + revenue
+    if spend is not None and revenue is not None and spend > 0:
+        perf["roas"] = round(revenue / spend, 4)
+    else:
+        # prevent stale ROAS lingering
+        perf.pop("roas", None)
+
+    perf["updatedAt"] = int(time.time())
+    perf["updatedBy"] = uid
+
+    ref.set({"performance": perf}, merge=True)
+
+    return {"ok": True, "kind": kind, "jobId": job_id, "performance": perf}
+
+
+# --- Shared insights implementation (we'll call it from BOTH /insights and /creative-insights) ---
+async def _creative_insights_impl(
+    authorization: str | None,
+    limit: int,
+    min_spend: float,
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    # Gate: Pro/Business only (admins bypass)
+    if not admin:
+        user_snap = db.collection("users").document(uid).get()
+        user_doc = user_snap.to_dict() or {}
+        tier, status = get_tier_and_status(user_doc)
+
+        allowed_statuses = {"active", "trialing"}
+        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+        require_pro_or_business(tier)
+
+    def fetch_jobs(col_name: str) -> List[dict]:
+        q = (
+            db.collection(col_name)
+            .where("uid", "==", uid)
+            .order_by("createdAt", direction=gc_firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        docs = []
+        for snap in q.stream():
+            docs.append({"id": snap.id, **(snap.to_dict() or {})})
+        return docs
+
+    image_docs = fetch_jobs("image_jobs")
+    video_docs = fetch_jobs("video_jobs")
+
+    items = []
+    for d in image_docs:
+        if not _has_perf(d):
+            continue
+        snap = _creative_snapshot("image", d["id"], d)
+        spend = _safe_num((snap["performance"] or {}).get("spend")) or 0.0
+        if spend < min_spend:
+            continue
+        items.append(snap)
+
+    for d in video_docs:
+        if not _has_perf(d):
+            continue
+        snap = _creative_snapshot("video", d["id"], d)
+        spend = _safe_num((snap["performance"] or {}).get("spend")) or 0.0
+        if spend < min_spend:
+            continue
+        items.append(snap)
+
+    top_by_roas = _rank(items, "roas", desc=True)[:5]
+    top_by_ctr = _rank(items, "ctr", desc=True)[:5]
+    lowest_cpa = _rank_low(items, "cpa")[:5]
+
+    all_roas = [_safe_num((x.get("performance") or {}).get("roas")) for x in items]
+    all_ctr = [_safe_num((x.get("performance") or {}).get("ctr")) for x in items]
+    all_cpa = [_safe_num((x.get("performance") or {}).get("cpa")) for x in items]
+
+    summary = {
+        "count_with_performance": len(items),
+        "avg_roas": _avg([x for x in all_roas if x is not None]),
+        "avg_ctr": _avg([x for x in all_ctr if x is not None]),
+        "avg_cpa": _avg([x for x in all_cpa if x is not None]),
+        "weighted_roas": _weighted_roas(items),
+        "min_spend_filter": min_spend,
+        "limit": limit,
+    }
+
+    best_platform = _group_best(items, "platform", min_spend=min_spend)
+    best_tone = _group_best(items, "tone", min_spend=min_spend)
+    best_style = _group_best([x for x in items if x["kind"] == "image"], "stylePreset", min_spend=min_spend)
+
+    ratio_groups = defaultdict(list)
+    for it in items:
+        ratio = it.get("ratio")
+        if not ratio:
+            continue
+        spend = _safe_num((it.get("performance") or {}).get("spend")) or 0.0
+        if spend < min_spend:
+            continue
+        ratio_groups[ratio].append(it)
+
+    ratio_rows = []
+    for ratio, arr in ratio_groups.items():
+        ratio_rows.append({
+            "value": ratio,
+            "count": len(arr),
+            "weighted_roas": _weighted_roas(arr),
+            "avg_ctr": _avg([_safe_num((x.get("performance") or {}).get("ctr")) for x in arr if _safe_num((x.get("performance") or {}).get("ctr")) is not None]),
+            "avg_cpa": _avg([_safe_num((x.get("performance") or {}).get("cpa")) for x in arr if _safe_num((x.get("performance") or {}).get("cpa")) is not None]),
+        })
+    ratio_rows.sort(key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18), reverse=True)
+    best_ratio = {"best": ratio_rows[0] if ratio_rows else None, "rows": ratio_rows[:10]}
+
+    guidance_parts = []
+    if best_platform.get("best") and best_platform["best"].get("value"):
+        guidance_parts.append(f"Best platform: {best_platform['best']['value']}")
+    if best_tone.get("best") and best_tone["best"].get("value"):
+        guidance_parts.append(f"Best tone: {best_tone['best']['value']}")
+    if best_style.get("best") and best_style["best"].get("value"):
+        guidance_parts.append(f"Best image style: {best_style['best']['value']}")
+    if best_ratio.get("best") and best_ratio["best"].get("value"):
+        guidance_parts.append(f"Best ratio: {best_ratio['best']['value']}")
+
+    return {
+        "summary": summary,
+        "top": {
+            "by_roas": top_by_roas,
+            "by_ctr": top_by_ctr,
+            "lowest_cpa": lowest_cpa,
+        },
+        "patterns": {
+            "platform": best_platform,
+            "tone": best_tone,
+            "image_stylePreset": best_style,
+            "ratio": best_ratio,
+        },
+        "guidance": " • ".join(guidance_parts) if guidance_parts else "",
+    }
+
+@app.get("/creative-insights")
+async def creative_insights(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(200, ge=10, le=1000),
+    min_spend: float = Query(0.0, ge=0.0),
+):
+    return await _creative_insights_impl(authorization, limit, min_spend)
+
+@app.get("/insights")
+async def insights(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(200, ge=10, le=1000),
+    min_spend: float = Query(0.0, ge=0.0),
+):
+    return await _creative_insights_impl(authorization, limit, min_spend)
 
 
 # ---------------- Stripe routes ----------------

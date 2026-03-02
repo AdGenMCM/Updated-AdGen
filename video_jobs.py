@@ -30,6 +30,8 @@ from admin_guard import is_admin
 from fastapi import APIRouter, Header, HTTPException, Query
 from google.cloud import firestore as gc_firestore
 
+from entitlements import require_pro_or_business
+
 
 # -----------------------------
 # Env / defaults
@@ -277,6 +279,7 @@ class StartImageVideoRequest(BaseModel):
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
 
 class StartPromptVideoRequest(BaseModel):
     productName: str = Field(min_length=1, max_length=120)
@@ -295,6 +298,7 @@ class StartPromptVideoRequest(BaseModel):
     # ✅ prompt/video default model (separate from image)
     model: str = VIDEO_DEFAULT_TEXT_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
 
 class StartVideoResponse(BaseModel):
     jobId: str
@@ -350,7 +354,13 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
     if not admin:
         user_doc = (db.collection("users").document(uid).get().to_dict() or {})
         tier, status = get_tier_and_status(user_doc)
+
+        # caps/entitlements
         _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
+
+        # ✅ winners guidance is Pro/Business only
+        if (req.winnerGuidance or "").strip():
+            require_pro_or_business(tier)
 
     job_id = str(uuid.uuid4())
     job_ref = db.collection("video_jobs").document(job_id)
@@ -370,12 +380,24 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
         "runwayTtsTaskId": None,
         "finalVideoUrl": None,
         "error": None,
+        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
     })
+
+    # Build prompt text + inject winners guidance lightly (if provided)
+    prompt_text = (req.promptText or "").strip()
+    if (req.winnerGuidance or "").strip():
+        g = (req.winnerGuidance or "").strip()
+        prompt_text = (
+            f"{prompt_text}\n\n"
+            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
+            f"{g}"
+        )
+    prompt_text = prompt_text[:1200]
 
     try:
         runway_task_id = await create_image_to_video(
             model=req.model,
-            prompt_text=req.promptText,
+            prompt_text=prompt_text,
             prompt_image=req.promptImageUrl,
             duration=req.duration,
             ratio=req.ratio,
@@ -404,9 +426,25 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
     if not admin:
         user_doc = (db.collection("users").document(uid).get().to_dict() or {})
         tier, status = get_tier_and_status(user_doc)
+
         _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
 
+        # ✅ winners guidance is Pro/Business only
+        if (req.winnerGuidance or "").strip():
+            require_pro_or_business(tier)
+
+    # ✅ Director prompt used for the actual Runway generation
     director_prompt = build_director_prompt(req)
+
+    # ✅ Inject winners guidance into the actual prompt (fixes bits/bitts undefined + makes it effective)
+    if (req.winnerGuidance or "").strip():
+        g = (req.winnerGuidance or "").strip()
+        director_prompt = (
+            f"{director_prompt}\n\n"
+            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
+            f"{g}"
+        )
+    director_prompt = director_prompt[:1000]
 
     job_id = str(uuid.uuid4())
     job_ref = db.collection("video_jobs").document(job_id)
@@ -425,6 +463,79 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
         "runwayTtsTaskId": None,
         "finalVideoUrl": None,
         "error": None,
+        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
+    })
+
+    try:
+        runway_task_id = await create_text_to_video(
+            model=req.model,
+            prompt_text=director_prompt,
+            duration=req.duration,
+            ratio=req.ratio,
+            audio=False,
+        )
+    except RunwayError as e:
+        job_ref.update({"status": "failed", "error": str(e)})
+        raise HTTPException(status_code=502, detail=str(e))
+
+    job_ref.update({"runwayVideoTaskId": runway_task_id})
+    return StartVideoResponse(jobId=job_id, status="running")
+
+
+@router.post("/video/start-prompt", response_model=StartVideoResponse)
+async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | None = Header(default=None)):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+
+    if req.duration > VIDEO_MAX_SECONDS:
+        raise HTTPException(status_code=400, detail=f"Max duration is {VIDEO_MAX_SECONDS}s")
+
+    # ✅ backend safeguard: block if script won't fit
+    enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
+
+    db = get_db()
+
+    if not admin:
+        user_doc = (db.collection("users").document(uid).get().to_dict() or {})
+        tier, status = get_tier_and_status(user_doc)
+
+        _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
+
+        # ✅ winners guidance is Pro/Business only
+        if (req.winnerGuidance or "").strip():
+            require_pro_or_business(tier)
+
+    # ✅ Director prompt used for the actual Runway generation
+    director_prompt = build_director_prompt(req)
+
+    # ✅ Inject winners guidance into the actual prompt (fixes bits/bitts undefined + makes it effective)
+    if (req.winnerGuidance or "").strip():
+        g = (req.winnerGuidance or "").strip()
+        director_prompt = (
+            f"{director_prompt}\n\n"
+            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
+            f"{g}"
+        )
+    director_prompt = director_prompt[:1000]
+
+    job_id = str(uuid.uuid4())
+    job_ref = db.collection("video_jobs").document(job_id)
+    job_ref.set({
+        "uid": uid,
+        "createdAt": int(time.time()),
+        "status": "running",
+        "mode": "prompt",
+        "duration": req.duration,
+        "ratio": req.ratio,
+        "model": req.model,
+        "voiceover": req.voiceover.model_dump(),
+        "voiceoverScript": (req.voiceoverScript or "").strip() or None,
+        "directorPrompt": director_prompt,
+        "runwayVideoTaskId": None,
+        "runwayTtsTaskId": None,
+        "finalVideoUrl": None,
+        "error": None,
+        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
     })
 
     try:
@@ -465,7 +576,6 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
     if not runway_video_task_id:
         return VideoStatusResponse(jobId=job_id, status=job.get("status", "running"))
 
-    # ✅ IMPORTANT: catch *all* errors -> return JSON (no more plain 500)
     try:
         task = await get_task(runway_video_task_id)
     except RunwayError as e:
@@ -491,7 +601,6 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                 normalized_video = os.path.join(td, "runway_norm.mp4")
                 normalize_video_with_ffmpeg(raw_video, normalized_video)
 
-                # ✅ enforce exact length only ONCE (before mux)
                 target_seconds = int(job.get("duration") or 6)
                 enforced_video = os.path.join(td, "runway_enforced.mp4")
                 enforce_exact_duration(normalized_video, enforced_video, target_seconds)
@@ -504,7 +613,6 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                     if not script:
                         raise RuntimeError("Voiceover enabled but voiceoverScript is empty.")
 
-                    # ✅ re-check (defense in depth)
                     enforce_script_fits_duration(script, target_seconds, True)
 
                     tts_task_id = job.get("runwayTtsTaskId")
@@ -527,11 +635,7 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                     await download_to_file(tts_url, audio_path)
 
                     muxed = os.path.join(td, "final_muxed.mp4")
-
-                    # ✅ mux WITHOUT -shortest so short audio does NOT cut video
                     mux_voiceover(enforced_video, audio_path, muxed)
-
-                    # ✅ DO NOT enforce duration again here (avoids frozen tail)
                     final_path = muxed
 
                 with open(final_path, "rb") as f:
@@ -647,7 +751,6 @@ async def list_video_jobs(
     admin = is_admin(claims)
     db = get_db()
 
-    # Admin could optionally list their own only; keep consistent:
     q = (
         db.collection("video_jobs")
         .where("uid", "==", uid)
@@ -655,7 +758,6 @@ async def list_video_jobs(
         .limit(limit)
     )
 
-    # Simple cursor pagination based on createdAt
     if cursor is not None:
         q = q.start_after({"createdAt": cursor})
 
@@ -663,7 +765,6 @@ async def list_video_jobs(
     last_created_at = None
     for snap in q.stream():
         data = snap.to_dict() or {}
-        # extra safety
         if not admin and data.get("uid") != uid:
             continue
         data["id"] = snap.id
