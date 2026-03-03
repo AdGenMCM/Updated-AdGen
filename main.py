@@ -772,6 +772,10 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     # IMPORTANT: subject should not override product_name — prompt builder anchors product_name regardless.
     subject = infer_visual_subject(product_name, description, product_type)
 
+    winners_line=""
+    if winner_guidance:
+        winners_line=f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
+
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
 
 Return one JSON object with:
@@ -789,7 +793,7 @@ tone: {tone}
 platform: {platform}
 goal: {goal}
 offer: {offer or "N/A"}
-{"\nPast winners guidance (use lightly; do NOT mention metrics): " + winner_guidance if winner_guidance else ""}
+{winners_line}
 """
     
     extra = (
