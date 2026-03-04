@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./VideoAds.css";
 import "./AdGenerator.css"; // ✅ reuse AdGenerator overlay + spinner styles
 import { auth } from "../firebaseConfig";
+import { useWinnersProfile } from "../hooks/useWinnersProfile";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -57,30 +58,6 @@ function estimateSpeechSeconds(text) {
 }
 
 // --- helpers for winners guidance ---
-function compactGuidanceString(insights) {
-  if (!insights || typeof insights !== "object") return "";
-
-  const parts = [];
-
-  if (typeof insights.guidance === "string" && insights.guidance.trim()) {
-    parts.push(insights.guidance.trim());
-  }
-
-  // Add top pattern winners lightly
-  const patterns = insights.patterns || {};
-  const bestPlatform = patterns?.platform?.best?.value;
-  const bestTone = patterns?.tone?.best?.value;
-  const bestStyle = patterns?.image_stylePreset?.best?.value;
-  const bestRatio = patterns?.ratio?.best?.value;
-
-  if (bestPlatform) parts.push(`Preferred platform: ${bestPlatform}`);
-  if (bestTone) parts.push(`Preferred tone: ${bestTone}`);
-  if (bestStyle) parts.push(`Preferred image style: ${bestStyle}`);
-  if (bestRatio) parts.push(`Preferred ratio: ${bestRatio}`);
-
-  // Hard cap so we don’t overwhelm the prompt
-  return parts.join(" • ").slice(0, 900);
-}
 
 export default function VideoAds() {
   const navigate = useNavigate();
@@ -130,10 +107,22 @@ export default function VideoAds() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const audioRef = useRef(null);
 
-  // ========== Winners guidance (NEW) ==========
+  // ========== Winners guidance (Shared Hook) ==========
   const [useWinners, setUseWinners] = useState(false);
-  const [winnersLoading, setWinnersLoading] = useState(false);
-  const [winnerGuidance, setWinnerGuidance] = useState("");
+
+  const canUseWinners = useMemo(() => {
+    if (me.isAdmin) return true;
+    const t = String(me.tier || "").toLowerCase();
+    return t === "pro_monthly" || t === "business_monthly";
+  }, [me]);
+
+  const { winnersProfile, winnerGuidance, winnersLoading } = useWinnersProfile({
+    kind: "video",
+    enabled: useWinners && canUseWinners, // only fetch when entitled + toggle on
+    apiBase: API_BASE,
+    limit: 200,
+    minSpend: 0,
+  });
 
   // ========== Job state ==========
   const [loading, setLoading] = useState(false);
@@ -152,11 +141,13 @@ export default function VideoAds() {
   }, [me]);
 
   // ✅ winners guidance should be Pro/Business only (admin allowed)
-  const canUseWinners = useMemo(() => {
-    if (me.isAdmin) return true;
-    const t = String(me.tier || "").toLowerCase();
-    return t === "pro_monthly" || t === "business_monthly";
-  }, [me]);
+
+  // If user toggles winners on without entitlement, auto-disable it
+  useEffect(() => {
+    if (useWinners && !canUseWinners) {
+      setUseWinners(false);
+    }
+  }, [useWinners, canUseWinners]);
 
   const isGenerating =
     loading || (!!jobId && !finalVideoUrl && status !== "failed" && status !== "succeeded");
@@ -265,64 +256,6 @@ export default function VideoAds() {
     return url;
   };
 
-  // -------- Winners fetch (NEW) --------
-  const fetchWinnersGuidance = React.useCallback(async () => {
-  const token = await getIdToken();
-
-  const res = await fetch(`${API_BASE}/creative-insights?limit=200&min_spend=0`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  const data = await safeJson(res);
-  if (!res.ok) {
-    throw new Error(
-      data?.detail?.message ||
-      safeDetailMessage(data?.detail) ||
-      "Failed to load winners insights"
-    );
-  }
-
-  const g = compactGuidanceString(data);
-  return g;
-}, []);  // no dynamic dependencies here
-
-  // If user toggles on, load guidance once (NEW)
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      if (!useWinners) {
-        setWinnerGuidance("");
-        return;
-      }
-      if (!canUseWinners) {
-        // If user somehow toggled on without entitlement
-        setWinnerGuidance("");
-        return;
-      }
-
-      setWinnersLoading(true);
-      setError(null);
-
-      try {
-        const g = await fetchWinnersGuidance();
-        if (cancelled) return;
-        setWinnerGuidance(g || "");
-      } catch (e) {
-        if (cancelled) return;
-        setWinnerGuidance("");
-        setError(e?.message || "Failed to load winners insights.");
-        // auto turn off if it fails
-        setUseWinners(false);
-      } finally {
-        if (!cancelled) setWinnersLoading(false);
-      }
-    };
-
-    run();
-
-    return () => { cancelled = true; };
-  }, [useWinners, canUseWinners, fetchWinnersGuidance]); // intentionally depends on entitlement
 
   // Voice preview
   const previewVoice = async () => {
@@ -422,6 +355,9 @@ export default function VideoAds() {
 
         // ✅ NEW: winners guidance injected lightly (Pro/Business only)
         winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
+        winnerProfile: (useWinners && canUseWinners) ? (winnersProfile || null) : null,
+        winnersApply: (useWinners && canUseWinners) ? ["tone", "platform", "ratio"] : null,
+        winnersInfluence: (useWinners && canUseWinners) ? 0.6 : null,
       };
 
       const res = await fetch(`${API_BASE}/video/start-image`, {
@@ -696,7 +632,7 @@ export default function VideoAds() {
               <div className="hint">Loading winners…</div>
             ) : (
               <div className="hint">
-                Adds light guidance from your best-performing creatives (no metric text).
+                Adds guidance from your best-performing creatives (no metric text).
               </div>
             )}
           </div>

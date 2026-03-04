@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
 import { auth } from "../firebaseConfig";
+import { useWinnersProfile } from "../hooks/useWinnersProfile";
 
 function AdGenerator() {
   const navigate = useNavigate();
@@ -20,9 +21,8 @@ function AdGenerator() {
     productType: "auto",
   });
 
-  // ✅ NEW: “Use my winners” toggle (Pro/Business only)
+  // ✅ “Use my winners” toggle (Pro/Business only)
   const [useWinners, setUseWinners] = useState(false);
-  const [winnersLoading, setWinnersLoading] = useState(false);
 
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -39,39 +39,19 @@ function AdGenerator() {
     return String(detail);
   };
 
-  const safeJson = async (res) => {
-    try {
-      return await res.json();
-    } catch {
-      return {};
-    }
-  };
-
-  // ✅ NEW: fetch guidance from your insights endpoint
-  const fetchWinnersGuidance = async () => {
-    if (!apiBase) throw new Error("Config error: API URL is missing. App must be rebuilt.");
-
-    const user = auth.currentUser;
-    if (!user) throw new Error("You must be logged in.");
-
-    const token = await user.getIdToken(true);
-
-    const res = await fetch(`${apiBase}/creative-insights?limit=200&min_spend=0`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const data = await safeJson(res);
-
-    if (!res.ok) {
-      // Backend gating will likely return 402/403 for non Pro/Business
-      const msg = safeDetailMessage(data?.detail) || `Insights request failed (${res.status})`;
-      throw new Error(msg);
-    }
-
-    // Your backend returns { guidance: "..." }
-    const g = (data?.guidance || "").trim();
-    return g;
-  };
+  // ✅ Shared winners hook (image)
+  const {
+    winnersProfile,
+    winnerGuidance,
+    winnersLoading,
+    refreshWinners,
+  } = useWinnersProfile({
+    kind: "image",
+    enabled: useWinners,
+    apiBase,
+    limit: 200,
+    minSpend: 0,
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -106,14 +86,22 @@ function AdGenerator() {
         productType: form.productType === "auto" ? null : form.productType,
       };
 
-      // ✅ NEW: inject winners guidance (lightly)
+      // ✅ Inject winners profile (structured) using shared hook
       if (useWinners) {
-        setWinnersLoading(true);
         try {
-          const guidance = await fetchWinnersGuidance();
-          // only send if non-empty
-          if (guidance) {
-            payload.winnerGuidance = guidance.slice(0, 1000);
+          // Use cached profile if present; otherwise refresh
+          const profile = winnersProfile || (await refreshWinners());
+
+          if (profile) {
+            // Structured winners (preferred)
+            payload.winnerProfile = profile;
+            payload.winnersApply = ["tone", "platform", "ratio", "style", "do", "avoid"];
+            payload.winnersInfluence = 0.6;
+
+            // Backward-compatible fallback (backend will prefer winnerProfile anyway)
+            if (winnerGuidance) {
+              payload.winnerGuidance = winnerGuidance.slice(0, 1000);
+            }
           }
         } catch (err) {
           // Don’t hard-fail generation; just surface helpful message
@@ -121,14 +109,10 @@ function AdGenerator() {
             type: "sub",
             message:
               err?.message ||
-              "Winners guidance is available on Pro & Business plans. Upgrade to use this feature.",
+              "Winners insights are available on Pro & Business plans. Upgrade to use this feature.",
             upgradePath: "/account",
           });
-          // If you want to allow continuing WITHOUT winners, comment out this return.
-          // Right now, we stop so the user understands why the toggle didn’t work.
           return;
-        } finally {
-          setWinnersLoading(false);
         }
       }
 
@@ -217,7 +201,6 @@ function AdGenerator() {
       alert("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
-      setWinnersLoading(false);
     }
   };
 
@@ -323,7 +306,6 @@ function AdGenerator() {
           </div>
         </div>
 
-        {/* Use winners toggle */}
         {/* Use my winners (Pro/Business) */}
         <div className="winnersCard">
           <label className="winnersPill">
@@ -331,7 +313,7 @@ function AdGenerator() {
               type="checkbox"
               checked={useWinners}
               onChange={(e) => setUseWinners(e.target.checked)}
-              disabled={loading /* or whatever lock state you use */}
+              disabled={loading /* keep as-is */ }
             />
             <span className="winnersPillText">
               <span className="winnersPillTitle">Use my winners</span>
@@ -346,7 +328,7 @@ function AdGenerator() {
 
         <div className="button-row">
           <button type="submit" disabled={loading || winnersLoading}>
-            {loading ? "Generating..." : "Generate Ad"}
+            {loading ? "Generating..." : winnersLoading ? "Loading winners..." : "Generate Ad"}
           </button>
         </div>
       </form>

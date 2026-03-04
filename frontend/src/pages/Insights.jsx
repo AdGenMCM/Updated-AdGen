@@ -89,25 +89,25 @@ export default function Insights() {
   const guidance = data?.guidance || "";
 
   const highlights = useMemo(() => {
-  const patterns = data?.patterns || {};
+    const patterns = data?.patterns || {};
 
-  const bestPlatform = patterns?.platform?.best?.value;
-  const bestTone = patterns?.tone?.best?.value;
-  const bestStyle = patterns?.image_stylePreset?.best?.value;
-  const bestRatio = patterns?.ratio?.best?.value;
+    const bestPlatform = patterns?.platform?.best?.value;
+    const bestTone = patterns?.tone?.best?.value;
+    const bestStyle = patterns?.image_stylePreset?.best?.value;
+    const bestRatio = patterns?.ratio?.best?.value;
 
-  return [
-    { label: "Best platform", value: bestPlatform || "—" },
-    { label: "Best tone", value: bestTone || "—" },
-    { label: "Best image style", value: bestStyle || "—" },
-    { label: "Best ratio", value: bestRatio || "—" },
-  ];
-}, [data]);
+    return [
+      { label: "Best platform", value: bestPlatform || "—" },
+      { label: "Best tone", value: bestTone || "—" },
+      { label: "Best image style", value: bestStyle || "—" },
+      { label: "Best ratio", value: bestRatio || "—" },
+    ];
+  }, [data]);
 
   const renderTopList = (title, items, metricLabel) => (
     <div className="ins-card">
       <div className="ins-cardTitle">{title}</div>
-      {(!items || items.length === 0) ? (
+      {!items || items.length === 0 ? (
         <div className="ins-muted">No data yet.</div>
       ) : (
         <div className="ins-list">
@@ -124,10 +124,15 @@ export default function Insights() {
                 <div className="ins-metric">
                   <span className="ins-metricLabel">{metricLabel}</span>
                   <span className="ins-metricValue">
-                    {metricLabel === "CTR" ? pct(it.performance?.ctr) :
-                     metricLabel === "CPA" ? money(it.performance?.cpa) :
-                     metricLabel === "ROAS" ? fmt(it.performance?.roas, 2) :
-                     "—"}
+                    {metricLabel === "CTR"
+                      ? pct(it.performance?.ctr)
+                      : metricLabel === "CPA"
+                      ? money(it.performance?.cpa)
+                      : metricLabel === "CPM"
+                      ? money(it.performance?.cpm)
+                      : metricLabel === "ROAS"
+                      ? fmt(it.performance?.roas, 2)
+                      : "—"}
                   </span>
                 </div>
                 {it.url && (
@@ -148,9 +153,7 @@ export default function Insights() {
       <div className="ins-header">
         <div>
           <h1 className="ins-title">Insights</h1>
-          <div className="ins-subtitle">
-            Summarizes performance across your image + video creatives.
-          </div>
+          <div className="ins-subtitle">Summarizes performance across your image + video creatives.</div>
         </div>
 
         <div className="ins-controls">
@@ -165,12 +168,7 @@ export default function Insights() {
 
           <label className="ins-field">
             <span>Min spend ($)</span>
-            <input
-              type="number"
-              step="0.01"
-              value={minSpend}
-              onChange={(e) => setMinSpend(Number(e.target.value))}
-            />
+            <input type="number" step="0.01" value={minSpend} onChange={(e) => setMinSpend(Number(e.target.value))} />
           </label>
 
           <button className="ins-btn" onClick={load} disabled={loading}>
@@ -181,9 +179,7 @@ export default function Insights() {
 
       {err && <div className="ins-error">{err}</div>}
 
-      {!err && !loading && !data && (
-        <div className="ins-muted">No insights available yet.</div>
-      )}
+      {!err && !loading && !data && <div className="ins-muted">No insights available yet.</div>}
 
       {!err && data && (
         <>
@@ -195,17 +191,26 @@ export default function Insights() {
                   <div className="ins-kpiLabel">Creatives w/ performance</div>
                   <div className="ins-kpiValue">{summary.count_with_performance ?? 0}</div>
                 </div>
+
                 <div className="ins-kpi">
                   <div className="ins-kpiLabel">Weighted ROAS</div>
                   <div className="ins-kpiValue">{fmt(summary.weighted_roas, 2)}</div>
                 </div>
+
                 <div className="ins-kpi">
                   <div className="ins-kpiLabel">Avg CTR</div>
                   <div className="ins-kpiValue">{pct(summary.avg_ctr, 2)}</div>
                 </div>
+
                 <div className="ins-kpi">
                   <div className="ins-kpiLabel">Avg CPA</div>
                   <div className="ins-kpiValue">{money(summary.avg_cpa, 2)}</div>
+                </div>
+
+                {/* ✅ NEW */}
+                <div className="ins-kpi">
+                  <div className="ins-kpiLabel">Avg CPM</div>
+                  <div className="ins-kpiValue">{money(summary.avg_cpm, 2)}</div>
                 </div>
               </div>
 
@@ -236,6 +241,8 @@ export default function Insights() {
             {renderTopList("Top by ROAS", top.by_roas, "ROAS")}
             {renderTopList("Top by CTR", top.by_ctr, "CTR")}
             {renderTopList("Lowest CPA", top.lowest_cpa, "CPA")}
+            {/* ✅ NEW */}
+            {renderTopList("Lowest CPM", top.lowest_cpm, "CPM")}
           </div>
         </>
       )}

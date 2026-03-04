@@ -6,7 +6,7 @@ import time
 import uuid
 import tempfile
 import subprocess
-from typing import Optional, Literal, Dict, Any
+from typing import Optional, Literal, Dict, Any, List
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException
@@ -31,6 +31,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from google.cloud import firestore as gc_firestore
 
 from entitlements import require_pro_or_business
+
 
 
 # -----------------------------
@@ -279,7 +280,15 @@ class StartImageVideoRequest(BaseModel):
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+
+    # legacy (keep)
     winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
+
+    # ✅ NEW: structured winners (preferred over winnerGuidance)
+    winnerProfile: Optional[Dict[str, Any]] = None
+    winnersApply: Optional[List[str]] = None
+    winnersInfluence: Optional[float] = 0.5
+
 
 class StartPromptVideoRequest(BaseModel):
     productName: str = Field(min_length=1, max_length=120)
@@ -298,7 +307,14 @@ class StartPromptVideoRequest(BaseModel):
     # ✅ prompt/video default model (separate from image)
     model: str = VIDEO_DEFAULT_TEXT_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+
+    # legacy (keep)
     winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
+
+    # ✅ NEW: structured winners (preferred over winnerGuidance)
+    winnerProfile: Optional[Dict[str, Any]] = None
+    winnersApply: Optional[List[str]] = None
+    winnersInfluence: Optional[float] = 0.5
 
 class StartVideoResponse(BaseModel):
     jobId: str
@@ -337,6 +353,69 @@ def build_director_prompt(req: StartPromptVideoRequest) -> str:
         bits.append(f"Extra direction: {req.userPrompt}")
     return " ".join(bits)[:1000]
 
+def inject_winners_structured(
+    base_text: str,
+    winner_profile: Optional[Dict[str, Any]],
+    winners_apply: Optional[List[str]],
+    winners_influence: Optional[float],
+) -> str:
+    """
+    Injects compact, structured winners constraints (NOT a blob).
+    Safe + optional. If no profile or no applicable fields, returns base_text unchanged.
+    """
+    if not winner_profile:
+        return base_text
+
+    # normalize apply list
+    apply_set = set()
+    for x in (winners_apply or []):
+        if isinstance(x, str) and x.strip():
+            apply_set.add(x.strip().lower())
+
+    # parse influence (optional)
+    w = "default"
+    try:
+        if winners_influence is not None:
+            w = str(round(float(winners_influence), 2))
+    except Exception:
+        w = "default"
+
+    constraints: List[str] = []
+
+    top_platform = winner_profile.get("top_platform")
+    top_ratio = winner_profile.get("top_ratio")
+    top_tone = winner_profile.get("top_tone")
+
+    if top_platform and ("platform" in apply_set):
+        constraints.append(f"Optimize for platform: {top_platform}.")
+    if top_ratio and ("ratio" in apply_set):
+        constraints.append(f"Use aspect ratio: {top_ratio}.")
+    if top_tone and ("tone" in apply_set):
+        constraints.append(f"Tone: {top_tone}.")
+
+    # optional arrays if you add them later
+    do_list = winner_profile.get("do")
+    avoid_list = winner_profile.get("avoid")
+
+    if isinstance(do_list, list) and ("do" in apply_set):
+        do_items = [str(v).strip() for v in do_list if str(v).strip()][:5]
+        if do_items:
+            constraints.append("Do: " + "; ".join(do_items) + ".")
+
+    if isinstance(avoid_list, list) and ("avoid" in apply_set):
+        avoid_items = [str(v).strip() for v in avoid_list if str(v).strip()][:5]
+        if avoid_items:
+            constraints.append("Avoid: " + "; ".join(avoid_items) + ".")
+
+    if not constraints:
+        return base_text
+
+    return (
+        f"{base_text}\n\n"
+        f"Winners-based constraints (weight {w}): "
+        + " ".join(constraints)
+    )
+
 # ---------- Routes ----------
 @router.post("/video/start-image", response_model=StartVideoResponse)
 async def start_image_video(req: StartImageVideoRequest, authorization: str | None = Header(default=None)):
@@ -358,8 +437,8 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
         # caps/entitlements
         _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
 
-        # ✅ winners guidance is Pro/Business only
-        if (req.winnerGuidance or "").strip():
+        # ✅ winners guidance/profile is Pro/Business only
+        if (req.winnerGuidance or "").strip() or (req.winnerProfile is not None):
             require_pro_or_business(tier)
 
     job_id = str(uuid.uuid4())
@@ -380,34 +459,67 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
         "runwayTtsTaskId": None,
         "finalVideoUrl": None,
         "error": None,
+
+        # Keep old field
         "winnerGuidance": (req.winnerGuidance or "").strip() or None,
+
+        # NEW structured winners fields
+        "winnerProfile": req.winnerProfile or None,
+        "winnersApply": req.winnersApply or None,
+        "winnersInfluence": req.winnersInfluence if req.winnersInfluence is not None else None,
     })
 
-    # Build prompt text + inject winners guidance lightly (if provided)
+    # Build prompt text + inject winners structured constraints (preferred)
     prompt_text = (req.promptText or "").strip()
-    if (req.winnerGuidance or "").strip():
+
+    if req.winnerProfile is not None:
+        prompt_text = inject_winners_structured(
+            prompt_text,
+            req.winnerProfile,
+            req.winnersApply,
+            req.winnersInfluence,
+        )
+    elif (req.winnerGuidance or "").strip():
+        # Backward-compatible old guidance blob
         g = (req.winnerGuidance or "").strip()
         prompt_text = (
             f"{prompt_text}\n\n"
             "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
             f"{g}"
         )
-    prompt_text = prompt_text[:1200]
+
+    prompt_text = prompt_text[:1000]
 
     try:
-        runway_task_id = await create_image_to_video(
+        task = await create_image_to_video(
+            image_url=req.promptImageUrl,
+            prompt=prompt_text,
             model=req.model,
-            prompt_text=prompt_text,
-            prompt_image=req.promptImageUrl,
-            duration=req.duration,
             ratio=req.ratio,
+            duration=int(req.duration),
         )
+        runway_task_id = task.get("id") or task.get("task_id")
+        job_ref.update({"runwayVideoTaskId": runway_task_id})
+
+        if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
+            tts_task = await create_text_to_speech(
+                text=(req.voiceoverScript or "").strip(),
+                voice=req.voiceover.voice,
+            )
+            runway_tts_id = tts_task.get("id") or tts_task.get("task_id")
+            job_ref.update({"runwayTtsTaskId": runway_tts_id})
+
+        # Persist final prompt text used (optional but helpful)
+        job_ref.update({"promptTextFinal": prompt_text})
+
+        return StartVideoResponse(ok=True, jobId=job_id)
+
     except RunwayError as e:
         job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=502, detail=str(e))
-
-    job_ref.update({"runwayVideoTaskId": runway_task_id})
-    return StartVideoResponse(jobId=job_id, status="running")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        job_ref.update({"status": "failed", "error": str(e)})
+        raise HTTPException(status_code=500, detail="Failed to start image video job.")
 
 
 @router.post("/video/start-prompt", response_model=StartVideoResponse)
@@ -429,21 +541,30 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
 
         _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
 
-        # ✅ winners guidance is Pro/Business only
-        if (req.winnerGuidance or "").strip():
+        # ✅ winners guidance/profile is Pro/Business only
+        if (req.winnerGuidance or "").strip() or (req.winnerProfile is not None):
             require_pro_or_business(tier)
 
     # ✅ Director prompt used for the actual Runway generation
     director_prompt = build_director_prompt(req)
 
-    # ✅ Inject winners guidance into the actual prompt (fixes bits/bitts undefined + makes it effective)
-    if (req.winnerGuidance or "").strip():
+    # ✅ NEW: structured winners (preferred)
+    if req.winnerProfile is not None:
+        director_prompt = inject_winners_structured(
+            director_prompt,
+            req.winnerProfile,
+            req.winnersApply,
+            req.winnersInfluence,
+        )
+    # ✅ Backward-compatible: old blob text still works
+    elif (req.winnerGuidance or "").strip():
         g = (req.winnerGuidance or "").strip()
         director_prompt = (
             f"{director_prompt}\n\n"
             "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
             f"{g}"
         )
+
     director_prompt = director_prompt[:1000]
 
     job_id = str(uuid.uuid4())
@@ -463,95 +584,45 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
         "runwayTtsTaskId": None,
         "finalVideoUrl": None,
         "error": None,
+
+        # Keep old field for compatibility / debugging
         "winnerGuidance": (req.winnerGuidance or "").strip() or None,
+
+        # NEW structured winners fields (safe/no styling impact)
+        "winnerProfile": req.winnerProfile or None,
+        "winnersApply": req.winnersApply or None,
+        "winnersInfluence": req.winnersInfluence if req.winnersInfluence is not None else None,
     })
 
     try:
-        runway_task_id = await create_text_to_video(
+        # start Runway task (UNCHANGED)
+        task = await create_text_to_video(
+            prompt=director_prompt,
             model=req.model,
-            prompt_text=director_prompt,
-            duration=req.duration,
             ratio=req.ratio,
-            audio=False,
+            duration=int(req.duration),
         )
+        runway_task_id = task.get("id") or task.get("task_id")
+
+        job_ref.update({"runwayVideoTaskId": runway_task_id})
+
+        # Kick off TTS (UNCHANGED)
+        if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
+            tts_task = await create_text_to_speech(
+                text=(req.voiceoverScript or "").strip(),
+                voice=req.voiceover.voice,
+            )
+            runway_tts_id = tts_task.get("id") or tts_task.get("task_id")
+            job_ref.update({"runwayTtsTaskId": runway_tts_id})
+
+        return StartVideoResponse(ok=True, jobId=job_id)
+
     except RunwayError as e:
         job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=502, detail=str(e))
-
-    job_ref.update({"runwayVideoTaskId": runway_task_id})
-    return StartVideoResponse(jobId=job_id, status="running")
-
-
-@router.post("/video/start-prompt", response_model=StartVideoResponse)
-async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | None = Header(default=None)):
-    uid, _email, claims = require_user(authorization)
-    admin = is_admin(claims)
-
-    if req.duration > VIDEO_MAX_SECONDS:
-        raise HTTPException(status_code=400, detail=f"Max duration is {VIDEO_MAX_SECONDS}s")
-
-    # ✅ backend safeguard: block if script won't fit
-    enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
-
-    db = get_db()
-
-    if not admin:
-        user_doc = (db.collection("users").document(uid).get().to_dict() or {})
-        tier, status = get_tier_and_status(user_doc)
-
-        _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
-
-        # ✅ winners guidance is Pro/Business only
-        if (req.winnerGuidance or "").strip():
-            require_pro_or_business(tier)
-
-    # ✅ Director prompt used for the actual Runway generation
-    director_prompt = build_director_prompt(req)
-
-    # ✅ Inject winners guidance into the actual prompt (fixes bits/bitts undefined + makes it effective)
-    if (req.winnerGuidance or "").strip():
-        g = (req.winnerGuidance or "").strip()
-        director_prompt = (
-            f"{director_prompt}\n\n"
-            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
-            f"{g}"
-        )
-    director_prompt = director_prompt[:1000]
-
-    job_id = str(uuid.uuid4())
-    job_ref = db.collection("video_jobs").document(job_id)
-    job_ref.set({
-        "uid": uid,
-        "createdAt": int(time.time()),
-        "status": "running",
-        "mode": "prompt",
-        "duration": req.duration,
-        "ratio": req.ratio,
-        "model": req.model,
-        "voiceover": req.voiceover.model_dump(),
-        "voiceoverScript": (req.voiceoverScript or "").strip() or None,
-        "directorPrompt": director_prompt,
-        "runwayVideoTaskId": None,
-        "runwayTtsTaskId": None,
-        "finalVideoUrl": None,
-        "error": None,
-        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
-    })
-
-    try:
-        runway_task_id = await create_text_to_video(
-            model=req.model,
-            prompt_text=director_prompt,
-            duration=req.duration,
-            ratio=req.ratio,
-            audio=False,
-        )
-    except RunwayError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
         job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=502, detail=str(e))
-
-    job_ref.update({"runwayVideoTaskId": runway_task_id})
-    return StartVideoResponse(jobId=job_id, status="running")
+        raise HTTPException(status_code=500, detail="Failed to start video job.")
 
 
 @router.get("/video/status/{job_id}", response_model=VideoStatusResponse)

@@ -54,7 +54,6 @@ export default function Library() {
   const [perfSaving, setPerfSaving] = useState({});
   const [perfNotice, setPerfNotice] = useState({});
 
-
   const getToken = async () => {
     const user = auth.currentUser;
     if (!user) throw new Error("You must be logged in.");
@@ -207,6 +206,7 @@ export default function Library() {
         "ctr",
         "cpc",
         "cpa",
+        "cpm", // ✅ NEW
         "spend",
         "revenue",
         "thumb_stop_rate",
@@ -421,6 +421,18 @@ export default function Library() {
                         value={d.cpa ?? ""}
                         onChange={(e) => onPerfChange(item.kind, item.id, "cpa", e.target.value)}
                         placeholder="e.g. 18.40"
+                      />
+                    </label>
+
+                    {/* ✅ NEW: CPM */}
+                    <label className="lib-field">
+                      <span>CPM $</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={d.cpm ?? ""}
+                        onChange={(e) => onPerfChange(item.kind, item.id, "cpm", e.target.value)}
+                        placeholder="e.g. 12.50"
                       />
                     </label>
 

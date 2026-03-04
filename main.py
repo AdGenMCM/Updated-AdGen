@@ -7,7 +7,7 @@ import uuid
 import asyncio
 import requests
 import time
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
@@ -56,7 +56,7 @@ from typing import Optional
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Query
-
+from collections import Counter
 
 
 load_dotenv(override=True)
@@ -204,7 +204,13 @@ class AdRequest(BaseModel):
     stylePreset: Optional[str] = None
     productType: Optional[str] = None
 
+    # Legacy winners text (keep)
     winnerGuidance: Optional[str] = None
+
+    # ✅ NEW structured winners (preferred over winnerGuidance)
+    winnerProfile: Optional[Dict[str, Any]] = None
+    winnersApply: Optional[List[str]] = None
+    winnersInfluence: Optional[float] = 0.5
 
 class ContactForm(BaseModel):
     name: str
@@ -226,6 +232,7 @@ class PerformanceUpdate(BaseModel):
     ctr: Optional[float] = None
     cpc: Optional[float] = None
     cpa: Optional[float] = None
+    cpm: Optional[float] = None
 
     spend: Optional[float] = None      # $
     revenue: Optional[float] = None    # $  (used to compute ROAS)
@@ -471,7 +478,7 @@ def _get_perf(doc: dict) -> dict:
 def _has_perf(doc: dict) -> bool:
     p = _get_perf(doc)
     # consider it “has perf” if any of the key metrics exist
-    for k in ("ctr", "cpc", "cpa", "spend", "revenue", "roas"):
+    for k in ("ctr", "cpc", "cpa", "cpm", "spend", "revenue", "roas"):
         if p.get(k) is not None:
             return True
     return False
@@ -509,6 +516,7 @@ def _creative_snapshot(kind: str, doc_id: str, doc: dict) -> dict:
             "ctr": _safe_num(p.get("ctr")),
             "cpc": _safe_num(p.get("cpc")),
             "cpa": _safe_num(p.get("cpa")),
+            "cpm": _safe_num(p.get("cpm")),
             "spend": _safe_num(p.get("spend")),
             "revenue": _safe_num(p.get("revenue")),
             "roas": _safe_num(p.get("roas")),
@@ -576,12 +584,14 @@ def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str
         ctrs = [_safe_num((x.get("performance") or {}).get("ctr")) for x in arr]
         cpas = [_safe_num((x.get("performance") or {}).get("cpa")) for x in arr]
         spends = [_safe_num((x.get("performance") or {}).get("spend")) for x in arr]
+        cpms = [_safe_num((x.get("performance") or {}).get("cpm")) for x in arr]
 
         out.append({
             "value": g,
             "count": len(arr),
             "avg_ctr": _avg([x for x in ctrs if x is not None]),
             "avg_cpa": _avg([x for x in cpas if x is not None]),
+            "avg_cpm": _avg([x for x in cpms if x is not None]),
             "total_spend": round(sum([x for x in spends if x is not None]), 4),
             "weighted_roas": roas,
         })
@@ -594,6 +604,65 @@ def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str
         "best": out[0] if out else None,
         "rows": out[:10],
     }
+
+def inject_winners_structured_image(
+    base_text: str,
+    winner_profile: Optional[Dict[str, Any]],
+    winners_apply: Optional[List[str]],
+    winners_influence: Optional[float],
+) -> str:
+    """
+    Compact, structured winners constraints for image gen (NOT a blob).
+    Safe + optional. Returns base_text unchanged if no profile or nothing applicable.
+    """
+    if not winner_profile:
+        return base_text
+
+    apply_set = set()
+    for x in (winners_apply or []):
+        if isinstance(x, str) and x.strip():
+            apply_set.add(x.strip().lower())
+
+    # optional weight for future
+    w = "default"
+    try:
+        if winners_influence is not None:
+            w = str(round(float(winners_influence), 2))
+    except Exception:
+        w = "default"
+
+    constraints = []
+
+    top_tone = winner_profile.get("top_tone")
+    top_platform = winner_profile.get("top_platform")
+    top_ratio = winner_profile.get("top_ratio")
+    top_style = winner_profile.get("top_stylePreset") or winner_profile.get("top_style")
+
+    if top_tone and ("tone" in apply_set):
+        constraints.append(f"Tone: {top_tone}.")
+    if top_platform and ("platform" in apply_set):
+        constraints.append(f"Optimize for platform: {top_platform}.")
+    if top_ratio and ("ratio" in apply_set):
+        constraints.append(f"Compose for aspect ratio: {top_ratio}.")
+    if top_style and ("style" in apply_set):
+        constraints.append(f"Style direction: {top_style}.")
+
+    # optional do/avoid arrays (if you add them later to profile)
+    do_list = winner_profile.get("do")
+    avoid_list = winner_profile.get("avoid")
+    if isinstance(do_list, list) and ("do" in apply_set):
+        do_items = [str(v).strip() for v in do_list if str(v).strip()][:5]
+        if do_items:
+            constraints.append("Do: " + "; ".join(do_items) + ".")
+    if isinstance(avoid_list, list) and ("avoid" in apply_set):
+        avoid_items = [str(v).strip() for v in avoid_list if str(v).strip()][:5]
+        if avoid_items:
+            constraints.append("Avoid: " + "; ".join(avoid_items) + ".")
+
+    if not constraints:
+        return base_text
+
+    return f"{base_text}\nWinners-based constraints (weight {w}): " + " ".join(constraints)
 
 # ---------------- Usage ----------------
 @app.get("/usage")
@@ -728,8 +797,16 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
+    # ✅ legacy winners text (keep)
     winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
-    if winner_guidance and not admin:
+
+    # ✅ NEW structured winners (optional)
+    winner_profile = getattr(payload, "winnerProfile", None)
+    winners_apply = getattr(payload, "winnersApply", None)
+    winners_influence = getattr(payload, "winnersInfluence", None)
+
+    # Gate: winners features are Pro/Business only (admins bypass)
+    if (winner_guidance or winner_profile) and not admin:
         require_pro_or_business(tier)
 
     if not admin:
@@ -769,12 +846,25 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
-    # IMPORTANT: subject should not override product_name — prompt builder anchors product_name regardless.
     subject = infer_visual_subject(product_name, description, product_type)
 
-    winners_line=""
-    if winner_guidance:
-        winners_line=f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
+    # =========================
+    # ✅ Winners injection block
+    # =========================
+    winners_line = ""
+    if winner_profile:
+        # structured (preferred)
+        winners_line = inject_winners_structured_image(
+            "",
+            winner_profile,
+            winners_apply,
+            winners_influence,
+        ).strip()
+        if winners_line:
+            winners_line = "\n" + winners_line
+    elif winner_guidance:
+        # legacy text
+        winners_line = f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
 
@@ -792,10 +882,9 @@ audience: {audience}
 tone: {tone}
 platform: {platform}
 goal: {goal}
-offer: {offer or "N/A"}
-{winners_line}
+offer: {offer or "N/A"}{winners_line}
 """
-    
+
     extra = (
         "Plain seamless studio setup. "
         "Single hero product shot. "
@@ -806,14 +895,17 @@ offer: {offer or "N/A"}
         "All surfaces must be completely blank and smooth. "
     )
 
-    if winner_guidance:
+    # ✅ NEW: structured winners affects visual instructions (compact)
+    if winner_profile:
+        extra = inject_winners_structured_image(extra, winner_profile, winners_apply, winners_influence)
+    elif winner_guidance:
+        # legacy behavior unchanged
         extra += (
             "Use this guidance from the user's past best performers as subtle direction "
             "(do NOT mention metrics and do NOT copy verbatim): "
             f"{winner_guidance}. "
         )
 
-    # ✅ NEW: shared builder w/ hard product anchor
     visual_prompt = build_visual_prompt(
         product_name=product_name,
         subject=subject,
@@ -887,7 +979,6 @@ offer: {offer or "N/A"}
 
     copy_obj, image_url = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
 
-    # ✅ NEW: Save a Firestore "image job" record for the Library
     image_job_id = uuid.uuid4().hex
     try:
         db.collection("image_jobs").document(image_job_id).set({
@@ -915,9 +1006,14 @@ offer: {offer or "N/A"}
                 "month": cap_result.get("month"),
                 "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
             },
+
+            # ✅ NEW: persist structured winners fields (optional)
+            "winnerProfile": winner_profile or None,
+            "winnersApply": winners_apply or None,
+            "winnersInfluence": winners_influence if winners_influence is not None else None,
+            "winnerGuidance": winner_guidance or None,
         })
     except Exception:
-        # Don't break generation if logging fails
         pass
 
     legacy_text = (
@@ -930,7 +1026,7 @@ offer: {offer or "N/A"}
         "text": legacy_text,
         "copy": copy_obj,
         "imageUrl": image_url,
-        "imageJobId": image_job_id,  # ✅ NEW
+        "imageJobId": image_job_id,
         "meta": {"goal": goal, "stylePreset": style, "offer": offer, "productType": product_type},
         "usage": {
             "used": cap_result.get("used"),
@@ -1672,10 +1768,13 @@ async def update_creative_performance(
     # Money validation
     spend = perf.get("spend")
     revenue = perf.get("revenue")
+    cpm = perf.get("cpm")
     if spend is not None and spend < 0:
         raise HTTPException(status_code=400, detail="spend must be >= 0.")
     if revenue is not None and revenue < 0:
         raise HTTPException(status_code=400, detail="revenue must be >= 0.")
+    if cpm is not None and cpm < 0:  
+        raise HTTPException(status_code=400, detail="cpm must be >= 0.")
 
     # Notes cleanup
     if "notes" in perf and perf["notes"] is not None:
@@ -1754,16 +1853,20 @@ async def _creative_insights_impl(
     top_by_roas = _rank(items, "roas", desc=True)[:5]
     top_by_ctr = _rank(items, "ctr", desc=True)[:5]
     lowest_cpa = _rank_low(items, "cpa")[:5]
+    lowest_cpm = _rank_low(items, "cpm")[:5] 
 
     all_roas = [_safe_num((x.get("performance") or {}).get("roas")) for x in items]
     all_ctr = [_safe_num((x.get("performance") or {}).get("ctr")) for x in items]
     all_cpa = [_safe_num((x.get("performance") or {}).get("cpa")) for x in items]
+    all_cpm = [_safe_num((x.get("performance") or {}).get("cpm")) for x in items]
+    
 
     summary = {
         "count_with_performance": len(items),
         "avg_roas": _avg([x for x in all_roas if x is not None]),
         "avg_ctr": _avg([x for x in all_ctr if x is not None]),
         "avg_cpa": _avg([x for x in all_cpa if x is not None]),
+        "avg_cpm": _avg([x for x in all_cpm if x is not None]),
         "weighted_roas": _weighted_roas(items),
         "min_spend_filter": min_spend,
         "limit": limit,
@@ -1791,6 +1894,7 @@ async def _creative_insights_impl(
             "weighted_roas": _weighted_roas(arr),
             "avg_ctr": _avg([_safe_num((x.get("performance") or {}).get("ctr")) for x in arr if _safe_num((x.get("performance") or {}).get("ctr")) is not None]),
             "avg_cpa": _avg([_safe_num((x.get("performance") or {}).get("cpa")) for x in arr if _safe_num((x.get("performance") or {}).get("cpa")) is not None]),
+            "avg_cpm": _avg([_safe_num((x.get("performance") or {}).get("cpm")) for x in arr if _safe_num((x.get("performance") or {}).get("cpm")) is not None]),
         })
     ratio_rows.sort(key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18), reverse=True)
     best_ratio = {"best": ratio_rows[0] if ratio_rows else None, "rows": ratio_rows[:10]}
@@ -1811,6 +1915,7 @@ async def _creative_insights_impl(
             "by_roas": top_by_roas,
             "by_ctr": top_by_ctr,
             "lowest_cpa": lowest_cpa,
+            "lowest_cpm": lowest_cpm,
         },
         "patterns": {
             "platform": best_platform,
@@ -1836,6 +1941,72 @@ async def insights(
     min_spend: float = Query(0.0, ge=0.0),
 ):
     return await _creative_insights_impl(authorization, limit, min_spend)
+
+@app.get("/winners/profile")
+async def winners_profile(
+    authorization: str | None = Header(default=None),
+    kind: str | None = Query(None, description="image | video | None"),
+    limit: int = Query(200, ge=10, le=1000),
+    min_spend: float = Query(0.0, ge=0.0),
+):
+    """
+    Returns a structured winners profile based on marked_successful creatives.
+    This is used by 'Use My Winners' to inject structured signals instead of text blobs.
+    """
+
+    # Reuse your existing insights logic
+    insights = await _creative_insights_impl(authorization, limit, min_spend)
+
+    # Pull all top items (already filtered by spend etc.)
+    items = []
+    items.extend(insights.get("top", {}).get("by_roas", []) or [])
+    items.extend(insights.get("top", {}).get("by_ctr", []) or [])
+
+    # Deduplicate
+    seen = set()
+    winners = []
+    for it in items:
+        key = f"{it.get('kind')}:{it.get('id')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        winners.append(it)
+
+    if kind in {"image", "video"}:
+        winners = [w for w in winners if w.get("kind") == kind]
+
+    if not winners:
+        return {"count": 0, "profile": {}}
+
+    # Aggregate structured signals
+    platforms = Counter()
+    tones = Counter()
+    ratios = Counter()
+
+    for w in winners:
+        if w.get("platform"):
+            platforms[w["platform"]] += 1
+        if w.get("tone"):
+            tones[w["tone"]] += 1
+        if w.get("ratio"):
+            ratios[w["ratio"]] += 1
+
+    def top(counter):
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
+
+    profile = {
+        "top_platform": top(platforms),
+        "top_tone": top(tones),
+        "top_ratio": top(ratios),
+        "winner_count": len(winners),
+    }
+
+    return {
+        "count": len(winners),
+        "profile": profile,
+    }
 
 
 # ---------------- Stripe routes ----------------
