@@ -320,6 +320,28 @@
   gap: 8px;
 }
 
+.videoAds .uploadTip{
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  border-radius: 12px;
+}
+
+.videoAds .uploadTip strong{
+  display: block;
+  color: #1d4ed8;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.videoAds .uploadTip p{
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .videoAds .previewName{
   font-weight: 900;
 }

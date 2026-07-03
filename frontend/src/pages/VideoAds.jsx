@@ -753,6 +753,15 @@ export default function VideoAds() {
               )}
             </div>
 
+           <div className="uploadTip">
+              <strong>💡 Best Results</strong>
+              <p>
+                Upload clean product or lifestyle images with little or no text.
+                Flyer-style images, posters, or graphics with heavy text may not
+                generate successfully.
+              </p>
+            </div>
+
             <div className="field">
               <label>Prompt Text</label>
               <textarea
@@ -786,8 +795,18 @@ export default function VideoAds() {
                 <input value={productName} onChange={(e) => setProductName(e.target.value)} disabled={isGenerating} />
               </div>
               <div className="field">
-                <label>Platform</label>
-                <input value={platform} readOnly />
+                <label>Platform / Format</label>
+                <select
+                  value={formatId}
+                  onChange={(e) => setFormatId(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  {FORMAT_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

@@ -491,28 +491,28 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
     prompt_text = prompt_text[:1000]
 
     try:
-        task = await create_image_to_video(
-            image_url=req.promptImageUrl,
-            prompt=prompt_text,
-            model=req.model,
-            ratio=req.ratio,
-            duration=int(req.duration),
+
+        runway_task_id = await create_image_to_video(
+         prompt_image=req.promptImageUrl,
+         prompt_text=prompt_text,
+         model=req.model,
+         ratio=req.ratio,
+         duration=int(req.duration),
         )
-        runway_task_id = task.get("id") or task.get("task_id")
+
         job_ref.update({"runwayVideoTaskId": runway_task_id})
 
         if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
-            tts_task = await create_text_to_speech(
-                text=(req.voiceoverScript or "").strip(),
-                voice=req.voiceover.voice,
-            )
-            runway_tts_id = tts_task.get("id") or tts_task.get("task_id")
+            runway_tts_id = await create_text_to_speech(
+             prompt_text=(req.voiceoverScript or "").strip(),
+             preset_voice=safe_voice(req.voiceover.presetVoice),
+)
             job_ref.update({"runwayTtsTaskId": runway_tts_id})
 
         # Persist final prompt text used (optional but helpful)
         job_ref.update({"promptTextFinal": prompt_text})
 
-        return StartVideoResponse(ok=True, jobId=job_id)
+        return StartVideoResponse(jobId=job_id, status="running")
 
     except RunwayError as e:
         job_ref.update({"status": "failed", "error": str(e)})
@@ -596,13 +596,12 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
 
     try:
         # start Runway task (UNCHANGED)
-        task = await create_text_to_video(
-            prompt=director_prompt,
-            model=req.model,
-            ratio=req.ratio,
-            duration=int(req.duration),
-        )
-        runway_task_id = task.get("id") or task.get("task_id")
+        runway_task_id = await create_text_to_video(
+    prompt_text=director_prompt,
+    model=req.model,
+    ratio=req.ratio,
+    duration=int(req.duration),
+)
 
         job_ref.update({"runwayVideoTaskId": runway_task_id})
 
@@ -615,7 +614,7 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
             runway_tts_id = tts_task.get("id") or tts_task.get("task_id")
             job_ref.update({"runwayTtsTaskId": runway_tts_id})
 
-        return StartVideoResponse(ok=True, jobId=job_id)
+        return StartVideoResponse(jobId=job_id, status="running")
 
     except RunwayError as e:
         job_ref.update({"status": "failed", "error": str(e)})
