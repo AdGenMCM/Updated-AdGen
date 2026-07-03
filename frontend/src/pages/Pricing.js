@@ -8,85 +8,121 @@ const TIERS = [
     name: "Trial",
     price: "$4.99",
     badge: "Try it",
-    description: "Best for testing the workflow and generating a few starter ads.",
-    usesPerMonth: 5,
+    bestFor: "Best for trying AdGen MCM.",
+    description: "Experience the platform before committing.",
+    imageUses: "5",
+    videoUses: "—",
     ctaText: "Start Trial",
     highlighted: false,
+    includes: [
+      "AI Image Ads",
+      "AI Ad Copy",
+      "Creative Library",
+      "Text Editor",
+      "Email Support",
+    ],
   },
   {
     id: "early_access",
     name: "Early Access",
     price: "$14.99",
-    badge: "Founding",
-    description: "Best for early users who want optimizer access and light generation.",
-    usesPerMonth: 10,
+    badge: "Video Access",
+    bestFor: "Best for exploring AI video ads.",
+    description: "Get image-to-video and prompt-to-video tools at a lower entry price.",
+    imageUses: "10",
+    videoUses: "3",
     ctaText: "Choose Early Access",
     highlighted: false,
+    includes: [
+      "AI Image Ads",
+      "AI Video Ads",
+      "AI Ad Copy",
+      "Creative Library",
+      "Text Editor",
+    ],
   },
   {
     id: "starter",
     name: "Starter",
     price: "$24.99",
-    badge: "Most popular",
-    description: "Best for solo advertisers who need fresh creatives every week.",
-    usesPerMonth: 25,
+    badge: "Popular",
+    bestFor: "Best for solo advertisers.",
+    description: "Create fresh image ads and copy every week.",
+    imageUses: "25",
+    videoUses: "—",
     ctaText: "Choose Starter",
-    highlighted: true,
+    highlighted: false,
+    includes: [
+      "AI Image Ads",
+      "AI Ad Copy",
+      "Creative Library",
+      "Text Editor",
+      "Email Support",
+    ],
   },
   {
     id: "pro",
     name: "Pro",
     price: "$49.99",
-    badge: "Scale",
-    description: "Best for scaling campaigns and testing multiple angles per ad set.",
-    usesPerMonth: 60,
+    badge: "Best Value",
+    bestFor: "Best for active ad campaigns.",
+    description: "Create, analyze, and improve your advertising creative.",
+    imageUses: "60",
+    videoUses: "15",
     ctaText: "Choose Pro",
-    highlighted: false,
+    highlighted: true,
+    includes: [
+      "AI Image Ads",
+      "AI Video Ads",
+      "AI Ad Copy",
+      "Creative Library",
+      "Text Editor",
+      "Performance Insights",
+      "Winners Engine",
+      "Priority Support",
+    ],
   },
   {
     id: "business",
     name: "Business",
     price: "$124.99",
     badge: "Teams",
-    description: "Best for heavy usage, teams, and agencies managing multiple offers.",
-    usesPerMonth: 175,
+    bestFor: "Best for agencies and teams.",
+    description: "Higher limits for multiple brands or high-volume creative testing.",
+    imageUses: "175",
+    videoUses: "50",
     ctaText: "Choose Business",
     highlighted: false,
+    includes: [
+      "Everything in Pro",
+      "Higher image limits",
+      "Higher video limits",
+      "Winners Engine",
+      "Priority Support",
+    ],
   },
 ];
 
-function formatUSD(n) {
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-  } catch {
-    return `$${Number(n).toFixed(2)}`;
-  }
-}
+const FEATURES = [
+  ["AI Image Ads", true, true, true, true, true],
+  ["AI Video Ads", false, true, false, true, true],
+  ["AI Ad Copy", true, true, true, true, true],
+  ["Text Editor", true, true, true, true, true],
+  ["Creative Library", true, true, true, true, true],
+  ["Performance Insights", false, false, false, true, true],
+  ["Winners Engine", false, false, false, true, true],
+  ["Priority Support", false, false, false, true, true],
+];
 
-function parsePriceUSD(priceStr) {
-  const n = Number(String(priceStr).replace("$", "").trim());
-  return Number.isFinite(n) ? n : null;
-}
-
-function approxCostPerGen(priceStr, usesPerMonth) {
-  const p = parsePriceUSD(priceStr);
-  if (!p || !usesPerMonth) return null;
-  const v = p / usesPerMonth;
-  return v;
-}
-
-function hasOptimizer(tierId) {
-  return tierId === "early_access" || tierId === "pro" || tierId === "business";
+function CheckMark({ enabled }) {
+  return enabled ? (
+    <span className="compare-check">✓</span>
+  ) : (
+    <span className="compare-dash">—</span>
+  );
 }
 
 export default function Pricing() {
-  // Meta Ads service math
-  const minSpend = 100;
-  const serviceFeeRate = 0.25;
-  const serviceFee = minSpend * serviceFeeRate;
-  const total = minSpend + serviceFee;
-
-  // Modal state
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [selectedTier, setSelectedTier] = React.useState(null);
 
@@ -100,7 +136,6 @@ export default function Pricing() {
     setSelectedTier(null);
   };
 
-  // Close on ESC
   React.useEffect(() => {
     if (!isModalOpen) return;
 
@@ -112,201 +147,220 @@ export default function Pricing() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [isModalOpen]);
 
-  // Prevent background scroll when modal is open
   React.useEffect(() => {
-    if (isModalOpen) {
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = "";
-      };
-    }
+    if (!isModalOpen) return;
+
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [isModalOpen]);
 
   return (
     <main className="pricing-page">
-      <div className="pricing-container">
-        <header className="pricing-header">
-          <h1 className="pricing-title">Products, Services, & Pricing</h1>
+      <section className="pricing-hero">
+        <div className="pricing-container">
+          <span className="pricing-pill">AdGen MCM Pricing</span>
+
+          <h1 className="pricing-title">
+            Simple pricing for every stage of your advertising workflow.
+          </h1>
+
           <p className="pricing-subtitle">
-            Simple monthly pricing for advertisers who need fresh creative consistently. <i>* Usage resets at the start of each month. *</i>
+            Generate AI image ads, video ads, ad copy, and creative insights from
+            one platform. Upgrade anytime as your advertising needs grow.
           </p>
-        </header>
 
-        <section className="pricing-grid" aria-label="SaaS pricing tiers">
-          {TIERS.map((tier) => {
-            const perGen = approxCostPerGen(tier.price, tier.usesPerMonth);
-            const perGenLabel =
-              perGen != null ? `≈ ${formatUSD(perGen)} per generation` : null;
+          <div className="pricing-trust">
+            <span>No long-term contracts</span>
+            <span>Cancel anytime</span>
+            <span>Secure payments through Stripe</span>
+          </div>
+        </div>
+      </section>
 
-            return (
-              <article key={tier.id} className={`tier-card ${tier.highlighted ? "highlighted" : ""}`}>
-                <div className="tier-top">
-                  <div className="tier-name-row">
-                    <h2 className="tier-name">{tier.name}</h2>
-                    <span className="tier-badge">{tier.badge}</span>
-                  </div>
+      <section className="pricing-container">
+        <div className="pricing-grid" aria-label="Pricing tiers">
+          {TIERS.map((tier) => (
+            <article
+              key={tier.id}
+              className={`tier-card ${tier.highlighted ? "highlighted" : ""}`}
+            >
+              {tier.highlighted && <div className="tier-ribbon">Recommended</div>}
 
-                  <p className="tier-desc">{tier.description}</p>
-
-                  <div className="tier-price">
-                    <span className="tier-price-amount">{tier.price}</span>
-                    <span className="tier-price-suffix">/mo</span>
-                  </div>
-
-                  {perGenLabel && (
-                    <p className="tier-cost">{perGenLabel}</p>
-                  )}
-
-                  {/* No billing redirect: show modal */}
-                  <button
-                    type="button"
-                    className={`tier-cta ${tier.highlighted ? "primary" : ""}`}
-                    onClick={() => openModal(tier)}
-                  >
-                    {tier.ctaText}
-                  </button>
-                </div>
-
-                <div className="tier-divider" />
-
-                <div className="tier-section">
-                  <h3 className="tier-section-title">Usage limits</h3>
-                  <ul className="tier-limits">
-                    <li>
-                      <span>AI generations</span>
-                      <strong>{tier.usesPerMonth} / month</strong>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="tier-section">
-                  <h3 className="tier-section-title">Includes</h3>
-                  <ul className="tier-includes">
-                    <li>AI ad text & image generation</li>
-                    <li>Text Editor</li>
-                    <li>Email support</li>
-
-                    {hasOptimizer(tier.id) && (
-                      <li>
-                        <strong>Ad Performance Optimization (Pro+)</strong>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              </article>
-            );
-          })}
-        </section>
-
-        {/* SERVICE OFFERING */}
-        <section className="service-wrap" aria-label="Meta Ads campaign setup service">
-          <div className="service-card">
-            <div className="service-header">
-              <div>
-                <h2 className="service-title">Meta Ads Campaign Setup</h2>
-                <p className="service-subtitle">
-                  Want it done-for-you? We’ll build and launch a Meta campaign designed to drive high engagement,
-                  clicks, and landing page traffic — with a clean structure you can scale.
-                </p>
+              <div className="tier-name-row">
+                <h2 className="tier-name">{tier.name}</h2>
+                <span className="tier-badge">{tier.badge}</span>
               </div>
-              <span className="service-badge">Done-for-you</span>
-            </div>
 
-            <div className="service-grid">
-              <div className="service-block">
-                <h3 className="service-block-title">What you get</h3>
-                <ul className="service-list">
-                  <li>Campaign structure + objective selection (traffic / conversions)</li>
-                  <li>Audience targeting strategy (interests / lookalikes where applicable)</li>
-                  <li>Ad set setup + placements across Meta</li>
-                  <li>Creative + copy recommendations aligned to your offer</li>
-                  <li>Landing page traffic optimization focus</li>
+              <p className="tier-best">{tier.bestFor}</p>
+              <p className="tier-desc">{tier.description}</p>
+
+              <div className="tier-price">
+                <span className="tier-price-amount">{tier.price}</span>
+                <span className="tier-price-suffix">/mo</span>
+              </div>
+
+              <button
+                type="button"
+                className={`tier-cta ${tier.highlighted ? "primary" : ""}`}
+                onClick={() => openModal(tier)}
+              >
+                {tier.ctaText}
+              </button>
+
+              <div className="tier-divider" />
+
+              <div className="tier-section">
+                <h3 className="tier-section-title">Includes</h3>
+                <ul className="tier-includes">
+                  {tier.includes.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
                 </ul>
               </div>
 
-              <div className="service-block">
-                <h3 className="service-block-title">Pricing</h3>
-
-                <div className="service-pricing">
-                  <div className="service-line">
-                    <span>Minimum campaign spend</span>
-                    <strong>{formatUSD(minSpend)}</strong>
+              <div className="tier-section tier-usage-section">
+                <h3 className="tier-section-title">Monthly usage</h3>
+                <div className="tier-usage">
+                  <div>
+                    <span>AI Images</span>
+                    <strong>{tier.imageUses}</strong>
                   </div>
-                  <div className="service-line">
-                    <span>Service fee (25%)</span>
-                    <strong>{formatUSD(serviceFee)}</strong>
-                  </div>
-                  <div className="service-total">
-                    <span>Minimum total</span>
-                    <strong>{formatUSD(total)}</strong>
+                  <div>
+                    <span>AI Videos</span>
+                    <strong>{tier.videoUses}</strong>
                   </div>
                 </div>
-
-                <p className="service-note">
-                  Campaign spend is your advertising budget applied to Meta. A 25% service fee is added to your
-                  bill. <strong>Payment is handled by invoice</strong> after we confirm campaign details.
-                </p>
-
-                <a className="service-cta" href="/contact">
-                  Request Campaign Setup
-                </a>
               </div>
+            </article>
+          ))}
+        </div>
+
+        <section className="pricing-panel" aria-label="Compare plans">
+          <div className="pricing-panel-header">
+            <div>
+              <span className="pricing-panel-kicker">Compare Plans</span>
+              <h2>Find the plan that fits your creative workflow.</h2>
+              <p>
+                Start small, then unlock video generation, performance insights,
+                and the Winners Engine as your campaigns grow.
+              </p>
+            </div>
+          </div>
+
+          <div className="compare-wrap">
+            <table className="compare-table">
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>Trial</th>
+                  <th>Early</th>
+                  <th>Starter</th>
+                  <th>Pro</th>
+                  <th>Business</th>
+                </tr>
+              </thead>
+              <tbody>
+                {FEATURES.map(([feature, trial, early, starter, pro, business]) => (
+                  <tr key={feature}>
+                    <td>{feature}</td>
+                    <td><CheckMark enabled={trial} /></td>
+                    <td><CheckMark enabled={early} /></td>
+                    <td><CheckMark enabled={starter} /></td>
+                    <td><CheckMark enabled={pro} /></td>
+                    <td><CheckMark enabled={business} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="pricing-panel" aria-label="Why upgrade">
+          <div className="pricing-panel-header">
+            <div>
+              <span className="pricing-panel-kicker">Why Upgrade?</span>
+              <h2>As your campaigns grow, your creative system should grow too.</h2>
+              <p>
+                Pro and Business unlock tools designed for advertisers who need
+                more creative volume, stronger testing, and a smarter feedback loop.
+              </p>
+            </div>
+          </div>
+
+          <div className="upgrade-grid">
+            <div className="upgrade-card">
+              <h3>Create more</h3>
+              <p>
+                Generate more ad concepts every month, including short-form video
+                ads for platforms like TikTok, Reels, and Shorts.
+              </p>
+              <ul>
+                <li>More image generations</li>
+                <li>AI video ads</li>
+                <li>More creative variations</li>
+              </ul>
+            </div>
+
+            <div className="upgrade-card">
+              <h3>Improve faster</h3>
+              <p>
+                Track performance and use your highest-performing ads to guide
+                future creative generations.
+              </p>
+              <ul>
+                <li>Performance Insights</li>
+                <li>Winners Engine</li>
+                <li>Better future creative direction</li>
+              </ul>
             </div>
           </div>
         </section>
 
-        {/* Feature description block */}
-        <section className="service-wrap" aria-label="Ad Performance Optimization feature">
-          <div className="service-card">
-            <div className="service-header">
-              <div>
-                <h2 className="service-title">Ad Performance Optimization</h2>
-                <p className="service-subtitle">
-                  Available on <strong>Pro</strong> and <strong>Business</strong> plans.
-                </p>
-              </div>
-              <span className="service-badge">Pro+</span>
+        <section className="pricing-faq" aria-label="Frequently asked questions">
+          <div className="pricing-faq-header">
+            <span className="pricing-panel-kicker">FAQ</span>
+            <h2>Frequently Asked Questions</h2>
+          </div>
+
+          <div className="faq-grid">
+            <div className="faq-item">
+              <h3>How do monthly generations work?</h3>
+              <p>
+                Each successful generation counts toward your monthly allowance.
+                Image and video generations are tracked separately where video is included.
+              </p>
             </div>
 
-            <div className="service-grid">
-              <div className="service-block">
-                <h3 className="service-block-title">What it does</h3>
-                <p className="pricing-p">
-                  Upload key metrics like CTR, CPC, CPA, spend, and audience type. AdGen MCM diagnoses what’s most
-                  likely happening and gives you a clear plan for the next creative iteration.
-                </p>
-              </div>
+            <div className="faq-item">
+              <h3>Can I upgrade or downgrade later?</h3>
+              <p>
+                Yes. You can manage your plan from the My Account page after logging in.
+              </p>
+            </div>
 
-              <div className="service-block">
-                <h3 className="service-block-title">You get</h3>
-                <ul className="service-list">
-                  <li>Diagnosis of likely performance issues</li>
-                  <li>Clear, actionable improvement suggestions</li>
-                  <li>Improved headline, primary text, and CTA</li>
-                  <li>Optimized image prompt for your next iteration</li>
-                </ul>
-              </div>
+            <div className="faq-item">
+              <h3>What happens if I reach my limit?</h3>
+              <p>
+                Generation pauses until your next billing cycle or until you upgrade.
+              </p>
+            </div>
+
+            <div className="faq-item">
+              <h3>Do unused generations roll over?</h3>
+              <p>
+                No. Monthly usage resets each billing cycle.
+              </p>
+            </div>
+
+            <div className="faq-item">
+              <h3>Is payment secure?</h3>
+              <p>
+                Yes. Subscriptions are securely processed through Stripe.
+              </p>
             </div>
           </div>
-        </section>
-
-        <section className="pricing-faq" aria-label="Usage and billing details">
-          <h2 className="pricing-h2">How usage works</h2>
-          <p className="pricing-p">
-            Each plan includes a fixed number of AI generations per month. One successful click of “Generate”
-            counts as one use. Usage resets automatically at the beginning of each month.
-          </p>
-
-          <h3 className="pricing-h3">What happens if I hit my limit?</h3>
-          <p className="pricing-p">
-            If you reach your monthly limit, generation will be paused until your usage resets.
-          </p>
-
-          <h3 className="pricing-h3">Billing & cancellations</h3>
-          <p className="pricing-p">
-            Subscriptions are billed monthly through Stripe. You can cancel at any time; access remains until the
-            end of your billing period. Charges are non-refundable except where required by law.
-          </p>
 
           <div className="pricing-links">
             <a className="pricing-link" href="/terms">Terms</a>
@@ -314,17 +368,27 @@ export default function Pricing() {
             <a className="pricing-link" href="/privacy">Privacy</a>
           </div>
         </section>
-      </div>
+      </section>
 
-      {/* Modal */}
       {isModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" onMouseDown={closeModal}>
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={closeModal}
+        >
           <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
                 {selectedTier ? `Selected Plan: ${selectedTier.name}` : "Get Started"}
               </h3>
-              <button className="modal-close" type="button" onClick={closeModal} aria-label="Close">
+
+              <button
+                className="modal-close"
+                type="button"
+                onClick={closeModal}
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
@@ -332,8 +396,8 @@ export default function Pricing() {
             <p className="modal-text">
               <strong>Create an account and log in to get started.</strong>
               <br />
-              If you already have an account and want to change your plan, log in and go to the{" "}
-              <strong>My Account</strong> page.
+              If you already have an account and want to change your plan, log in
+              and go to the <strong>My Account</strong> page.
             </p>
 
             <div className="modal-actions">
@@ -342,7 +406,9 @@ export default function Pricing() {
               </a>
             </div>
 
-            <p className="modal-footnote">Note: Plan changes are managed from your account.</p>
+            <p className="modal-footnote">
+              Plan changes are managed from your account.
+            </p>
           </div>
         </div>
       )}

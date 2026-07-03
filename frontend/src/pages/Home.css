@@ -49,6 +49,12 @@
   align-items: start;
 }
 
+.hero-note {
+  margin-top: 10px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
 @media (min-width: 960px) {
   .hero-grid {
     grid-template-columns: 1.1fr 0.9fr;

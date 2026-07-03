@@ -7,55 +7,145 @@ export default function About() {
       <section className="about-hero">
         <div className="about-container">
           <span className="about-pill">About AdGen MCM</span>
-          <h1 className="about-title">We help you launch better ads, faster.</h1>
+
+          <h1 className="about-title">
+            AI-powered creative built for modern advertisers.
+          </h1>
+
           <p className="about-subtitle">
-            AdGen MCM is built for marketers, founders, and teams who want high-quality ad creative
-            without the bottlenecks. Generate copy and visuals in minutes, iterate quickly, and keep
-            your momentum.
+            Creating high-performing advertising campaigns should not require
+            switching between multiple AI tools, design software, and
+            spreadsheets. AdGen MCM brings image generation, video generation,
+            copywriting, creative management, and performance optimization into
+            one workflow.
           </p>
 
           <div className="about-ctas">
-            <a className="btn primary" href="/pricing">View pricing</a>
-            <a className="btn" href="/contact">Contact</a>
+            <a className="btn primary" href="/subscribe">
+              Get Started
+            </a>
+            <a className="btn" href="/pricing">
+              View Pricing
+            </a>
           </div>
         </div>
       </section>
 
       <section className="about-section">
         <div className="about-container">
-          <h2 className="about-h2">What we believe</h2>
+          <h2 className="about-h2">Why AdGen exists</h2>
+          <p className="about-lead">
+            Advertising moves fast. Winning campaigns require constant creative
+            testing, but producing enough quality creative has always been
+            expensive and time-consuming.
+          </p>
+
+          <p className="about-lead">
+            AdGen was built to solve that problem. Instead of spending hours
+            creating every variation manually, advertisers can generate,
+            organize, track, and improve creatives in minutes.
+          </p>
+        </div>
+      </section>
+
+      <section className="about-section alt">
+        <div className="about-container">
+          <h2 className="about-h2">What you can do with AdGen</h2>
 
           <div className="about-grid">
             <div className="about-card">
-              <h3>Creative wins campaigns</h3>
+              <div className="about-icon">🎨</div>
+              <h3>AI Image Ads</h3>
               <p>
-                Better creative gives you more leverage than minor targeting tweaks. We help you
-                generate more angles, faster.
+                Generate professional advertising creatives designed for
+                testing products, offers, and campaign angles.
               </p>
             </div>
 
             <div className="about-card">
-              <h3>Iteration beats perfection</h3>
+              <div className="about-icon">🎬</div>
+              <h3>AI Video Ads</h3>
               <p>
-                The fastest way to find winners is testing. We make it easy to produce variations
-                and learn quickly.
+                Create short-form video ads from prompts or uploaded images,
+                with optional AI voiceovers.
               </p>
             </div>
 
             <div className="about-card">
-              <h3>Simple pricing, real limits</h3>
+              <div className="about-icon">✍️</div>
+              <h3>AI Ad Copy</h3>
               <p>
-                No confusing credits. Pick a plan with monthly usage that matches your pace.
+                Generate headlines, hooks, primary text, CTAs, and copy
+                variations for paid advertising.
               </p>
             </div>
 
             <div className="about-card">
-              <h3>Support when you need it</h3>
+              <div className="about-icon">📚</div>
+              <h3>Creative Library</h3>
               <p>
-                Need help launching? We also offer a done-for-you Meta campaign setup to drive clicks
-                and traffic to your landing page.
+                Keep generated images and videos organized so your best ideas
+                are easy to revisit and reuse.
               </p>
-              <a className="text-link" href="/pricing">See campaign setup →</a>
+            </div>
+
+            <div className="about-card">
+              <div className="about-icon">📈</div>
+              <h3>Performance Insights</h3>
+              <p>
+                Add metrics like CTR, CPC, CPA, CPM, ROAS, spend, and revenue
+                to understand what is actually working.
+              </p>
+            </div>
+
+            <div className="about-card">
+              <div className="about-icon">🏆</div>
+              <h3>Winners Engine</h3>
+              <p>
+                Your highest-performing creatives can influence future
+                generations, helping AdGen create around proven winning
+                patterns.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="about-section">
+        <div className="about-container">
+          <h2 className="about-h2">Built around your creative workflow</h2>
+
+          <div className="about-list">
+            <div className="about-row">
+              <strong>Create</strong>
+              <span>
+                Generate image ads, video ads, hooks, copy, and creative
+                variations for your product or offer.
+              </span>
+            </div>
+
+            <div className="about-row">
+              <strong>Launch</strong>
+              <span>
+                Use your creatives across Meta, TikTok, Instagram, Google,
+                email, landing pages, or any paid advertising workflow.
+              </span>
+            </div>
+
+            <div className="about-row">
+              <strong>Learn</strong>
+              <span>
+                Add performance metrics so you can see which creatives, angles,
+                formats, and messages are working.
+              </span>
+            </div>
+
+            <div className="about-row">
+              <strong>Improve</strong>
+              <span>
+                Use what performs best to guide stronger future creative
+                generations.
+              </span>
             </div>
           </div>
         </div>
@@ -63,30 +153,26 @@ export default function About() {
 
       <section className="about-section alt">
         <div className="about-container">
-          <h2 className="about-h2">What AdGen MCM does</h2>
+          <h2 className="about-h2">Our vision</h2>
 
-          <div className="about-list">
-            <div className="about-row">
-              <strong>AI Ad Copy</strong>
-              <span>Hooks, headlines, primary text, CTAs, and variations you can edit.</span>
-            </div>
-            <div className="about-row">
-              <strong>AI Images</strong>
-              <span>Visual directions for fast testing and iteration.</span>
-            </div>
-            <div className="about-row">
-              <strong>Editor + History</strong>
-              <span>Refine outputs and save what works.</span>
-            </div>
-            <div className="about-row">
-              <strong>Meta Campaign Setup</strong>
-              <span>Done-for-you setup optimized for engagement, clicks, and traffic.</span>
-            </div>
-          </div>
+          <p className="about-lead">
+            Our vision is simple: help businesses spend less time creating ads
+            and more time discovering what works.
+          </p>
+
+          <p className="about-lead">
+            By combining AI generation with performance insights, AdGen MCM
+            helps turn every campaign into a smarter starting point for the next
+            one.
+          </p>
 
           <div className="about-bottom-cta">
-            <a className="btn primary" href="/subscribe">Get started</a>
-            <a className="btn" href="/pricing">Choose a plan</a>
+            <a className="btn primary" href="/subscribe">
+              Start Creating
+            </a>
+            <a className="btn" href="/pricing">
+              View Pricing
+            </a>
           </div>
         </div>
       </section>
