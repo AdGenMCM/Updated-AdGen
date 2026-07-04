@@ -58,6 +58,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Query
 from collections import Counter
 
+#Google SMTP 
+import smtplib
+from email.message import EmailMessage
+
 
 load_dotenv(override=True)
 
@@ -696,46 +700,63 @@ def me(authorization: str | None = Header(default=None)):
 # ---------------- Contact ----------------
 @app.post("/contact")
 def send_contact_email(payload: ContactForm):
-    api_key = os.getenv("SENDGRID_API_KEY")
-    from_email = os.getenv("CONTACT_FROM_EMAIL")
-    to_email = os.getenv("CONTACT_TO_EMAIL", from_email)
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    from_email = os.getenv("SMTP_FROM_EMAIL", smtp_user)
+    from_name = os.getenv("SMTP_FROM_NAME", "AdGen MCM Support")
+    to_email = os.getenv("SMTP_CONTACT_TO_EMAIL", from_email)
 
-    if not api_key:
-        raise HTTPException(status_code=500, detail="SENDGRID_API_KEY not configured")
-    if not from_email:
-        raise HTTPException(status_code=500, detail="CONTACT_FROM_EMAIL not configured")
+    if not all([smtp_host, smtp_user, smtp_password]):
+        raise HTTPException(
+            status_code=500,
+            detail="SMTP configuration is incomplete."
+        )
 
     subject = f"New Contact Form Message from {payload.name}"
-    text_body = (
-        f"New contact form submission:\n\n"
-        f"Name: {payload.name}\n"
-        f"Email: {payload.email}\n\n"
-        f"Message:\n{payload.message}\n"
-    )
 
-    sendgrid_url = "https://api.sendgrid.com/v3/mail/send"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    data = {
-        "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
-        "from": {"email": from_email, "name": "AdGen MCM Support"},
-        "reply_to": {"email": payload.email},
-        "content": [{"type": "text/plain", "value": text_body}],
-    }
+    body = f"""
+New contact form submission
+
+----------------------------------------
+
+Name:
+{payload.name}
+
+Email:
+{payload.email}
+
+----------------------------------------
+
+Message:
+
+{payload.message}
+"""
 
     try:
-        response = requests.post(sendgrid_url, headers=headers, json=data, timeout=15)
-        if response.status_code != 202:
-             print("SENDGRID CONTACT ERROR:", response.status_code, response.text)
-             raise HTTPException(
-             status_code=500,
-             detail=f"SendGrid error: {response.status_code} {response.text}"
-    )
+        msg = EmailMessage()
+
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = to_email
+        msg["Reply-To"] = payload.email
+
+        msg.set_content(body)
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+
         return {"success": True}
-    except HTTPException:
-        raise
+
     except Exception as e:
-     print("CONTACT FORM ERROR:", repr(e))
-     raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
+        print("SMTP CONTACT ERROR:", repr(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send email: {str(e)}"
+        )
 
 # ---------------- Upload creatives ----------------
 @app.post("/upload-creatives", response_model=UploadCreativesResponse)
