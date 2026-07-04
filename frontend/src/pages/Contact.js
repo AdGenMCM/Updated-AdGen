@@ -13,7 +13,7 @@ export default function Contact() {
   const isError = status === "error";
 
   //deployed backend URL:
-  const API_BASE = "https://updated-adgen.onrender.com";
+  const API_BASE = "https://updated-adgen-1.onrender.com";
 
   const canSubmit = useMemo(() => {
     return form.name.trim() && form.email.trim() && form.message.trim() && !isSending;

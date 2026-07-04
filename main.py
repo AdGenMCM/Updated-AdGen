@@ -725,12 +725,17 @@ def send_contact_email(payload: ContactForm):
     try:
         response = requests.post(sendgrid_url, headers=headers, json=data, timeout=15)
         if response.status_code != 202:
-            raise HTTPException(status_code=500, detail=f"SendGrid error: {response.status_code} {response.text}")
+             print("SENDGRID CONTACT ERROR:", response.status_code, response.text)
+             raise HTTPException(
+             status_code=500,
+             detail=f"SendGrid error: {response.status_code} {response.text}"
+    )
         return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
+     print("CONTACT FORM ERROR:", repr(e))
+     raise HTTPException(status_code=500, detail=f"Failed to send contact email: {str(e)}")
 
 # ---------------- Upload creatives ----------------
 @app.post("/upload-creatives", response_model=UploadCreativesResponse)
