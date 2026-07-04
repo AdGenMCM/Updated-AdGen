@@ -56,7 +56,7 @@ export default function Contact() {
       }
 
       setStatus("success");
-      setStatusMessage("Message sent — we’ll get back to you shortly.");
+      setStatusMessage("Message sent — AdGen MCM Support will get back to you shortly.");
       setForm({ name: "", email: "", message: "" });
 
       // Optional: auto-hide success after a few seconds
@@ -161,8 +161,8 @@ export default function Contact() {
 
         <p className="contact__alt">
           Or email us directly:{" "}
-          <a className="contact__link" href="mailto:adgenmcm@gmail.com">
-            adgenmcm@gmail.com
+          <a className="contact__link" href="mailto:support@adgenmcm.com">
+            support@adgenmcm.com
           </a>
         </p>
       </div>

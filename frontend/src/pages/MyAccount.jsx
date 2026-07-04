@@ -335,7 +335,7 @@ export default function MyAccount() {
             </button>
           </div>
 
-          <p className="acctTiny">Billing portal opens in this tab.</p>
+          <p className="acctTiny">Billing portal opens in this tab. Contact billing@adgenmcm.com for assistance.</p>
         </div>
 
         {/* ✅ Image usage */}

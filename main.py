@@ -717,7 +717,7 @@ def send_contact_email(payload: ContactForm):
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
         "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
-        "from": {"email": from_email, "name": "AdGen MCM"},
+        "from": {"email": from_email, "name": "AdGen MCM Support"},
         "reply_to": {"email": payload.email},
         "content": [{"type": "text/plain", "value": text_body}],
     }

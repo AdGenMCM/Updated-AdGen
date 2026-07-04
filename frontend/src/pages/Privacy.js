@@ -5,7 +5,7 @@ import "./Privacy.css";
 export default function Privacy() {
   const lastUpdated = "February 4, 2026"; // <-- change as needed
   const companyName = "ADGen MCM";
-  const supportEmail = "adgenmcm@gmail.com"; // <-- change as needed
+  const supportEmail = "support@adgenmcm.com"; // <-- change as needed
 
   return (
     <main className="legal-page">
