@@ -204,6 +204,44 @@ function AdGenerator() {
     }
   };
 
+    const downloadImage = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+
+    const response = await fetch(`${apiBase}/download-image/${result.imageJobId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Download request failed.");
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `adgen-${result.imageJobId || "image"}.png`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error("Download failed:", err);
+    alert("Download failed. Please try again.");
+  }
+};
+
   return (
     <div className="adgen-container">
       <h1 className="app-title">AI Ad Generator</h1>
@@ -380,17 +418,7 @@ function AdGenerator() {
                 onError={() => alert("Image failed to load")}
               />
 
-              <button
-                className="download-button"
-                onClick={() => {
-                  const link = document.createElement("a");
-                  link.href = result.imageUrl;
-                  link.download = "adgen-image.png";
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                }}
-              >
+              <button className="download-button" onClick={downloadImage}>
                 Download Image
               </button>
             </div>

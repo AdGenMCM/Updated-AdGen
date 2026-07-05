@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
+import base64
 
 # Stripe router (separate file)
 from stripe_server import stripe_router
@@ -35,7 +36,8 @@ from firebase_admin import auth as admin_auth
 from usage_caps import utc_month_key
 
 import traceback
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import io
 
 from pydantic import BaseModel
 from google.cloud import firestore as gc_firestore
@@ -178,21 +180,29 @@ def root():
 def admin_health():
     return {"ok": True, "admin": True}
 
-# ---------------- OpenAI + Ideogram ----------------
+# ---------------- OpenAI ----------------
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
-IDEOGRAM_API_KEY = (os.getenv("IDEOGRAM_API_KEY") or "").strip()
 
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing.")
-if not IDEOGRAM_API_KEY:
-    raise RuntimeError("IDEOGRAM_API_KEY is missing.")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-try:
-    from providers.ideogram import generate_ideogram  # type: ignore
-except Exception:
-    from ideogram import generate_ideogram  # type: ignore
+def generate_gpt_image_bytes(prompt: str, size: str = "1024x1024") -> bytes:
+    allowed_sizes = {"1024x1024", "1024x1792", "1792x1024"}
+    safe_size = size if size in allowed_sizes else "1024x1024"
+
+    result = client.images.generate(
+        model="gpt-image-1",
+        prompt=prompt,
+        size=safe_size,
+    )
+
+    image_b64 = result.data[0].b64_json
+    if not image_b64:
+        raise RuntimeError("GPT Image returned no image data.")
+
+    return base64.b64decode(image_b64)
 
 # ---------------- Models ----------------
 class AdRequest(BaseModel):
@@ -823,15 +833,11 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     user_doc = user_snap.to_dict() or {}
     tier, status = get_tier_and_status(user_doc)
 
-    # ✅ legacy winners text (keep)
     winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
-
-    # ✅ NEW structured winners (optional)
     winner_profile = getattr(payload, "winnerProfile", None)
     winners_apply = getattr(payload, "winnersApply", None)
     winners_influence = getattr(payload, "winnersInfluence", None)
 
-    # Gate: winners features are Pro/Business only (admins bypass)
     if (winner_guidance or winner_profile) and not admin:
         require_pro_or_business(tier)
 
@@ -863,23 +869,15 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
     platform = (payload.platform or "Instagram").strip()[:40]
-
     offer = (payload.offer or "").strip()[:80]
     goal = (payload.goal or "Sales").strip()[:30]
     style = (payload.stylePreset or "Minimal").strip()[:30]
     product_type = (payload.productType or "").strip()[:40] or None
 
-    style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
-    subject = infer_visual_subject(product_name, description, product_type)
-
-    # =========================
-    # ✅ Winners injection block
-    # =========================
     winners_line = ""
     if winner_profile:
-        # structured (preferred)
         winners_line = inject_winners_structured_image(
             "",
             winner_profile,
@@ -889,7 +887,6 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
         if winners_line:
             winners_line = "\n" + winners_line
     elif winner_guidance:
-        # legacy text
         winners_line = f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
@@ -911,35 +908,61 @@ goal: {goal}
 offer: {offer or "N/A"}{winners_line}
 """
 
-    extra = (
-        "Plain seamless studio setup. "
-        "Single hero product shot. "
-        "No packaging, no posters, no signage, no printed materials."
-        "Absolutely no visible text of any kind. "
-        "No logos, no labels, no packaging, no brand names, no symbols, "
-        "no typography, no engraved markings, no embossed markings. "
-        "All surfaces must be completely blank and smooth. "
-    )
+    visual_prompt = f"""
+You are an award-winning advertising creative director.
 
-    # ✅ NEW: structured winners affects visual instructions (compact)
-    if winner_profile:
-        extra = inject_winners_structured_image(extra, winner_profile, winners_apply, winners_influence)
-    elif winner_guidance:
-        # legacy behavior unchanged
-        extra += (
-            "Use this guidance from the user's past best performers as subtle direction "
-            "(do NOT mention metrics and do NOT copy verbatim): "
-            f"{winner_guidance}. "
-        )
+Design a complete, polished, marketing-ready social media advertisement.
 
-    visual_prompt = build_visual_prompt(
-        product_name=product_name,
-        subject=subject,
-        tone=tone,
-        goal=goal,
-        style_hint=style_hint,
-        extra_instructions=extra,
-    )
+Brand/Product:
+{product_name}
+
+Product description:
+{description}
+
+Target audience:
+{audience}
+
+Platform:
+{platform}
+
+Tone:
+{tone}
+
+Goal:
+{goal}
+
+Offer:
+{offer or "N/A"}
+
+Style direction:
+{style}
+
+Aspect ratio:
+{aspect_ratio}
+
+Create a professional ad creative with:
+- A clear hero product or product scene
+- Premium composition and lighting
+- Strong visual hierarchy
+- Clean, readable typography
+- A short compelling headline
+- A clear CTA button
+- A polished social-ad layout suitable for Meta, Instagram, LinkedIn, TikTok, or web display
+- The brand/product name spelled exactly as: "{product_name}"
+
+Important:
+- Avoid gibberish text
+- Avoid misspelled words
+- Avoid random fake logos
+- Avoid clutter
+- Avoid duplicated products unless the product naturally requires it
+- Do not include watermarks
+- Do not include unreadable small paragraphs
+- Make it look like a real finished advertisement a business could run today
+
+Use the offer if provided.
+{winners_line}
+""".strip()
 
     async def _gen_copy():
         try:
@@ -975,33 +998,15 @@ offer: {offer or "N/A"}{winners_line}
 
     async def _gen_image_and_upload():
         try:
-            paths = await asyncio.to_thread(
-                lambda: generate_ideogram(
+            img_bytes = await asyncio.to_thread(
+                lambda: generate_gpt_image_bytes(
                     prompt=visual_prompt,
-                    aspect_ratio=aspect_ratio,
-                    rendering_speed="DEFAULT",
-                    num_images=1,
+                    size=payload.imageSize or "1024x1024",
                 )
             )
-            if not paths:
-                raise HTTPException(status_code=502, detail="Ideogram returned no images")
-
-            image_path = paths[0]
-            with open(image_path, "rb") as f:
-                img_bytes = f.read()
-
-            url = upload_png_to_firebase_storage(img_bytes, uid)
-
-            try:
-                os.remove(image_path)
-            except Exception:
-                pass
-
-            return url
-        except HTTPException:
-            raise
+            return upload_png_to_firebase_storage(img_bytes, uid)
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Ideogram image generation failed: {e}")
+            raise HTTPException(status_code=502, detail=f"GPT Image generation failed: {e}")
 
     copy_obj, image_url = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
 
@@ -1032,12 +1037,11 @@ offer: {offer or "N/A"}{winners_line}
                 "month": cap_result.get("month"),
                 "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
             },
-
-            # ✅ NEW: persist structured winners fields (optional)
             "winnerProfile": winner_profile or None,
             "winnersApply": winners_apply or None,
             "winnersInfluence": winners_influence if winners_influence is not None else None,
             "winnerGuidance": winner_guidance or None,
+            "model": "gpt-image-1",
         })
     except Exception:
         pass
@@ -1221,7 +1225,6 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
-    # --- Pull optional fields safely (won't break if not in model yet) ---
     product_name = (getattr(payload, "product_name", None) or getattr(payload, "productName", None) or "").strip()[:80]
     description = (getattr(payload, "description", None) or "").strip()[:800]
     product_type = (getattr(payload, "productType", None) or "").strip()[:40] or None
@@ -1229,60 +1232,70 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     tone = (getattr(payload, "tone", None) or "confident").strip()[:40]
     goal = (getattr(payload, "goal", None) or "Performance optimization").strip()[:60]
 
-    style_hint = STYLE_HINTS.get(style, STYLE_HINTS["Minimal"])
-
-    # If not provided yet, fallback is still better than nothing
     if not product_name:
         product_name = "the same product as the reference creative"
 
-    subject = infer_visual_subject(product_name, description, product_type)
+    visual_prompt = f"""
+You are an award-winning advertising creative director.
 
-    regen_extra = (
-        "This is a regeneration of an existing ad creative. "
-        "Match the reference creative’s product identity and overall composition/camera angle. "
-        "Do NOT recreate any text-bearing elements (no posters, no packaging, no signage, no boards). "
-        "Only improve ad quality (lighting, clarity, composition, realism). "
-        "Absolutely no visible text of any kind. "
-        "No logos, no labels, no packaging, no brand names, no symbols, "
-        "no typography, no engraved markings, no embossed markings. "
-        "All surfaces must be completely blank and smooth. "
-        f"Apply these improvements: {payload.improved_image_prompt}."
-    )
+Create a new improved version of an existing ad creative.
 
-    # ✅ NEW: shared builder w/ hard product anchor + regen instructions
-    visual_prompt = build_visual_prompt(
-        product_name=product_name,
-        subject=subject,
-        tone=tone,
-        goal=goal,
-        style_hint=style_hint,
-        extra_instructions=regen_extra,
-    )
+Product:
+{product_name}
+
+Description:
+{description or "Use the same product identity as the original creative."}
+
+Optimization goal:
+{goal}
+
+Tone:
+{tone}
+
+Style:
+{style}
+
+Aspect ratio:
+{aspect_ratio}
+
+Improved headline:
+{payload.improved_headline}
+
+Improved primary text:
+{payload.improved_primary_text}
+
+Improved CTA:
+{payload.improved_cta}
+
+Creative improvement instructions:
+{payload.improved_image_prompt}
+
+Design requirements:
+- Make this look like a finished, professional social media advertisement
+- Use clear visual hierarchy
+- Use clean readable typography
+- Include a clear CTA button
+- Use the product name correctly if it appears
+- Improve lighting, clarity, composition, realism, and conversion appeal
+- Preserve the product identity
+- Avoid gibberish text
+- Avoid misspellings
+- Avoid fake random logos
+- Avoid clutter
+- Avoid watermarks
+- Avoid unreadable small text
+""".strip()
 
     try:
-        paths = await asyncio.to_thread(
-            lambda: generate_ideogram(
+        img_bytes = await asyncio.to_thread(
+            lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
-                aspect_ratio=aspect_ratio,
-                rendering_speed="DEFAULT",
-                num_images=1,
+                size=payload.imageSize or "1024x1024",
             )
         )
-        if not paths:
-            raise HTTPException(status_code=502, detail="Ideogram returned no images")
-
-        image_path = paths[0]
-        with open(image_path, "rb") as f:
-            img_bytes = f.read()
 
         image_url = upload_png_to_firebase_storage(img_bytes, uid)
 
-        try:
-            os.remove(image_path)
-        except Exception:
-            pass
-
-        # ✅ NEW: Save a Firestore "image job" record for the Library
         image_job_id = uuid.uuid4().hex
         try:
             db.collection("image_jobs").document(image_job_id).set({
@@ -1311,6 +1324,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
                     "month": cap_result.get("month"),
                     "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
                 },
+                "model": "gpt-image-1",
             })
         except Exception:
             pass
@@ -1322,7 +1336,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
                 "cta": payload.improved_cta,
             },
             "imageUrl": image_url,
-            "imageJobId": image_job_id,  # ✅ NEW
+            "imageJobId": image_job_id,
             "usage": {
                 "used": cap_result.get("used"),
                 "cap": cap_result.get("cap"),
@@ -1334,7 +1348,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Generation failed: {e}")
+        raise HTTPException(status_code=502, detail=f"GPT Image generation failed: {e}")
 
 
 # ---------------- Creation of Admin Page Routes ----------------
@@ -1699,6 +1713,46 @@ def admin_reset_video_usage(
         merge=True,
     )
     return {"ok": True, "uid": target_uid, "month": month, "video_used": 0}
+
+@app.get("/download-image/{job_id}")
+async def download_image(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    snap = db.collection("image_jobs").document(job_id).get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Image job not found.")
+
+    data = snap.to_dict() or {}
+
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    image_url = data.get("imageUrl")
+    if not image_url:
+        raise HTTPException(status_code=404, detail="No image URL found for this job.")
+
+    try:
+        r = requests.get(image_url, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch image: {e}")
+
+    product_name = (data.get("productName") or "adgen-image").strip()
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "-", product_name).strip("-").lower()
+    filename = f"{safe_name or 'adgen-image'}-{job_id[:8]}.png"
+
+    return StreamingResponse(
+        io.BytesIO(r.content),
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
 
 @app.get("/image/jobs")
 async def list_image_jobs(

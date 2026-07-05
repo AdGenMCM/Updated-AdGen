@@ -274,6 +274,40 @@ export default function Library() {
       setPerfSaving((prev) => ({ ...prev, [k]: false }));
     }
   };
+  
+  const downloadLibraryImage = async (item) => {
+    try {
+      if (item.kind !== "image") return;
+
+      const token = await getToken();
+
+      const response = await fetch(`${API_BASE}/download-image/${item.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Download request failed.");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `adgen-${item.id}.png`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please try again.");
+    }
+  };
 
   return (
     <div className="lib-wrap">
@@ -375,12 +409,37 @@ export default function Library() {
 
                 <div className="lib-buttons">
                   {item.url && (
-                    <a className="lib-linkBtn" href={item.url} target="_blank" rel="noreferrer">
+                    <a
+                      className="lib-linkBtn"
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Open
                     </a>
                   )}
-                  {item.url && (
-                    <a className="lib-linkBtn" href={item.url} download>
+
+                  {item.kind === "image" && item.url && (
+                    <button
+                      type="button"
+                      className="lib-linkBtn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log("Library download clicked:", item);
+                        downloadLibraryImage(item);
+                      }}
+                    >
+                      Download
+                    </button>
+                  )}
+
+                  {item.kind === "video" && item.url && (
+                    <a
+                      className="lib-linkBtn"
+                      href={item.url}
+                      download
+                    >
                       Download
                     </a>
                   )}

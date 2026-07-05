@@ -390,6 +390,47 @@ export default function Optimizer() {
     }
   };
 
+  const downloadOptimizedImage = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+
+    const response = await fetch(
+      `${apiBase}/download-image/${regenResult.imageJobId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Download request failed.");
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `adgen-optimized-${regenResult.imageJobId}.png`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error(err);
+    alert("Download failed. Please try again.");
+  }
+};
+
   return (
     <div className="opt-container">
       <h1 className="opt-title">Ad Optimizer</h1>
@@ -637,28 +678,7 @@ export default function Optimizer() {
     <button
   type="button"
   className="opt-btn"
-  onClick={async () => {
-    try {
-      const response = await fetch(regenResult.imageUrl, {
-        mode: "cors",
-      });
-
-      const blob = await response.blob();
-
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = "adgen-optimized.png"; // filename on user's device
-      document.body.appendChild(link);
-      link.click();
-
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("Download failed. Please try again.");
-    }
-  }}
+  onClick={downloadOptimizedImage}
   style={{ marginTop: 10 }}
 >
   Download Image
