@@ -95,6 +95,7 @@ export default function Navbar() {
     ...(user
       ? [
           { divider: true, mobileOnly: true },
+          { to: "/brand-kit", label: "Brand Kit", mobileOnly: true },
           { to: "/optimizer", label: "Ad Optimizer", mobileOnly: true },
           { to: "/insights", label: "Insights", mobileOnly: true },
           { to: "/library", label: "Creative Library", mobileOnly: true },
@@ -183,6 +184,15 @@ export default function Navbar() {
           </div>
 
           {/* ✅ Optimizer (desktop) — shown when logged in */}
+          {user && (
+            <NavLink
+              to="/brand-kit"
+              className="nav-link"
+              onClick={() => setInfoOpen(false)}
+            >
+              Brand Kit
+            </NavLink>
+          )}
           {user && (
             <NavLink
               to="/optimizer"

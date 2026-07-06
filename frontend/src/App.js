@@ -13,7 +13,7 @@ import MyAccount from "./pages/MyAccount";
 import VideoAds from "./pages/VideoAds";
 import Library from "./pages/Library";
 import Insights from "./pages/Insights";
-
+import BrandKit from "./pages/BrandKit";
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -64,6 +64,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
+            <Route path="/brand-kit" element={<BrandKit />} />
             <Route path="/optimizer" element={<Optimizer />} />
             <Route path="/library" element={<Library />} />
             <Route path="/insights" element={<Insights />} />

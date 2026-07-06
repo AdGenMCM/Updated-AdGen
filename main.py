@@ -188,16 +188,35 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def generate_gpt_image_bytes(prompt: str, size: str = "1024x1024") -> bytes:
+def generate_gpt_image_bytes(
+    prompt: str,
+    size: str = "1024x1024",
+    input_image_url: str | None = None,
+) -> bytes:
     allowed_sizes = {"1024x1024", "1024x1792", "1792x1024"}
     safe_size = size if size in allowed_sizes else "1024x1024"
+    model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
 
-    result = client.images.generate(
-        model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        prompt=prompt,
-        size=safe_size,
-        quality="medium",
-    )
+    # If Brand Kit logo exists, use it as an input/reference image.
+    if input_image_url:
+        result = client.images.edit(
+            model=model,
+            images=[
+                {
+                    "image_url": input_image_url
+                }
+            ],
+            prompt=prompt,
+            size=safe_size,
+            quality="medium",
+        )
+    else:
+        result = client.images.generate(
+            model=model,
+            prompt=prompt,
+            size=safe_size,
+            quality="medium",
+        )
 
     image_b64 = result.data[0].b64_json
     if not image_b64:
@@ -466,6 +485,59 @@ def infer_visual_subject(product_name: str, description: str, product_type: str 
     if attrs:
         return f"{pn} ({attrs})"
     return pn
+
+def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
+    if not brand_kit:
+        return ""
+
+    colors = brand_kit.get("colors") or {}
+    fonts = brand_kit.get("fonts") or {}
+
+    lines = []
+
+    def add(label, value):
+        value = value.strip() if isinstance(value, str) else value
+        if value:
+            lines.append(f"{label}: {value}")
+
+    add("Brand name", brand_kit.get("brandName"))
+    add("Website", brand_kit.get("websiteUrl"))
+    add("Industry", brand_kit.get("industry"))
+    add("Brand personality", brand_kit.get("brandPersonality"))
+    add("Target audience", brand_kit.get("targetAudience"))
+    add("Brand DNA", brand_kit.get("brandDna"))
+
+    add("Primary color", colors.get("primary"))
+    add("Secondary color", colors.get("secondary"))
+    add("Accent color", colors.get("accent"))
+
+    add("Headline font", fonts.get("headline"))
+    add("Body font", fonts.get("body"))
+    add("CTA font", fonts.get("cta"))
+
+    add("Default CTA", brand_kit.get("preferredCta"))
+    add("Default platform", brand_kit.get("preferredPlatform"))
+    add("Default image style", brand_kit.get("imageStyle"))
+    add("Offer style", brand_kit.get("offerStyle"))
+
+    add("Brand voice", brand_kit.get("voice"))
+    add("Extra instructions", brand_kit.get("notes"))
+    add("Do list", brand_kit.get("doList"))
+    add("Don't list", brand_kit.get("dontList"))
+    add("Brand keywords", brand_kit.get("brandKeywords"))
+    add("Negative keywords", brand_kit.get("negativeKeywords"))
+    add("Compliance rules", brand_kit.get("complianceRules"))
+    add("Products/services notes", brand_kit.get("productsServices"))
+
+    if not lines:
+        return ""
+
+    return (
+        "BRAND KIT CONTEXT:\n"
+        + "\n".join(lines)
+        + "\n\nUse this Brand Kit as creative guidance. Do not mention the Brand Kit to the user. "
+        "Only apply fields that are relevant to the ad being generated."
+    )
 
 # ---------------- Library Performance ----------------
 def _safe_num(x):
@@ -823,6 +895,58 @@ async def upload_creatives(
 
     return {"urls": urls}
 
+@app.post("/upload-brand-logo")
+async def upload_brand_logo(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, _claims = require_user(authorization)
+
+    allowed_types = {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+        "image/svg+xml",
+    }
+
+    ct = (file.content_type or "").lower().strip()
+
+    if ct not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported logo type. Use PNG, JPG, WEBP, or SVG.",
+        )
+
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Logo too large. Max 5MB.")
+
+    logo_url = upload_bytes_to_firebase_storage(
+        data,
+        uid,
+        content_type=ct,
+        folder="brand_logos",
+        filename_hint=file.filename or "logo",
+    )
+
+    db = get_db()
+    db.collection("users").document(uid).set(
+        {
+            "brandKit": {
+                "logoUrl": logo_url,
+                "logoUpdatedAt": int(time.time()),
+            }
+        },
+        merge=True,
+    )
+
+    return {"logoUrl": logo_url}
+
 # ---------------- Generate Ad ----------------
 @app.post("/generate-ad")
 async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
@@ -832,6 +956,8 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
     winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
@@ -891,7 +1017,30 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
         winners_line = f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
+    
+==================================================
+PRIORITY ORDER
+==================================================
 
+When generating this creative, follow these priorities in order:
+
+1. The user's current request is the highest priority.
+   Always satisfy the user's requested product, offer, goal, platform, style,
+   and any specific instructions they provide.
+
+2. Use the Brand Kit to maintain consistent branding, colors, typography,
+   messaging, voice, personality, and design language.
+   Only apply Brand Kit fields that are present.
+   Never override the user's current request with Brand Kit defaults.
+
+3. Use the Winner Profile as optimization guidance only.
+   Incorporate successful patterns when they do not conflict with the user's
+   request or Brand Kit.
+   Never copy previous creatives.
+
+4. Follow general advertising best practices to maximize performance while
+   maintaining originality and visual quality.
+    
 Return one JSON object with:
 - headline: string (<= 40 chars)
 - primary_text: string (<= 125 chars)
@@ -906,7 +1055,11 @@ audience: {audience}
 tone: {tone}
 platform: {platform}
 goal: {goal}
-offer: {offer or "N/A"}{winners_line}
+offer: {offer or "N/A"}
+
+{brand_kit_context}
+
+{winners_line}
 """
 
     winners_section = f"""
@@ -960,6 +1113,36 @@ Brand Style:
 Tone:
 {tone}
 
+==================================================
+PRIORITY ORDER
+==================================================
+
+When generating this creative, follow these priorities in order:
+
+1. The user's current request is the highest priority.
+   Always satisfy the user's requested product, offer, goal, platform, style,
+   and any specific instructions they provide.
+
+2. Use the Brand Kit to maintain consistent branding, colors, typography,
+   messaging, voice, personality, and design language.
+   Only apply Brand Kit fields that are present.
+   Never override the user's current request with Brand Kit defaults.
+
+3. Use the Winner Profile as optimization guidance only.
+   Incorporate successful patterns when they do not conflict with the user's
+   request or Brand Kit.
+   Never copy previous creatives.
+
+4. Follow general advertising best practices to maximize performance while
+   maintaining originality and visual quality.
+
+==================================================
+BRAND KIT
+==================================================
+
+{brand_kit_context}
+
+If a logo reference image is provided, use it as the brand logo reference. Preserve the logo identity as accurately as possible and place it tastefully in the advertisement only when it improves the design.
 
 {winners_section}
 
@@ -1116,6 +1299,7 @@ It should be visually impressive enough to appear in a professional design portf
                 lambda: generate_gpt_image_bytes(
                     prompt=visual_prompt,
                     size=payload.imageSize or "1024x1024",
+                    input_image_url=brand_kit.get("logoUrl"),
                 )
             )
             return upload_png_to_firebase_storage(img_bytes, uid)
@@ -1190,6 +1374,8 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
     if not admin:
@@ -1242,6 +1428,29 @@ RULES:
 - The improved image prompt should encourage clean readable typography, correct spelling, strong product focus, clear CTA, and professional ad layout.
 - Do not recommend misleading claims, unrealistic guarantees, or unsupported performance claims.
 
+==================================================
+PRIORITY ORDER
+==================================================
+
+When analyzing this advertisement and generating improvements, follow these priorities in order:
+
+1. Preserve the advertiser's core product, offer, campaign objective, and messaging.
+   Improvements should strengthen the existing campaign—not create a completely different one.
+
+2. Maintain the Established Brand Identity.
+   Use the Brand Kit to preserve branding, colors, typography, messaging, voice,
+   personality, and overall creative direction.
+   Only apply Brand Kit fields that are present.
+   Never recommend changes that conflict with the Brand Kit.
+
+3. Use the uploaded creative analysis and performance metrics to identify the
+   highest-impact opportunities for improvement.
+   Recommendations should improve performance while remaining consistent with the brand.
+
+4. Follow modern advertising and conversion best practices.
+   Focus on stronger hooks, better visual hierarchy, clearer messaging,
+   improved readability, stronger CTAs, and higher commercial quality.
+
 CAMPAIGN CONTEXT:
 product_name: {product_name}
 description: {description}
@@ -1252,6 +1461,12 @@ goal: {goal}
 offer: {offer or "N/A"}
 audience_temp: {payload.audience_temp}
 notes: {payload.notes or ""}
+
+==================================================
+ESTABLISHED BRAND IDENTITY
+==================================================
+
+{brand_kit_context}
 
 EXTRA CONTEXT JSON:
 {json.dumps(extra)}
@@ -1340,6 +1555,8 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
     if not admin:
@@ -1421,12 +1638,42 @@ CTA:
 {payload.improved_cta}
 
 ==================================================
+PRIORITY ORDER
+==================================================
+
+When generating this optimized advertisement, follow these priorities in order:
+
+1. Preserve the advertiser's core product, message, offer, and campaign objective.
+   This should feel like an improved version of the same campaign, not a totally new campaign.
+
+2. Maintain the Established Brand Identity.
+   Use the Brand Kit to preserve branding, colors, typography, messaging, voice,
+   personality, and design language.
+   Only apply Brand Kit fields that are present.
+   Never override the advertiser's branding.
+
+3. Apply the optimization recommendations.
+   Improve the creative using the optimizer's suggested copy, image prompt, and performance guidance,
+   but do not sacrifice brand consistency or product accuracy.
+
+4. Follow modern advertising and conversion best practices.
+   Improve clarity, hierarchy, stopping power, trust, and commercial quality.
+
+==================================================
 OPTIMIZATION OBJECTIVES
 ==================================================
 
 Apply these improvements:
 
 {payload.improved_image_prompt}
+
+==================================================
+BRAND KIT
+==================================================
+
+{brand_kit_context}
+
+If a logo reference image is provided, use it as the brand logo reference. Preserve the logo identity as accurately as possible and place it tastefully in the advertisement only when it improves the design.
 
 ==================================================
 CREATIVE DIRECTION
@@ -1551,6 +1798,7 @@ Improve it.
             lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
                 size=payload.imageSize or "1024x1024",
+                input_image_url=brand_kit.get("logoUrl"),
             )
         )
 

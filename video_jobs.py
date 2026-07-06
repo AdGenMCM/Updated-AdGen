@@ -334,6 +334,69 @@ class TTSPreviewResponse(BaseModel):
     audioUrl: str
     cached: bool = False
 
+def build_brand_kit_video_context(brand_kit: dict | None) -> str:
+    if not brand_kit:
+        return ""
+
+    colors = brand_kit.get("colors") or {}
+    fonts = brand_kit.get("fonts") or {}
+
+    lines = []
+
+    def add(label, value):
+        value = value.strip() if isinstance(value, str) else value
+        if value:
+            lines.append(f"{label}: {value}")
+
+    add("Brand name", brand_kit.get("brandName"))
+    add("Industry", brand_kit.get("industry"))
+    add("Brand personality", brand_kit.get("brandPersonality"))
+    add("Target audience", brand_kit.get("targetAudience"))
+    add("Brand DNA", brand_kit.get("brandDna"))
+
+    add("Primary color", colors.get("primary"))
+    add("Secondary color", colors.get("secondary"))
+    add("Accent color", colors.get("accent"))
+
+    add("Brand voice", brand_kit.get("voice"))
+    add("Default CTA", brand_kit.get("preferredCta"))
+    add("Default platform", brand_kit.get("preferredPlatform"))
+    add("Default image style", brand_kit.get("imageStyle"))
+    add("Offer style", brand_kit.get("offerStyle"))
+
+    add("Do list", brand_kit.get("doList"))
+    add("Don't list", brand_kit.get("dontList"))
+    add("Compliance rules", brand_kit.get("complianceRules"))
+    add("Products/services notes", brand_kit.get("productsServices"))
+
+    if not lines:
+        return ""
+
+    return (
+        "Brand Kit guidance:\n"
+        + "\n".join(lines)
+        + "\nUse this as creative direction for the video. "
+        "Do not force a logo into the scene. If branding appears naturally, keep it tasteful and subtle."
+    )
+
+def build_video_priority_context() -> str:
+        return """
+            Priority Order:
+
+            1. Follow the user's current video request first.
+            Preserve the requested product, scene, offer, duration, ratio, and video intent.
+
+            2. Use the Brand Kit as established brand identity.
+            Apply brand voice, colors, personality, audience, CTA, and creative rules only when present.
+            Do not let Brand Kit defaults override the user's current request.
+
+            3. Use Winner Profile guidance only as optimization direction.
+            Apply past winning patterns only when they do not conflict with the current request or Brand Kit.
+
+            4. Produce an original, clean, performance-focused ad video.
+            Prioritize clear product focus, strong motion, smooth pacing, and commercial quality.
+            """.strip()
+
 def build_director_prompt(req: StartPromptVideoRequest) -> str:
     bits = [
         "Create a short-form performance ad video.",
@@ -429,9 +492,11 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
     enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
 
     db = get_db()
+    user_doc = (db.collection("users").document(uid).get().to_dict() or {})
+    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit_context = build_brand_kit_video_context(brand_kit)
 
     if not admin:
-        user_doc = (db.collection("users").document(uid).get().to_dict() or {})
         tier, status = get_tier_and_status(user_doc)
 
         # caps/entitlements
@@ -471,6 +536,12 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
 
     # Build prompt text + inject winners structured constraints (preferred)
     prompt_text = (req.promptText or "").strip()
+
+    priority_context = build_video_priority_context()
+    prompt_text = f"{priority_context}\n\nCURRENT VIDEO REQUEST:\n{prompt_text}"
+
+    if brand_kit_context:
+        prompt_text = f"{prompt_text}\n\n{brand_kit_context}"   
 
     if req.winnerProfile is not None:
         prompt_text = inject_winners_structured(
@@ -534,9 +605,11 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
     enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
 
     db = get_db()
+    user_doc = (db.collection("users").document(uid).get().to_dict() or {})
+    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit_context = build_brand_kit_video_context(brand_kit)
 
     if not admin:
-        user_doc = (db.collection("users").document(uid).get().to_dict() or {})
         tier, status = get_tier_and_status(user_doc)
 
         _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
@@ -547,6 +620,12 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
 
     # ✅ Director prompt used for the actual Runway generation
     director_prompt = build_director_prompt(req)
+
+    priority_context = build_video_priority_context()
+    director_prompt = f"{priority_context}\n\nCURRENT VIDEO REQUEST:\n{director_prompt}"
+
+    if brand_kit_context:
+        director_prompt = f"{director_prompt}\n\n{brand_kit_context}"
 
     # ✅ NEW: structured winners (preferred)
     if req.winnerProfile is not None:
@@ -607,11 +686,10 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
 
         # Kick off TTS (UNCHANGED)
         if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
-            tts_task = await create_text_to_speech(
-                text=(req.voiceoverScript or "").strip(),
-                voice=req.voiceover.voice,
-            )
-            runway_tts_id = tts_task.get("id") or tts_task.get("task_id")
+            runway_tts_id = await create_text_to_speech(
+            prompt_text=(req.voiceoverScript or "").strip(),
+            preset_voice=safe_voice(req.voiceover.presetVoice),
+        )
             job_ref.update({"runwayTtsTaskId": runway_tts_id})
 
         return StartVideoResponse(jobId=job_id, status="running")

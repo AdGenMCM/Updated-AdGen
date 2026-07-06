@@ -1,10 +1,6 @@
-/* Contact.css - clean, modern, consistent */
-
 .brandkit-page {
   min-height: calc(100vh - 80px);
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
-    #f5f7fb;
+  background: #f5f7fb;
   padding: 48px 24px 80px;
 }
 
@@ -45,7 +41,6 @@
 }
 
 .brandkit-hero p {
-  max-width: 780px;
   margin: 0;
   color: #d1d5db;
   font-size: 17px;
@@ -79,7 +74,7 @@
 
 .brandkit-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
   gap: 24px;
   align-items: start;
 }
@@ -122,6 +117,7 @@
 
 .brandkit-field input,
 .brandkit-field textarea,
+.brandkit-field select,
 .brandkit-import-disabled input {
   width: 100%;
   box-sizing: border-box;
@@ -134,14 +130,15 @@
 }
 
 .brandkit-field input:focus,
-.brandkit-field textarea:focus {
+.brandkit-field textarea:focus,
+.brandkit-field select:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .brandkit-field textarea {
-  min-height: 118px;
+  min-height: 110px;
   resize: vertical;
 }
 
@@ -163,6 +160,35 @@
 
 .logo-upload-box small {
   color: #6b7280;
+}
+
+.brandkit-logo-preview {
+  max-width: 180px;
+  max-height: 120px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+.brandkit-small-btn {
+  margin-top: 10px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.brandkit-small-btn:hover {
+  background: #f9fafb;
+}
+
+.brandkit-error {
+  margin-top: 10px;
+  color: #b91c1c;
+  font-weight: 700;
 }
 
 .brandkit-import-disabled {
@@ -237,6 +263,17 @@
   background: #030712;
 }
 
+.brandkit-save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.brandkit-save-message {
+  margin-top: 12px;
+  color: #047857;
+  font-weight: 800;
+}
+
 .brandkit-preview {
   position: sticky;
   top: 100px;
@@ -254,6 +291,12 @@
   color: #6b7280;
   font-weight: 900;
   margin-bottom: 18px;
+}
+
+.preview-logo-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
 }
 
 .brandkit-preview h3 {
@@ -297,6 +340,7 @@
 .preview-block p {
   margin: 6px 0;
   color: #4b5563;
+  line-height: 1.5;
 }
 
 .status-ready {
@@ -306,6 +350,86 @@
 
 .preview-block.muted p {
   color: #9ca3af;
+}
+
+.brandkit-select__control {
+  min-height: 48px;
+  border-radius: 12px !important;
+  border-color: #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.brandkit-select__control--is-focused {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+
+.brandkit-select__menu {
+  z-index: 100 !important;
+}
+
+.brandkit-font-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandkit-font-star {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.brandkit-select__input-container {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.brandkit-select__input {
+  box-shadow: none !important;
+}
+
+.brandkit-select__single-value {
+  display: flex !important;
+  align-items: center !important;
+}
+
+.font-preview-card {
+  margin-top: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 22px;
+  background: linear-gradient(135deg, #ffffff, #f9fafb);
+}
+
+.font-preview-label {
+  display: inline-block;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+}
+
+.font-preview-card h3 {
+  font-size: 28px;
+  margin: 0 0 10px;
+  color: #111827;
+}
+
+.font-preview-card p {
+  margin: 0 0 16px;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.font-preview-card button {
+  border: none;
+  border-radius: 999px;
+  background: #2563eb;
+  color: white;
+  padding: 11px 18px;
+  font-weight: 900;
 }
 
 @media (max-width: 950px) {
@@ -341,22 +465,4 @@
   .brandkit-tips {
     padding: 22px;
   }
-}
-
-.optional-label,
-.section-optional {
-  display: inline-block;
-  margin-left: 6px;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.brandkit-helper-text {
-  display: block;
-  margin-top: 8px;
-  font-size: 13px;
-  color: #6b7280;
-  line-height: 1.5;
 }
