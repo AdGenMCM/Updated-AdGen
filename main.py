@@ -193,9 +193,10 @@ def generate_gpt_image_bytes(prompt: str, size: str = "1024x1024") -> bytes:
     safe_size = size if size in allowed_sizes else "1024x1024"
 
     result = client.images.generate(
-        model="gpt-image-1",
+        model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
         prompt=prompt,
         size=safe_size,
+        quality="medium",
     )
 
     image_b64 = result.data[0].b64_json
@@ -908,60 +909,173 @@ goal: {goal}
 offer: {offer or "N/A"}{winners_line}
 """
 
+    winners_section = f"""
+        ==================================================
+        PAST WINNING CREATIVE INSIGHTS
+        ==================================================
+
+        These insights summarize patterns identified from the advertiser's highest-performing creatives. Treat them as performance-informed creative direction that should influence your design decisions.
+
+        These insights represent characteristics shared by the advertiser's highest-performing creatives.
+
+        Use these insights to influence layout, composition, lighting, visual hierarchy, typography, color palette, and overall creative direction.
+
+        Do not copy previous advertisements directly. Instead, naturally apply the successful design principles while creating a new, original advertisement.
+
+        {winners_line}
+        """ if winners_line else ""
+
     visual_prompt = f"""
-You are an award-winning advertising creative director.
+You are the Creative Director at a world-class advertising agency.
 
-Design a complete, polished, marketing-ready social media advertisement.
+Your job is to design a premium, production-ready advertisement that a Fortune 500 company would confidently run on Meta, Instagram, LinkedIn, TikTok, or Google Display.
 
-Brand/Product:
+The final result should look like it was created by an experienced marketing designer—not AI.
+
+==================================================
+CREATIVE BRIEF
+==================================================
+
+Brand:
 {product_name}
 
-Product description:
+Product Description:
 {description}
 
-Target audience:
+Target Audience:
 {audience}
 
 Platform:
 {platform}
 
-Tone:
-{tone}
-
-Goal:
+Campaign Goal:
 {goal}
 
 Offer:
-{offer or "N/A"}
+{offer or "No promotional offer"}
 
-Style direction:
+Brand Style:
 {style}
 
-Aspect ratio:
-{aspect_ratio}
+Tone:
+{tone}
 
-Create a professional ad creative with:
-- A clear hero product or product scene
-- Premium composition and lighting
-- Strong visual hierarchy
-- Clean, readable typography
-- A short compelling headline
-- A clear CTA button
-- A polished social-ad layout suitable for Meta, Instagram, LinkedIn, TikTok, or web display
-- The brand/product name spelled exactly as: "{product_name}"
 
-Important:
-- Avoid gibberish text
-- Avoid misspelled words
-- Avoid random fake logos
-- Avoid clutter
-- Avoid duplicated products unless the product naturally requires it
-- Do not include watermarks
-- Do not include unreadable small paragraphs
-- Make it look like a real finished advertisement a business could run today
+{winners_section}
 
-Use the offer if provided.
-{winners_line}
+==================================================
+DESIGN REQUIREMENTS
+==================================================
+
+Create a complete advertisement—not just a product render.
+
+The finished advertisement should be visually indistinguishable from a professionally designed digital advertisement created by a senior advertising designer using Adobe Photoshop.
+
+Every design decision should reflect modern advertising best practices and commercial-quality graphic design.
+
+The design should include:
+
+• A premium hero product
+• Professional advertising layout
+• Clean modern composition
+• Authentic commercial photography
+• Luxury lighting
+• Elegant spacing
+• Strong visual hierarchy
+• Professional marketing typography
+• A tasteful CTA button
+• One clear headline
+• One supporting line if needed
+• One offer badge if appropriate
+
+==================================================
+VISUAL HIERARCHY
+==================================================
+
+Priority order:
+
+1. Product
+2. Brand
+3. Headline
+4. Offer
+5. CTA
+
+The product should occupy roughly 60% of the visual composition.
+
+Typography should complement the product—not overpower it.
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Use real English words.
+
+Every word must be correctly spelled.
+
+Typography should be clean, elegant, readable, and professionally typeset.
+
+Avoid excessive text.
+
+Never use placeholder or meaningless text.
+
+==================================================
+ART DIRECTION
+==================================================
+
+The advertisement should feel:
+
+Premium
+
+Modern
+
+Trustworthy
+
+Professional
+
+Commercial
+
+Photorealistic
+
+Visually balanced
+
+Use realistic shadows, reflections, textures, depth of field, and studio-quality lighting.
+
+==================================================
+NEGATIVE REQUIREMENTS
+==================================================
+
+Do not include:
+
+Watermarks
+
+Stock photo watermarks
+
+Distorted products
+
+Duplicate products
+
+Clutter
+
+Busy backgrounds
+
+Unnecessary props
+
+Unrealistic lighting
+
+Comic-style graphics
+
+Cheap clip art
+
+Messy layouts
+
+==================================================
+FINAL GOAL
+==================================================
+
+Create an advertisement that looks ready to publish immediately as a paid social advertisement.
+
+It should be visually impressive enough to appear in a professional design portfolio.
+
 """.strip()
 
     async def _gen_copy():
@@ -1111,18 +1225,24 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     }
 
     optimizer_prompt = f"""
-You are an expert direct-response performance marketer.
+You are a senior direct-response creative strategist and performance marketing analyst.
 
-Given the current ad and its metrics, diagnose what's likely happening and produce improved copy + an improved image prompt.
+Your job is to analyze the current ad, uploaded creative, campaign context, and metrics, then produce:
+1. A concise diagnosis
+2. Specific creative recommendations
+3. Improved ad copy
+4. A production-ready image prompt for generating a stronger finished advertisement
 
 RULES:
-- Output ONLY valid JSON. No markdown, no extra text.
+- Output ONLY valid JSON. No markdown, no commentary.
 - improved_headline <= 40 characters.
 - improved_primary_text <= 150 characters.
-- improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now
-- Improved image prompt must be brand-neutral and avoid ANY readable text, logos, labels, trademarks.
+- improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now.
+- improved_image_prompt should describe a complete, polished advertisement, not just a product photo.
+- The improved image prompt should encourage clean readable typography, correct spelling, strong product focus, clear CTA, and professional ad layout.
+- Do not recommend misleading claims, unrealistic guarantees, or unsupported performance claims.
 
-CONTEXT:
+CAMPAIGN CONTEXT:
 product_name: {product_name}
 description: {description}
 audience: {audience}
@@ -1136,31 +1256,51 @@ notes: {payload.notes or ""}
 EXTRA CONTEXT JSON:
 {json.dumps(extra)}
 
-creative_image_urls: {creative_urls}
-
-CREATIVE ANALYSIS (HIGH PRIORITY):
+CREATIVE ANALYSIS FROM UPLOADED IMAGES:
 {creative_analysis or "No uploaded creatives."}
 
 CURRENT CREATIVE:
 headline: {payload.current_headline or ""}
 primary_text: {payload.current_primary_text or ""}
 cta: {payload.current_cta or ""}
-image_prompt: {payload.current_image_prompt or ""}
+image_prompt_or_notes: {payload.current_image_prompt or ""}
 
-METRICS JSON:
+PERFORMANCE METRICS JSON:
 {json.dumps(metrics)}
 
-Return JSON with keys:
-summary (string),
-likely_issues (array of 3-6 strings),
-recommended_changes (array of 3-6 strings),
-improved_headline (string),
-improved_primary_text (string),
-improved_cta (string),
-improved_image_prompt (string),
-confidence ("low"|"medium"|"high")
-""".strip()
+ANALYSIS GUIDANCE:
+- If CTR is low, focus on hook strength, visual stopping power, headline clarity, contrast, and audience-message fit.
+- If CPC is high, focus on relevance, clarity, stronger offer framing, and reducing friction.
+- If CPA is high, focus on trust, offer strength, CTA clarity, objections, and conversion intent.
+- If CPM is high, mention audience/placement competitiveness only if relevant, but focus creative recommendations on improving efficiency.
+- If ROAS is low, focus on stronger purchase intent, clearer value proposition, better offer presentation, and reducing wasted clicks.
+- If metrics are incomplete, state that confidence is medium or low and base recommendations on creative fundamentals.
 
+IMPROVED IMAGE PROMPT REQUIREMENTS:
+The improved_image_prompt should instruct the image model to create a finished paid social advertisement with:
+- Hero product or product scene
+- Professional commercial photography
+- Clean readable English typography
+- One clear headline
+- Optional short supporting line
+- Clear CTA button
+- Offer badge if an offer exists
+- Strong visual hierarchy
+- Balanced spacing
+- Platform-appropriate layout
+- Premium, realistic, publish-ready design
+
+Return JSON with exactly these keys:
+summary,
+likely_issues,
+recommended_changes,
+improved_headline,
+improved_primary_text,
+improved_cta,
+improved_image_prompt,
+confidence
+""".strip()
+    
     try:
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
@@ -1231,22 +1371,34 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     style = (getattr(payload, "stylePreset", None) or "Minimal").strip()[:30]
     tone = (getattr(payload, "tone", None) or "confident").strip()[:40]
     goal = (getattr(payload, "goal", None) or "Performance optimization").strip()[:60]
+    platform = (payload.platform or "Instagram").strip()[:40]
 
     if not product_name:
         product_name = "the same product as the reference creative"
 
     visual_prompt = f"""
-You are an award-winning advertising creative director.
+You are the Lead Creative Director at a world-class advertising agency.
 
-Create a new improved version of an existing ad creative.
+You are reviewing an existing advertisement that performed reasonably well.
 
-Product:
+Your task is to redesign it into a significantly stronger version while preserving the same product identity and campaign intent.
+
+The result should feel like Version 2 of the same advertisement—not a completely different campaign.
+
+==================================================
+PRODUCT
+==================================================
+
+Brand:
 {product_name}
 
 Description:
-{description or "Use the same product identity as the original creative."}
+{description}
 
-Optimization goal:
+Platform:
+{platform}
+
+Campaign Goal:
 {goal}
 
 Tone:
@@ -1255,35 +1407,143 @@ Tone:
 Style:
 {style}
 
-Aspect ratio:
-{aspect_ratio}
+==================================================
+UPDATED COPY
+==================================================
 
-Improved headline:
+Headline:
 {payload.improved_headline}
 
-Improved primary text:
+Primary Text:
 {payload.improved_primary_text}
 
-Improved CTA:
+CTA:
 {payload.improved_cta}
 
-Creative improvement instructions:
+==================================================
+OPTIMIZATION OBJECTIVES
+==================================================
+
+Apply these improvements:
+
 {payload.improved_image_prompt}
 
-Design requirements:
-- Make this look like a finished, professional social media advertisement
-- Use clear visual hierarchy
-- Use clean readable typography
-- Include a clear CTA button
-- Use the product name correctly if it appears
-- Improve lighting, clarity, composition, realism, and conversion appeal
-- Preserve the product identity
-- Avoid gibberish text
-- Avoid misspellings
-- Avoid fake random logos
-- Avoid clutter
-- Avoid watermarks
-- Avoid unreadable small text
+==================================================
+CREATIVE DIRECTION
+==================================================
+
+Improve the advertisement while keeping the same product identity.
+
+The finished advertisement should be visually indistinguishable from a professionally designed digital advertisement created by a senior advertising designer using Adobe Photoshop.
+
+Every design decision should reflect modern advertising best practices and commercial-quality graphic design.
+
+Preserve the overall campaign theme.
+
+Create a noticeably higher-quality version with:
+
+• Better composition
+• Better product placement
+• Better lighting
+• Better realism
+• Better typography
+• Better spacing
+• Better hierarchy
+• Better commercial appeal
+
+==================================================
+VISUAL HIERARCHY
+==================================================
+
+Priority:
+
+1. Product
+2. Brand
+3. Headline
+4. Supporting text
+5. Offer (if appropriate)
+6. CTA
+
+The product should dominate the composition.
+
+Typography should support the product—not compete with it.
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Use only correctly spelled English.
+
+Use elegant professional marketing typography.
+
+The text should be perfectly readable.
+
+Avoid excessive wording.
+
+Avoid clutter.
+
+==================================================
+QUALITY
+==================================================
+
+Create an advertisement that appears professionally designed.
+
+Use:
+
+• Studio-quality lighting
+• Premium commercial photography
+• Realistic shadows
+• Natural reflections
+• High-end textures
+• Excellent depth of field
+• Balanced composition
+
+==================================================
+NEGATIVE REQUIREMENTS
+==================================================
+
+Do NOT include:
+
+Watermarks
+
+Duplicate products
+
+Random decorative objects
+
+Unreadable typography
+
+Misspelled words
+
+Placeholder text
+
+Fake logos
+
+Messy layouts
+
+Cheap clip art
+
+Distorted products
+
+Think like an experienced performance marketing designer.
+
+Every design decision should increase the likelihood that someone stops scrolling and takes action.
+
+The advertisement should maximize visual attention while maintaining a premium brand appearance.
+
+==================================================
+FINAL GOAL
+==================================================
+
+The optimized advertisement should look like the result of an experienced creative team improving an already good campaign.
+
+Someone should immediately think:
+
+"This is a stronger version of the same advertisement."
+
+Do not redesign the campaign from scratch.
+
+Improve it.
+
 """.strip()
 
     try:
