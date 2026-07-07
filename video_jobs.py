@@ -25,6 +25,7 @@ from runway_client import (
 
 from auth_helpers import get_db, require_user
 from usage_caps import get_tier_and_status, utc_month_key
+from video_usage import check_and_increment_video_usage
 from admin_guard import is_admin
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -236,36 +237,46 @@ def _enforce_tts_preview_caps_and_increment(db, uid: str, tier: str, status: str
 
 def _enforce_video_entitlements_and_increment(db, uid: str, tier: str, status: str, duration: int) -> Dict[str, Any]:
     allowed_statuses = {"active", "trialing"}
+
     if status not in allowed_statuses:
         raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
-
-    if tier not in VIDEO_ALLOWED_TIERS:
-        raise HTTPException(status_code=403, detail="Video ads are only available on Early Access, Pro, and Business plans.")
 
     if tier == "early_access" and int(duration) > 6:
         raise HTTPException(status_code=403, detail="Early Access supports 6-second videos only.")
 
-    cap = VIDEO_CAPS.get(tier)
-    if not cap:
-        raise HTTPException(status_code=500, detail="Video cap configuration missing for your plan.")
+    result = check_and_increment_video_usage(db, uid, tier)
 
-    month_key = utc_month_key()
-    user_ref = db.collection("users").document(uid)
-    user_doc = user_ref.get().to_dict() or {}
+    if not result.get("allowed"):
+        reason = result.get("reason")
 
-    used = int(user_doc.get("video_used", 0) or 0)
-    prev_month = user_doc.get("video_month_key")
-    if prev_month != month_key:
-        used = 0
+        if reason == "tier_not_allowed":
+            raise HTTPException(
+                status_code=403,
+                detail="Video ads are only available on Early Access, Pro, and Business plans.",
+            )
 
-    if used >= cap:
-        raise HTTPException(
-            status_code=429,
-            detail={"message": "You’ve reached your monthly video generation limit. Upgrade to continue.", "used": used, "cap": cap, "month": month_key, "upgradePath": "/account"},
-        )
+        if reason == "no_cap_configured":
+            raise HTTPException(status_code=500, detail="Video cap configuration missing for your plan.")
 
-    user_ref.update({"video_used": used + 1, "video_month_key": month_key})
-    return {"allowed": True, "used": used + 1, "cap": cap, "month": month_key}
+        if reason == "cap_reached":
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "You’ve reached your video generation limit. Upgrade to continue.",
+                    "used": result.get("used"),
+                    "cap": result.get("cap"),
+                    "month": result.get("month"),
+                    "periodKey": result.get("periodKey"),
+                    "periodStart": result.get("periodStart"),
+                    "periodEnd": result.get("periodEnd"),
+                    "periodSource": result.get("periodSource"),
+                    "upgradePath": "/account",
+                },
+            )
+
+        raise HTTPException(status_code=403, detail="Video generation is not available for your plan.")
+
+    return result
 
 # ---------- Request/Response models ----------
 class VoiceoverConfig(BaseModel):

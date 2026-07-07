@@ -13,16 +13,16 @@ export default function MyAccount() {
   const [error, setError] = useState("");
 
   // Image usage state
-  const [usage, setUsage] = useState(null); // { used, cap, month, remaining }
+  const [usage, setUsage] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
 
-  // ✅ Video usage state
-  const [videoUsage, setVideoUsage] = useState(null); // { used, cap, month, remaining, enabled, tier }
+  // Video usage state
+  const [videoUsage, setVideoUsage] = useState(null);
   const [videoUsageLoading, setVideoUsageLoading] = useState(false);
   const [videoUsageError, setVideoUsageError] = useState("");
 
-  // ✅ Dismiss state
+  // Dismiss state
   const [dismissing, setDismissing] = useState(false);
 
   // API base
@@ -38,6 +38,35 @@ export default function MyAccount() {
     }),
     []
   );
+
+  const formatUnixDate = (seconds) => {
+    if (!seconds) return "—";
+    return new Date(seconds * 1000).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const formatBillingPeriod = (data) => {
+    if (!data) return "—";
+
+    if (data.periodSource === "stripe" && data.periodStart && data.periodEnd) {
+      return `${formatUnixDate(data.periodStart)} – ${formatUnixDate(data.periodEnd)}`;
+    }
+
+    return data.month || "—";
+  };
+
+  const formatResetText = (data) => {
+    if (!data) return "Usage reset date unavailable";
+
+    if (data.periodSource === "stripe" && data.periodEnd) {
+      return `Usage resets on ${formatUnixDate(data.periodEnd)}`;
+    }
+
+    return "Usage resets monthly";
+  };
 
   async function fetchUsage() {
     setUsageError("");
@@ -140,7 +169,6 @@ export default function MyAccount() {
   const isActiveOrTrial = status === "active" || status === "trialing";
   const shouldShowRequestBanner = hasRequestedTier && requestedTier !== tier;
 
-  // ✅ FIXED: Works with BOTH createPortalSession(customerId) and createPortalSession(apiBase, token)
   async function openBillingPortal() {
     setError("");
     setLoadingPortal(true);
@@ -153,9 +181,6 @@ export default function MyAccount() {
 
       let url;
 
-      // Detect signature:
-      // - old: createPortalSession(customerId) -> {url}
-      // - new: createPortalSession(apiBase, token) -> url OR {url}
       const arity = typeof createPortalSession === "function" ? createPortalSession.length : 0;
 
       if (arity >= 2) {
@@ -173,7 +198,6 @@ export default function MyAccount() {
 
       if (!url) throw new Error("No billing portal URL returned.");
 
-      // ✅ Use same-tab navigation (avoids popup blockers)
       window.location.href = url;
     } catch (e) {
       setError(e?.message || "Could not open billing portal.");
@@ -190,7 +214,6 @@ export default function MyAccount() {
     }
   };
 
-  // ✅ Dismiss + clear requestedTier server-side
   const dismissRequestedTier = async () => {
     setError("");
 
@@ -338,7 +361,7 @@ export default function MyAccount() {
           <p className="acctTiny">Billing portal opens in this tab. Contact billing@adgenmcm.com for assistance.</p>
         </div>
 
-        {/* ✅ Image usage */}
+        {/* Image usage */}
         <div className="acctSection">
           <h2 className="acctH2">Image Generation Usage</h2>
 
@@ -353,8 +376,8 @@ export default function MyAccount() {
           {usage ? (
             <>
               <div className="acctRow">
-                <span className="acctLabel">This month</span>
-                <span className="acctValue">{usage.month || "—"}</span>
+                <span className="acctLabel">Current billing period</span>
+                <span className="acctValue">{formatBillingPeriod(usage)}</span>
               </div>
 
               <div className="acctRow">
@@ -371,7 +394,7 @@ export default function MyAccount() {
 
               <div className="acctRow">
                 <span className="acctLabel">
-                  <i>* Usage resets on the first of each month *</i>
+                  <i>* {formatResetText(usage)} *</i>
                 </span>
               </div>
             </>
@@ -380,7 +403,7 @@ export default function MyAccount() {
           )}
         </div>
 
-        {/* ✅ Video usage */}
+        {/* Video usage */}
         <div className="acctSection">
           <h2 className="acctH2">Video Generation Usage</h2>
 
@@ -394,73 +417,38 @@ export default function MyAccount() {
 
           {videoUsage ? (
             <>
-              <div className="acctRow">
-                <span className="acctLabel">This month</span>
-                <span className="acctValue">{videoUsage.month || "—"}</span>
-              </div>
+              {videoUsage.enabled ? (
+                <>
+                  <div className="acctRow">
+                    <span className="acctLabel">Current billing period</span>
+                    <span className="acctValue">{formatBillingPeriod(videoUsage)}</span>
+                  </div>
 
-              <div className="acctRow">
-                <span className="acctLabel">Used</span>
-                <span className="acctValue">
-                  {videoUsage ? (
-                  <>
-                    {videoUsage.enabled ? (
-                      <>
-                        <div className="acctRow">
-                          <span className="acctLabel">This month</span>
-                          <span className="acctValue">{videoUsage.month || "—"}</span>
-                        </div>
+                  <div className="acctRow">
+                    <span className="acctLabel">Used</span>
+                    <span className="acctValue">
+                      {videoUsage.used}/{videoUsage.cap}
+                    </span>
+                  </div>
 
-                        <div className="acctRow">
-                          <span className="acctLabel">Used</span>
-                          <span className="acctValue">
-                            {videoUsage.used}/{videoUsage.cap}
-                          </span>
-                        </div>
+                  <div className="acctRow">
+                    <span className="acctLabel">Remaining</span>
+                    <span className="acctValue">{videoUsage.remaining ?? 0}</span>
+                  </div>
 
-                        <div className="acctRow">
-                          <span className="acctLabel">Remaining</span>
-                          <span className="acctValue">{videoUsage.remaining}</span>
-                        </div>
+                  <div className="acctRow">
+                    <span className="acctLabel">
+                      <i>* {formatResetText(videoUsage)} *</i>
+                    </span>
+                  </div>
 
-                        <div className="acctRow">
-                          <span className="acctLabel">
-                            <i>* Usage resets on the first of each month *</i>
-                          </span>
-                        </div>
-
-                        {videoUsage.remaining === 0 && (
-                          <p className="acctTiny">
-                            You’ve reached your video limit. Upgrade to generate more this month.
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <div className="acctTiny" style={{ marginTop: 8 }}>
-                        Video Ads are available on Early Access, Pro, and Business plans.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="acctTiny">
-                    {videoUsageLoading ? "Loading video usage…" : "Video usage data not available yet."}
-                  </p>
-                )}
-                </span>
-              </div>
-
-              <div className="acctRow">
-                <span className="acctLabel">Remaining</span>
-                <span className="acctValue">{videoUsage.remaining ?? 0}</span>
-              </div>
-
-              <div className="acctRow">
-                <span className="acctLabel">
-                  <i>* Usage resets on the first of each month *</i>
-                </span>
-              </div>
-
-              {!videoUsage.enabled && (
+                  {videoUsage.remaining === 0 && (
+                    <p className="acctTiny">
+                      You’ve reached your video limit. Upgrade to generate more this billing period.
+                    </p>
+                  )}
+                </>
+              ) : (
                 <p className="acctTiny">
                   Video Ads are available on Early Access, Pro, and Business plans.
                 </p>

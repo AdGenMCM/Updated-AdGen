@@ -17,11 +17,12 @@ from openai import OpenAI
 import base64
 
 # Stripe router (separate file)
-from stripe_server import stripe_router
+from stripe_server import stripe_router, price_id_to_tier, extract_subscription_period
+import stripe
 
 # Firebase auth + Firestore
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
-from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status
+from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status, get_usage_period
 
 # admin dependency
 from admin_guard import admin_required
@@ -614,6 +615,72 @@ Brand Kit Usage Rules:
 • Preserve brand voice, personality, audience, compliance rules, and creative restrictions when provided.
 """.strip()
 
+def ensure_stripe_period_for_user(db, uid: str, user_doc: dict) -> dict:
+    stripe_obj = (user_doc or {}).get("stripe") or {}
+
+    if stripe_obj.get("currentPeriodStart") and stripe_obj.get("currentPeriodEnd"):
+        return user_doc
+
+    customer_id = stripe_obj.get("customerId")
+    if not customer_id:
+        return user_doc
+
+    try:
+        subs = stripe.Subscription.list(
+            customer=customer_id,
+            status="all",
+            limit=1,
+            expand=["data.items"],
+        )
+
+        if not subs.data:
+            return user_doc
+
+        latest = subs.data[0]
+
+        sub_id = latest.get("id")
+        sub_status = latest.get("status")
+        status = "active" if sub_status in {"active", "trialing", "past_due"} else "pending"
+
+        price_id = None
+        tier = None
+
+        items = (latest.get("items") or {}).get("data") or []
+        if items and items[0].get("price"):
+            price_id = items[0]["price"].get("id")
+            tier = price_id_to_tier(price_id)
+
+        period_start, period_end = extract_subscription_period(latest)
+
+        stripe_update = {
+            "customerId": customer_id,
+            "subscriptionId": sub_id,
+            "status": status,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        }
+
+        if price_id:
+            stripe_update["priceId"] = price_id
+
+        if tier:
+            stripe_update["tier"] = tier
+
+        if period_start:
+            stripe_update["currentPeriodStart"] = int(period_start)
+
+        if period_end:
+            stripe_update["currentPeriodEnd"] = int(period_end)
+
+        user_ref = db.collection("users").document(uid)
+        user_ref.set({"stripe": stripe_update}, merge=True)
+
+        refreshed = user_ref.get()
+        return refreshed.to_dict() or user_doc
+
+    except Exception as e:
+        print("STRIPE PERIOD SELF-HEAL ERROR:", repr(e))
+        return user_doc
+
 # ---------------- Library Performance ----------------
 def _safe_num(x):
     try:
@@ -834,9 +901,87 @@ def get_usage(authorization: str | None = Header(default=None)):
 
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+
+    user_doc = ensure_stripe_period_for_user(db, uid, user_doc)
+
     tier, _status = get_tier_and_status(user_doc)
 
-    return peek_usage(db, uid, tier)
+    return peek_usage(db, uid, tier, user_doc)
+
+@app.get("/sync-my-subscription")
+def sync_my_subscription(authorization: str | None = Header(default=None)):
+    uid, _email, _claims = require_user(authorization)
+    db = get_db()
+
+    user_ref = db.collection("users").document(uid)
+    user_doc = user_ref.get().to_dict() or {}
+    stripe_obj = user_doc.get("stripe") or {}
+    customer_id = stripe_obj.get("customerId")
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customerId found for this user.")
+
+    subs = stripe.Subscription.list(
+        customer=customer_id,
+        status="all",
+        limit=1,
+        expand=["data.items"],
+    )
+
+    if not subs.data:
+        raise HTTPException(status_code=404, detail="No Stripe subscription found for this customer.")
+
+    latest = subs.data[0]
+
+    sub_id = latest.get("id")
+    sub_status = latest.get("status")
+    status = "active" if sub_status in {"active", "trialing", "past_due"} else "pending"
+
+    price_id = None
+    tier = None
+
+    items = (latest.get("items") or {}).get("data") or []
+    if items and items[0].get("price"):
+        price_id = items[0]["price"].get("id")
+        tier = price_id_to_tier(price_id)
+
+    period_start, period_end = extract_subscription_period(latest)
+
+    update_payload = {
+        "stripe.customerId": customer_id,
+        "stripe.subscriptionId": sub_id,
+        "stripe.status": status,
+        "stripe.updatedAt": gc_firestore.SERVER_TIMESTAMP,
+    }
+
+    if price_id:
+        update_payload["stripe.priceId"] = price_id
+
+    if tier:
+        update_payload["stripe.tier"] = tier
+
+    if period_start:
+        update_payload["stripe.currentPeriodStart"] = int(period_start)
+
+    if period_end:
+        update_payload["stripe.currentPeriodEnd"] = int(period_end)
+
+    user_ref.set(update_payload, merge=True)
+
+    saved = user_ref.get().to_dict() or {}
+
+    return {
+        "ok": True,
+        "uid": uid,
+        "customer_id": customer_id,
+        "status": status,
+        "subscription_status": sub_status,
+        "price_id": price_id,
+        "tier": tier,
+        "current_period_start": period_start,
+        "current_period_end": period_end,
+        "saved_stripe": saved.get("stripe"),
+    }
 
 @app.get("/me")
 def me(authorization: str | None = Header(default=None)):
@@ -2059,11 +2204,11 @@ Improve it.
 @app.get("/admin/users")
 def admin_list_users(
     authorization: str | None = Header(default=None),
-    q: str = Query(default=""),                     # search (email/name)
-    tier: str = Query(default="all"),               # filter by tier (Firestore)
-    status: str = Query(default="all"),             # filter by stripe status (Firestore)
+    q: str = Query(default=""),
+    tier: str = Query(default="all"),
+    status: str = Query(default="all"),
     limit: int = Query(default=50, ge=1, le=200),
-    page_token: str = Query(default=""),            # pagination cursor from Firebase Auth
+    page_token: str = Query(default=""),
 ) -> dict[str, Any]:
     try:
         uid, _email, claims = require_user(authorization)
@@ -2076,21 +2221,16 @@ def admin_list_users(
         tier_norm = (tier or "all").strip().lower()
         status_norm = (status or "all").strip().lower()
 
-        # ✅ Some SDKs don't like empty string page_token
         pt = page_token or None
-
-        # Firebase Auth list_users pagination
         page = admin_auth.list_users(page_token=pt, max_results=limit)
 
         results = []
 
         for u in page.users:
-            # Auth fields
             auth_uid = u.uid
             auth_email = u.email or ""
             display_name = (u.display_name or "").strip()
 
-            # Signup date from Auth (milliseconds since epoch)
             created_iso = None
             try:
                 ms = u.user_metadata.creation_timestamp
@@ -2099,7 +2239,6 @@ def admin_list_users(
             except Exception:
                 created_iso = None
 
-            # Firestore profile (optional)
             prof = {}
             try:
                 snap = db.collection("users").document(auth_uid).get()
@@ -2111,7 +2250,6 @@ def admin_list_users(
             first = (prof.get("firstName") or "").strip()
             last = (prof.get("lastName") or "").strip()
 
-            # Fallback: split displayName if first/last missing
             if (not first and not last) and display_name:
                 parts = display_name.split()
                 if len(parts) >= 2:
@@ -2120,50 +2258,49 @@ def admin_list_users(
                 else:
                     first = first or display_name
 
-            # ✅ Prefer tier/status from your canonical helper (reads prof["stripe"].tier/status)
             tier_for_caps, stripe_status_from_helper = get_tier_and_status(prof)
 
-            # For display/filtering: try stripe.tier first, then fallback
-            stripe_obj = (prof.get("stripe") or {})
+            stripe_obj = prof.get("stripe") or {}
             requested_tier = (stripe_obj.get("requestedTier") or "").strip()
             customer_id = (stripe_obj.get("customerId") or "").strip()
 
-
-            user_tier = (stripe_obj.get("tier") or stripe_obj.get("requestedTier") or prof.get("tier") or "-")
+            user_tier = stripe_obj.get("tier") or stripe_obj.get("requestedTier") or prof.get("tier") or "-"
             user_tier = str(user_tier).strip() or "-"
 
-            stripe_status = (stripe_obj.get("status") or stripe_status_from_helper or "inactive")
+            stripe_status = stripe_obj.get("status") or stripe_status_from_helper or "inactive"
             stripe_status = str(stripe_status).strip().lower()
 
-            # ✅ Usage + cap from your real system (usage/{uid} + tier caps)
             usage_info = peek_usage(db, auth_uid, tier_for_caps)
             used = int(usage_info.get("used") or 0)
             cap = int(usage_info.get("cap") or 0)
             remaining = int(usage_info.get("remaining") or max(0, cap - used))
             usage_pct = 0 if cap <= 0 else round((used / cap) * 100)
 
-                        # ✅ Video usage (stored on users/{uid})
-            VIDEO_CAPS = {"early_access": 3, "pro_monthly": 15, "business_monthly": 50}
-            month_key = utc_month_key()
+            VIDEO_CAPS = {
+                "early_access": 3,
+                "pro_monthly": 15,
+                "business_monthly": 50,
+            }
+
+            usage_period = get_usage_period(prof)
+            period_key = usage_period["periodKey"]
 
             video_cap = int(VIDEO_CAPS.get(tier_for_caps) or 0)
-
             video_used = int(prof.get("video_used") or 0)
-            video_month_key = prof.get("video_month_key")
+            video_current_period = prof.get("video_period_key") or prof.get("video_month_key")
 
-            if video_month_key != month_key:
+            if video_current_period != period_key:
                 video_used = 0
 
             video_remaining = max(0, video_cap - video_used) if video_cap else 0
             video_usage_pct = 0 if video_cap <= 0 else round((video_used / video_cap) * 100)
 
-            # Filters
             if tier_norm != "all" and user_tier.lower() != tier_norm:
                 continue
+
             if status_norm != "all" and stripe_status.lower() != status_norm:
                 continue
 
-            # Search across merged fields
             if q_norm:
                 hay = f"{first} {last} {auth_email} {display_name}".lower()
                 if q_norm not in hay:
@@ -2174,24 +2311,21 @@ def admin_list_users(
                 "firstName": first,
                 "lastName": last,
                 "email": auth_email,
-                "createdAt": created_iso,          # Auth creation timestamp
+                "createdAt": created_iso,
 
                 "tier": user_tier,
-                "requestedTier": requested_tier,   # ✅ included for admin tier-request UI
+                "requestedTier": requested_tier,
                 "stripeStatus": stripe_status,
                 "customerId": customer_id,
 
-                # ✅ fields for UI usage display + highlighting
                 "used": used,
                 "cap": cap,
                 "remaining": remaining,
                 "usagePct": usage_pct,
-
-                # ✅ backwards compatibility
                 "monthlyUsage": used,
 
                 "hasProfile": bool(prof),
-                
+
                 "videoUsed": video_used,
                 "videoCap": video_cap,
                 "videoRemaining": video_remaining,
@@ -2207,10 +2341,6 @@ def admin_list_users(
         print("ADMIN USERS ERROR:", repr(e))
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": str(e)})
-    
-
-from fastapi import Header, HTTPException, Query
-from google.cloud import firestore as gc_firestore
 
 @app.post("/admin/users/{target_uid}/usage/grant")
 def admin_grant_usage_credits(
@@ -2223,7 +2353,13 @@ def admin_grant_usage_credits(
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    month = utc_month_key()
+
+    target_snap = db.collection("users").document(target_uid).get()
+    target_doc = target_snap.to_dict() or {}
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
+
     usage_ref = db.collection("usage").document(target_uid)
 
     @gc_firestore.transactional
@@ -2231,21 +2367,35 @@ def admin_grant_usage_credits(
         snap = usage_ref.get(transaction=transaction)
         data = snap.to_dict() or {}
 
-        current_month = data.get("month")
+        current_period = data.get("periodKey") or data.get("month")
         used = int(data.get("used") or 0)
 
-        if current_month != month:
+        if current_period != period_key:
             used = 0
 
-        # Grant credits = reduce used count
         new_used = max(0, used - credits)
 
         transaction.set(
             usage_ref,
-            {"month": month, "used": new_used, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+            {
+                "periodKey": period_key,
+                "periodStart": usage_period.get("periodStart"),
+                "periodEnd": usage_period.get("periodEnd"),
+                "periodSource": usage_period.get("periodSource"),
+                "month": usage_period.get("month"),
+                "used": new_used,
+                "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+            },
             merge=True,
         )
-        return {"ok": True, "uid": target_uid, "month": month, "used": new_used, "granted": credits}
+
+        return {
+            "ok": True,
+            "uid": target_uid,
+            "used": new_used,
+            "granted": credits,
+            **usage_period,
+        }
 
     tx = db.transaction()
     return _tx(tx)
@@ -2260,14 +2410,34 @@ def admin_reset_usage(
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    month = utc_month_key()
+
+    target_snap = db.collection("users").document(target_uid).get()
+    target_doc = target_snap.to_dict() or {}
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
+
     usage_ref = db.collection("usage").document(target_uid)
 
     usage_ref.set(
-        {"month": month, "used": 0, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+        {
+            "periodKey": period_key,
+            "periodStart": usage_period.get("periodStart"),
+            "periodEnd": usage_period.get("periodEnd"),
+            "periodSource": usage_period.get("periodSource"),
+            "month": usage_period.get("month"),
+            "used": 0,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        },
         merge=True,
     )
-    return {"ok": True, "uid": target_uid, "month": month, "used": 0}
+
+    return {
+        "ok": True,
+        "uid": target_uid,
+        "used": 0,
+        **usage_period,
+    }
 
 @app.post("/admin/users/{target_uid}/tier/request")
 def admin_request_tier_change(
@@ -2328,34 +2498,35 @@ def get_video_usage(authorization: str | None = Header(default=None)):
 
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
+
+    user_doc = ensure_stripe_period_for_user(db, uid, user_doc)
+
     tier, _status = get_tier_and_status(user_doc)
 
-    # Match your video caps
     VIDEO_CAPS = {
         "early_access": 3,
         "pro_monthly": 15,
         "business_monthly": 50,
     }
 
-    # Month key uses the same helper as image usage
-    month_key = utc_month_key()
+    usage_period = get_usage_period(user_doc)
+    period_key = usage_period["periodKey"]
 
     video_used = int(user_doc.get("video_used", 0) or 0)
-    video_month_key = user_doc.get("video_month_key")
+    video_current_period = user_doc.get("video_period_key") or user_doc.get("video_month_key")
 
-    # Reset for a new month
-    if video_month_key != month_key:
+    if video_current_period != period_key:
         video_used = 0
 
     cap = VIDEO_CAPS.get(tier, 0)
     remaining = max(0, int(cap) - int(video_used)) if cap else 0
 
     return {
-        "month": month_key,
+        **usage_period,
         "used": video_used,
         "cap": cap,
         "remaining": remaining,
-        "enabled": tier in VIDEO_CAPS,  # handy for UI
+        "enabled": tier in VIDEO_CAPS,
         "tier": tier,
     }
 
@@ -2370,8 +2541,13 @@ def admin_grant_video_credits(
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    month = utc_month_key()
     user_ref = db.collection("users").document(target_uid)
+
+    target_snap = user_ref.get()
+    target_doc = target_snap.to_dict() or {}
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
 
     @gc_firestore.transactional
     def _tx(transaction: gc_firestore.Transaction):
@@ -2379,20 +2555,34 @@ def admin_grant_video_credits(
         doc = snap.to_dict() or {}
 
         used = int(doc.get("video_used") or 0)
-        month_key = doc.get("video_month_key")
+        current_period = doc.get("video_period_key") or doc.get("video_month_key")
 
-        if month_key != month:
+        if current_period != period_key:
             used = 0
 
-        # Grant credits = reduce used count
         new_used = max(0, used - credits)
 
         transaction.set(
             user_ref,
-            {"video_used": new_used, "video_month_key": month, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+            {
+                "video_used": new_used,
+                "video_period_key": period_key,
+                "video_period_start": usage_period.get("periodStart"),
+                "video_period_end": usage_period.get("periodEnd"),
+                "video_period_source": usage_period.get("periodSource"),
+                "video_month_key": usage_period.get("month"),
+                "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+            },
             merge=True,
         )
-        return {"ok": True, "uid": target_uid, "month": month, "video_used": new_used, "granted": credits}
+
+        return {
+            "ok": True,
+            "uid": target_uid,
+            "video_used": new_used,
+            "granted": credits,
+            **usage_period,
+        }
 
     tx = db.transaction()
     return _tx(tx)
@@ -2408,14 +2598,33 @@ def admin_reset_video_usage(
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    month = utc_month_key()
     user_ref = db.collection("users").document(target_uid)
 
+    target_snap = user_ref.get()
+    target_doc = target_snap.to_dict() or {}
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
+
     user_ref.set(
-        {"video_used": 0, "video_month_key": month, "updatedAt": gc_firestore.SERVER_TIMESTAMP},
+        {
+            "video_used": 0,
+            "video_period_key": period_key,
+            "video_period_start": usage_period.get("periodStart"),
+            "video_period_end": usage_period.get("periodEnd"),
+            "video_period_source": usage_period.get("periodSource"),
+            "video_month_key": usage_period.get("month"),
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        },
         merge=True,
     )
-    return {"ok": True, "uid": target_uid, "month": month, "video_used": 0}
+
+    return {
+        "ok": True,
+        "uid": target_uid,
+        "video_used": 0,
+        **usage_period,
+    }
 
 @app.get("/download-image/{job_id}")
 async def download_image(
@@ -2790,6 +2999,7 @@ async def winners_profile(
         "count": len(winners),
         "profile": profile,
     }
+
 
 
 # ---------------- Stripe routes ----------------

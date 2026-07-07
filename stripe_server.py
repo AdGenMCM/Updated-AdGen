@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 
 import stripe
 
-import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import firestore
+from auth_helpers import get_db
 
 
 stripe_router = APIRouter()
@@ -23,7 +23,7 @@ WEBHOOK_SECRET: Optional[str] = None
 FRONTEND_URL: str = "http://localhost:3000"
 FIREBASE_SA_PATH: Optional[str] = None
 
-PRICE_MAP: Dict[str, str] = {}  # e.g. {"trial_monthly":"price_...", ...}
+PRICE_MAP: Dict[str, str] = {}
 
 
 def _load_settings_from_env() -> None:
@@ -32,7 +32,7 @@ def _load_settings_from_env() -> None:
     load_dotenv(override=True)
 
     STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
-    WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()  # live webhook secret
+    WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
     FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:3000").rstrip("/")
     FIREBASE_SA_PATH = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
 
@@ -61,25 +61,12 @@ def _load_settings_from_env() -> None:
 _load_settings_from_env()
 
 
-# ---------------- Firebase init ----------------
-def init_firebase_once() -> None:
-    try:
-        firebase_admin.get_app()
-    except ValueError:
-        cred = credentials.Certificate(FIREBASE_SA_PATH)
-        firebase_admin.initialize_app(cred)
-
-
-def get_db():
-    init_firebase_once()
-    return firestore.client()
-
 
 # ---------------- Models ----------------
 class CheckoutPayload(BaseModel):
     uid: str
     email: Optional[str] = None
-    tier: str  # trial_monthly | early_access | starter_monthly | pro_monthly | business_monthly
+    tier: str
 
 
 class PortalPayload(BaseModel):
@@ -94,6 +81,41 @@ def price_id_to_tier(price_id: Optional[str]) -> Optional[str]:
         if pid == price_id:
             return tier
     return None
+
+
+def extract_subscription_period(subscription: Dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """
+    Stripe may return billing period fields either on the subscription itself
+    or on the first subscription item depending on API/version shape.
+    """
+    if not subscription:
+        return None, None
+
+    period_start = subscription.get("current_period_start")
+    period_end = subscription.get("current_period_end")
+
+    items = (subscription.get("items") or {}).get("data") or []
+
+    if items:
+        first_item = items[0] or {}
+
+        if not period_start:
+            period_start = first_item.get("current_period_start")
+
+        if not period_end:
+            period_end = first_item.get("current_period_end")
+
+    try:
+        period_start = int(period_start) if period_start else None
+    except Exception:
+        period_start = None
+
+    try:
+        period_end = int(period_end) if period_end else None
+    except Exception:
+        period_end = None
+
+    return period_start, period_end
 
 
 # ---------------- Routes ----------------
@@ -117,7 +139,6 @@ def create_checkout_session(body: CheckoutPayload):
         price_id = PRICE_MAP[body.tier]
         db = get_db()
 
-        # 1) Fetch existing Stripe customer for this uid (if any)
         user_ref = db.collection("users").document(body.uid)
         user_data = user_ref.get().to_dict() or {}
         stripe_info = user_data.get("stripe") or {}
@@ -130,14 +151,13 @@ def create_checkout_session(body: CheckoutPayload):
             )
             customer_id = customer.id
 
-        # 2) Reverse index + pending status
         db.collection("stripe_customers").document(customer_id).set({"uid": body.uid}, merge=True)
+
         user_ref.set(
             {"stripe": {"customerId": customer_id, "status": "pending", "requestedTier": body.tier}},
             merge=True,
         )
 
-        # 3) Checkout session
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer_id,
@@ -177,7 +197,7 @@ async def stripe_webhook(request: Request):
     Handles Stripe events and writes users/{uid}.stripe:
       - status, tier, priceId
       - subscriptionId
-      - currentPeriodStart/currentPeriodEnd  ✅ for billing-cycle caps
+      - currentPeriodStart/currentPeriodEnd
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -186,7 +206,6 @@ async def stripe_webhook(request: Request):
         if WEBHOOK_SECRET:
             event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
         else:
-            # local dev only
             event = json.loads(payload.decode("utf-8"))
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Webhook error: {e}"})
@@ -214,6 +233,9 @@ async def stripe_webhook(request: Request):
             sub_id = obj.get("subscription")
             status = "active"
 
+            # Checkout event may not include expanded subscription.
+            # sync-subscription handles the full repair after return.
+
         elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
@@ -225,18 +247,16 @@ async def stripe_webhook(request: Request):
                 price_id = items[0]["price"].get("id")
                 tier = price_id_to_tier(price_id)
 
-            # ✅ Stripe billing cycle boundaries
-            period_start = obj.get("current_period_start")
-            period_end = obj.get("current_period_end")
+            period_start, period_end = extract_subscription_period(obj)
 
-        else:  # deleted
+        else:
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
             status = "inactive"
 
         if customer_id:
-            # resolve uid from reverse index or customer metadata
             uid = None
+
             m = db.collection("stripe_customers").document(customer_id).get()
             if m.exists:
                 uid = (m.to_dict() or {}).get("uid")
@@ -259,6 +279,7 @@ async def stripe_webhook(request: Request):
                         "updatedAt": firestore.SERVER_TIMESTAMP,
                     }
                 }
+
                 if price_id:
                     update["stripe"]["priceId"] = price_id
                 if tier:
@@ -281,7 +302,7 @@ def sync_subscription(
 ):
     """
     Repairs subscription state after checkout.
-    Writes tier/priceId + currentPeriodStart/End ✅
+    Writes tier/priceId + currentPeriodStart/End.
     """
     try:
         db = get_db()
@@ -298,6 +319,7 @@ def sync_subscription(
 
         if session_id:
             session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+
             resolved_customer = session.get("customer")
             subscription = session.get("subscription") or {}
 
@@ -311,19 +333,25 @@ def sync_subscription(
                 resolved_price_id = items[0]["price"].get("id")
                 resolved_tier = price_id_to_tier(resolved_price_id)
 
-            resolved_period_start = subscription.get("current_period_start")
-            resolved_period_end = subscription.get("current_period_end")
+            resolved_period_start, resolved_period_end = extract_subscription_period(subscription)
 
             active_like = {"active", "trialing", "past_due"}
             status = "active" if (
-                resolved_sub_status in active_like or
-                (resolved_session_status == "complete" and resolved_payment_status == "paid")
+                resolved_sub_status in active_like
+                or (resolved_session_status == "complete" and resolved_payment_status == "paid")
             ) else "pending"
 
         elif customer_id:
-            subs = stripe.Subscription.list(customer=customer_id, status="all", limit=1)
+            subs = stripe.Subscription.list(
+                customer=customer_id,
+                status="all",
+                limit=1,
+                expand=["data.items"],
+            )
+
             if subs.data:
                 latest = subs.data[0]
+
                 resolved_customer = latest.get("customer")
                 resolved_sub_id = latest.get("id")
                 resolved_sub_status = latest.get("status")
@@ -333,10 +361,9 @@ def sync_subscription(
                     resolved_price_id = items[0]["price"].get("id")
                     resolved_tier = price_id_to_tier(resolved_price_id)
 
-                resolved_period_start = latest.get("current_period_start")
-                resolved_period_end = latest.get("current_period_end")
+                resolved_period_start, resolved_period_end = extract_subscription_period(latest)
 
-            status = "active" if (resolved_sub_status in {"active", "trialing", "past_due"}) else "pending"
+            status = "active" if resolved_sub_status in {"active", "trialing", "past_due"} else "pending"
 
         else:
             raise HTTPException(status_code=400, detail="Provide session_id (cs_...) or customer_id (cus_...).")
@@ -350,6 +377,7 @@ def sync_subscription(
             "status": status,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         }
+
         if resolved_price_id:
             stripe_update["priceId"] = resolved_price_id
         if resolved_tier:
@@ -359,7 +387,14 @@ def sync_subscription(
         if resolved_period_end:
             stripe_update["currentPeriodEnd"] = int(resolved_period_end)
 
-        db.collection("users").document(uid).set({"stripe": stripe_update}, merge=True)
+        user_ref = db.collection("users").document(uid)
+
+        user_ref.set({"stripe": stripe_update}, merge=True)
+
+        saved = user_ref.get().to_dict() or {}
+        print("\n===== AFTER SYNC WRITE =====")
+        print(saved)
+        print("============================\n")
 
         return {
             "ok": True,
