@@ -277,6 +277,7 @@ class StartImageVideoRequest(BaseModel):
     duration: Literal[6, 10]
     ratio: VideoRatio = "720:1280"
     promptText: str = Field(min_length=1, max_length=1000)
+    useBrandKit: bool = True
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
@@ -302,6 +303,7 @@ class StartPromptVideoRequest(BaseModel):
     ratio: VideoRatio = "720:1280"
 
     userPrompt: Optional[str] = Field(default=None, max_length=1000)
+    useBrandKit: bool = True
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
 
     # ✅ prompt/video default model (separate from image)
@@ -358,6 +360,10 @@ def build_brand_kit_video_context(brand_kit: dict | None) -> str:
     add("Secondary color", colors.get("secondary"))
     add("Accent color", colors.get("accent"))
 
+    add("Headline font", fonts.get("headline"))
+    add("Body font", fonts.get("body"))
+    add("CTA font", fonts.get("cta"))
+
     add("Brand voice", brand_kit.get("voice"))
     add("Default CTA", brand_kit.get("preferredCta"))
     add("Default platform", brand_kit.get("preferredPlatform"))
@@ -373,10 +379,24 @@ def build_brand_kit_video_context(brand_kit: dict | None) -> str:
         return ""
 
     return (
-        "Brand Kit guidance:\n"
+        "==================================================\n"
+        "BRAND KIT\n"
+        "==================================================\n\n"
+        "The following Brand Kit represents the company's established visual identity.\n\n"
         + "\n".join(lines)
-        + "\nUse this as creative direction for the video. "
-        "Do not force a logo into the scene. If branding appears naturally, keep it tasteful and subtle."
+        + "\n\n"
+        "Apply these Brand Kit details only when they are present.\n\n"
+        "Creative Guidelines:\n"
+        "• Treat the Brand Kit as the established brand identity.\n"
+        "• Preserve the overall look, feel, and personality of the brand.\n"
+        "• Use supplied brand colors naturally throughout the video when appropriate (lighting, wardrobe, environments, packaging, graphics, end cards, accents, etc.).\n"
+        "• If fonts are provided and on-screen text appears, use those fonts or the closest visual match.\n"
+        "• Maintain consistent brand voice and messaging.\n"
+        "• Follow any compliance rules and creative restrictions.\n"
+        "• Apply 'Do' and 'Don't' lists whenever relevant.\n"
+        "• If a logo appears naturally, preserve it accurately and keep it subtle.\n"
+        "• Never force a logo into every shot.\n"
+        "• Ignore any Brand Kit fields that are blank or not provided.\n"
     )
 
 def build_video_priority_context() -> str:
@@ -493,7 +513,7 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
 
     db = get_db()
     user_doc = (db.collection("users").document(uid).get().to_dict() or {})
-    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit = (user_doc.get("brandKit") or {}) if req.useBrandKit else {}
     brand_kit_context = build_brand_kit_video_context(brand_kit)
 
     if not admin:
@@ -606,7 +626,7 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
 
     db = get_db()
     user_doc = (db.collection("users").document(uid).get().to_dict() or {})
-    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit = (user_doc.get("brandKit") or {}) if req.useBrandKit else {}
     brand_kit_context = build_brand_kit_video_context(brand_kit)
 
     if not admin:

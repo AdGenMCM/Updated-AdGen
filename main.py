@@ -192,20 +192,54 @@ def generate_gpt_image_bytes(
     prompt: str,
     size: str = "1024x1024",
     input_image_url: str | None = None,
+    input_image_urls: Optional[List[str]] = None,
 ) -> bytes:
     allowed_sizes = {"1024x1024", "1024x1792", "1792x1024"}
     safe_size = size if size in allowed_sizes else "1024x1024"
     model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
 
-    # If Brand Kit logo exists, use it as an input/reference image.
+    image_urls = []
+
     if input_image_url:
+        image_urls.append(input_image_url)
+
+    if input_image_urls:
+        image_urls.extend([
+            u for u in input_image_urls
+            if isinstance(u, str) and u.startswith("http")
+        ])
+
+    image_urls = image_urls[:4]  # logo + max 3 references
+
+    def download_image_tuple(url: str, idx: int):
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+
+        content_type = (r.headers.get("content-type") or "image/png").split(";")[0].lower()
+
+        if content_type == "image/jpg":
+            content_type = "image/jpeg"
+
+        if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise RuntimeError(f"Unsupported reference image type: {content_type}")
+
+        ext = {
+            "image/png": "png",
+            "image/jpeg": "jpg",
+            "image/webp": "webp",
+        }[content_type]
+
+        return (f"reference_{idx}.{ext}", r.content, content_type)
+
+    if image_urls:
+        image_files = [
+            download_image_tuple(url, idx)
+            for idx, url in enumerate(image_urls)
+        ]
+
         result = client.images.edit(
             model=model,
-            images=[
-                {
-                    "image_url": input_image_url
-                }
-            ],
+            image=image_files if len(image_files) > 1 else image_files[0],
             prompt=prompt,
             size=safe_size,
             quality="medium",
@@ -226,17 +260,23 @@ def generate_gpt_image_bytes(
 
 # ---------------- Models ----------------
 class AdRequest(BaseModel):
+    companyName: Optional[str] = None
     product_name: str
     description: str
     audience: str
     tone: str
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
+    useBrandKit: bool = True
 
     offer: Optional[str] = None
     goal: Optional[str] = None
     stylePreset: Optional[str] = None
     productType: Optional[str] = None
+
+    campaignObjective: Optional[str] = None
+    referenceImageUrls: Optional[List[str]] = None
+    referenceImageMode: Optional[str] = "product_reference"
 
     # Legacy winners text (keep)
     winnerGuidance: Optional[str] = None
@@ -260,7 +300,17 @@ class GenerateFromOptimizerRequest(BaseModel):
     improved_cta: str
     improved_image_prompt: str
     imageSize: str = "1024x1024"
+    useBrandKit: bool = True
     creative_image_urls: Optional[List[str]] = None
+    companyName: Optional[str] = None
+    product_name: Optional[str] = None
+    productName: Optional[str] = None
+    description: Optional[str] = None
+    productType: Optional[str] = None
+    stylePreset: Optional[str] = None
+    tone: Optional[str] = None
+    goal: Optional[str] = None
+    platform: Optional[str] = None
 
 class PerformanceUpdate(BaseModel):
     ctr: Optional[float] = None
@@ -493,13 +543,17 @@ def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     colors = brand_kit.get("colors") or {}
     fonts = brand_kit.get("fonts") or {}
 
-    lines = []
+    active_lines = []
+    disabled_lines = []
 
     def add(label, value):
         value = value.strip() if isinstance(value, str) else value
         if value:
-            lines.append(f"{label}: {value}")
+            active_lines.append(f"✓ {label}: {value}")
+        else:
+            disabled_lines.append(f"• {label}")
 
+    # Identity
     add("Brand name", brand_kit.get("brandName"))
     add("Website", brand_kit.get("websiteUrl"))
     add("Industry", brand_kit.get("industry"))
@@ -507,20 +561,24 @@ def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     add("Target audience", brand_kit.get("targetAudience"))
     add("Brand DNA", brand_kit.get("brandDna"))
 
+    # Visual identity
+    add("Logo", brand_kit.get("logoUrl"))
     add("Primary color", colors.get("primary"))
     add("Secondary color", colors.get("secondary"))
     add("Accent color", colors.get("accent"))
-
     add("Headline font", fonts.get("headline"))
     add("Body font", fonts.get("body"))
     add("CTA font", fonts.get("cta"))
 
-    add("Default CTA", brand_kit.get("preferredCta"))
-    add("Default platform", brand_kit.get("preferredPlatform"))
-    add("Default image style", brand_kit.get("imageStyle"))
+    # Defaults / strategy
+    add("Brand voice", brand_kit.get("voice"))
+    add("Preferred CTA", brand_kit.get("preferredCta"))
+    add("Preferred platform", brand_kit.get("preferredPlatform"))
+    add("Preferred image style", brand_kit.get("imageStyle"))
+    add("Preferred aspect ratio", brand_kit.get("aspectRatioPreference"))
     add("Offer style", brand_kit.get("offerStyle"))
 
-    add("Brand voice", brand_kit.get("voice"))
+    # Rules
     add("Extra instructions", brand_kit.get("notes"))
     add("Do list", brand_kit.get("doList"))
     add("Don't list", brand_kit.get("dontList"))
@@ -529,15 +587,32 @@ def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     add("Compliance rules", brand_kit.get("complianceRules"))
     add("Products/services notes", brand_kit.get("productsServices"))
 
-    if not lines:
+    if not active_lines:
         return ""
 
-    return (
-        "BRAND KIT CONTEXT:\n"
-        + "\n".join(lines)
-        + "\n\nUse this Brand Kit as creative guidance. Do not mention the Brand Kit to the user. "
-        "Only apply fields that are relevant to the ad being generated."
-    )
+    disabled_preview = "\n".join(disabled_lines[:12]) if disabled_lines else "None"
+
+    return f"""
+==================================================
+ESTABLISHED BRAND IDENTITY
+==================================================
+
+Active Brand Kit Fields:
+{chr(10).join(active_lines)}
+
+Disabled / Blank Brand Kit Fields:
+{disabled_preview}
+
+Brand Kit Usage Rules:
+
+• Treat active Brand Kit fields as the established brand identity.
+• Only apply fields listed under Active Brand Kit Fields.
+• Completely ignore disabled or blank fields.
+• Do not invent missing colors, fonts, logo details, or brand rules.
+• Use supplied colors for accents, CTA buttons, badges, highlights, backgrounds, and supporting design elements when appropriate.
+• Use supplied fonts or close visual matches for headline, body, and CTA typography.
+• Preserve brand voice, personality, audience, compliance rules, and creative restrictions when provided.
+""".strip()
 
 # ---------------- Library Performance ----------------
 def _safe_num(x):
@@ -947,6 +1022,51 @@ async def upload_brand_logo(
 
     return {"logoUrl": logo_url}
 
+@app.post("/upload-reference-images")
+async def upload_reference_images(
+    files: List[UploadFile] = File(...),
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, _claims = require_user(authorization)
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    if len(files) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 reference images allowed.")
+
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    urls: List[str] = []
+
+    for f in files[:3]:
+        ct = (f.content_type or "").lower().strip()
+
+        if ct not in allowed_types:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}")
+
+        data = await f.read()
+
+        if not data:
+            continue
+
+        if len(data) > 8 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Reference image too large. Max 8MB per image.")
+
+        url = upload_bytes_to_firebase_storage(
+            data,
+            uid,
+            content_type=ct,
+            folder="reference_images",
+            filename_hint=f.filename or "reference-image",
+        )
+
+        urls.append(url)
+
+    if not urls:
+        raise HTTPException(status_code=400, detail="No valid images uploaded.")
+
+    return {"urls": urls}
+
 # ---------------- Generate Ad ----------------
 @app.post("/generate-ad")
 async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
@@ -956,7 +1076,7 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -992,6 +1112,7 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     if not product_name:
         raise HTTPException(status_code=400, detail="product_name is required.")
 
+    company_name = (payload.companyName or "").strip()[:80]
     description = (payload.description or "").strip()[:800]
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
@@ -1000,6 +1121,9 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
     goal = (payload.goal or "Sales").strip()[:30]
     style = (payload.stylePreset or "Minimal").strip()[:30]
     product_type = (payload.productType or "").strip()[:40] or None
+    campaign_objective = (payload.campaignObjective or "Auto").strip()[:80]
+    reference_image_urls = (payload.referenceImageUrls or [])[:3]
+    reference_image_mode = (payload.referenceImageMode or "product_reference").strip()[:40]
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
@@ -1089,7 +1213,10 @@ The final result should look like it was created by an experienced marketing des
 CREATIVE BRIEF
 ==================================================
 
-Brand:
+Company:
+{company_name or brand_kit.get("brandName") or product_name}
+
+Product:
 {product_name}
 
 Product Description:
@@ -1103,6 +1230,9 @@ Platform:
 
 Campaign Goal:
 {goal}
+
+Campaign Objective:
+{campaign_objective}
 
 Offer:
 {offer or "No promotional offer"}
@@ -1142,7 +1272,41 @@ BRAND KIT
 
 {brand_kit_context}
 
-If a logo reference image is provided, use it as the brand logo reference. Preserve the logo identity as accurately as possible and place it tastefully in the advertisement only when it improves the design.
+When Brand Kit information is provided:
+
+• Treat the Brand Kit as the established visual identity.
+• Use the supplied brand colors throughout the advertisement whenever appropriate.
+• The primary color should be the dominant accent color.
+• The secondary color should support the design.
+• The accent color should be used for buttons, highlights, badges, or supporting elements.
+• Keep the overall advertisement visually consistent with the Brand Kit.
+• Do not ignore supplied brand colors unless the user specifically requests a different style.
+
+When Brand Kit fonts are provided:
+
+• Use the specified headline font style for major headlines.
+• Use the specified body font style for supporting text.
+• Use the CTA font style for buttons.
+• If the exact font is unavailable, closely match its visual appearance.
+
+If a logo reference image is provided:
+
+• Preserve the logo design as accurately as possible.
+• Scale it naturally for the composition.
+• Keep the logo sharp and legible.
+• Never stretch, crop, recolor, or distort the logo.
+• Place the logo where a professional advertising designer would (for example on product packaging, in the upper corner, or as subtle brand identification).
+• The logo should reinforce the advertisement, not dominate it.
+• Unless specifically requested, the logo should occupy less than 10% of the overall advertisement.
+
+If reference images are provided, use them as visual guidance.
+
+Reference image mode:
+{reference_image_mode}
+
+If reference mode is product_reference, preserve the product, packaging, app screen, or object identity from the uploaded references as closely as possible.
+
+If reference mode is style_inspiration, use the references only for composition, mood, lighting, framing, and design inspiration. Do not copy the reference image directly.
 
 {winners_section}
 
@@ -1166,7 +1330,16 @@ The design should include:
 • Elegant spacing
 • Strong visual hierarchy
 • Professional marketing typography
-• A tasteful CTA button
+• CTA BUTTON
+    - Include one professionally designed call-to-action button.
+    - The button should:
+        • Be visually prominent without overpowering the design.
+        • Use strong contrast against the background.
+        • Have premium rounded corners.
+        • Include clean, readable typography.
+        • Feel modern and professionally designed.
+        • Match the Brand Kit colors when available.
+        • Position naturally near the bottom of the advertisement.
 • One clear headline
 • One supporting line if needed
 • One offer badge if appropriate
@@ -1300,6 +1473,7 @@ It should be visually impressive enough to appear in a professional design portf
                     prompt=visual_prompt,
                     size=payload.imageSize or "1024x1024",
                     input_image_url=brand_kit.get("logoUrl"),
+                    input_image_urls=reference_image_urls,
                 )
             )
             return upload_png_to_firebase_storage(img_bytes, uid)
@@ -1325,6 +1499,14 @@ It should be visually impressive enough to appear in a professional design portf
             "stylePreset": style,
             "productType": product_type,
             "aspectRatio": aspect_ratio,
+            "campaignObjective": campaign_objective,
+            "referenceImageUrls": reference_image_urls,
+            "referenceImageMode": reference_image_mode,
+            "referenceImageCount": len(reference_image_urls),
+            "useBrandKit": payload.useBrandKit,
+            "brandKitUsed": bool(brand_kit_context),
+            "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+            "useMyWinners": bool(winner_profile),
             "visualPrompt": visual_prompt,
             "imageUrl": image_url,
             "copy": copy_obj,
@@ -1374,7 +1556,7 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -1462,11 +1644,16 @@ offer: {offer or "N/A"}
 audience_temp: {payload.audience_temp}
 notes: {payload.notes or ""}
 
-==================================================
-ESTABLISHED BRAND IDENTITY
-==================================================
 
 {brand_kit_context}
+When Brand Kit information is provided:
+
+• Treat it as the established visual identity.
+• Only use colors, fonts, logo, voice, and rules that are present.
+• If colors or fonts are blank, ignore them completely.
+• Do not invent missing brand colors or fonts.
+• Use supplied brand colors for accents, CTA buttons, badges, highlights, and supporting design elements.
+• Use supplied fonts or close visual matches for headline, body, and CTA typography.
 
 EXTRA CONTEXT JSON:
 {json.dumps(extra)}
@@ -1555,7 +1742,7 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = user_doc.get("brandKit") or {}
+    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -1794,13 +1981,16 @@ Improve it.
 """.strip()
 
     try:
+        reference_image_urls = (payload.creative_image_urls or [])[:3]
+
         img_bytes = await asyncio.to_thread(
             lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
                 size=payload.imageSize or "1024x1024",
                 input_image_url=brand_kit.get("logoUrl"),
-            )
+                input_image_urls=reference_image_urls,
         )
+    )
 
         image_url = upload_png_to_firebase_storage(img_bytes, uid)
 
@@ -1818,6 +2008,11 @@ Improve it.
                 "stylePreset": style,
                 "productType": product_type,
                 "aspectRatio": aspect_ratio,
+                "referenceImageUrls": reference_image_urls,
+                "referenceImageCount": len(reference_image_urls),
+                "useBrandKit": payload.useBrandKit,
+                "brandKitUsed": bool(brand_kit_context),
+                "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
                 "visualPrompt": visual_prompt,
                 "imageUrl": image_url,
                 "copy": {

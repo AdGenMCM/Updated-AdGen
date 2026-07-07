@@ -109,6 +109,7 @@ export default function VideoAds() {
 
   // ========== Winners guidance (Shared Hook) ==========
   const [useWinners, setUseWinners] = useState(false);
+  const [useBrandKit, setUseBrandKit] = useState(true);
 
   const canUseWinners = useMemo(() => {
     if (me.isAdmin) return true;
@@ -343,6 +344,7 @@ export default function VideoAds() {
       const promptImageUrl = await uploadImageToBackend(imageFile);
 
       const payload = {
+        useBrandKit,
         promptImageUrl,
         promptText,
         duration,
@@ -395,6 +397,7 @@ export default function VideoAds() {
       const token = await getIdToken();
 
       const payload = {
+        useBrandKit,
         productName,
         description,
         offer: offer || null,
@@ -423,6 +426,9 @@ export default function VideoAds() {
 
         // ✅ NEW: winners guidance injected lightly (Pro/Business only)
         winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
+        winnerProfile: (useWinners && canUseWinners) ? (winnersProfile || null) : null,
+        winnersApply: (useWinners && canUseWinners) ? ["tone", "platform", "ratio"] : null,
+        winnersInfluence: (useWinners && canUseWinners) ? 0.6 : null,
       };
 
       const res = await fetch(`${API_BASE}/video/start-prompt`, {
@@ -539,9 +545,18 @@ export default function VideoAds() {
         <div className="loading-text">Generating your video… please wait</div>
       </div>
 
-      <div className="videoAdsHeader">
-        <h1>Video Ads</h1>
-        <p>Create 6s or 10s video ads with optional AI voiceover.</p>
+      <div className="videoAdsHeader videoAdsHero">
+  <h1>Video Ads</h1>
+  <p>
+    Create short-form video ads from a product image or written prompt using your Brand Kit,
+    past winners, format settings, and optional AI voiceover.
+  </p>
+</div>
+
+    <div className="videoTopCard">
+      <div className="videoSectionHeading">
+        <h2>Creation Mode</h2>
+        <p>Choose whether to animate an uploaded image or generate a video from a written prompt.</p>
       </div>
 
       <div className="videoTabs">
@@ -553,6 +568,7 @@ export default function VideoAds() {
         >
           Image → Video
         </button>
+
         <button
           type="button"
           disabled={isGenerating}
@@ -562,8 +578,13 @@ export default function VideoAds() {
           Prompt → Video
         </button>
       </div>
+    </div>
 
       <div className="videoPanel">
+        <div className="videoSectionHeading">
+          <h2>Video Settings</h2>
+          <p>Set the voiceover, duration, and target platform format before generating.</p>
+        </div>
         {/* Shared settings row */}
         <div className="row">
           <label className="checkbox">
@@ -615,37 +636,66 @@ export default function VideoAds() {
           </div>
         </div>
 
-        {/* ✅ NEW: Use my winners (Pro/Business only) */}
-        <div className="box" style={{ marginTop: 14 }}>
-          <div className="row" style={{ alignItems: "center" }}>
-            <label className="checkbox" style={{ marginRight: 12 }}>
-              <input
-                type="checkbox"
-                checked={useWinners}
-                onChange={(e) => setUseWinners(e.target.checked)}
-                disabled={!canUseWinners || isGenerating || winnersLoading}
-              />
-              Use my winners (Pro/Business)
-            </label>
+        {/* ===== AI Enhancements ===== */}
+        <div className="videoAiSection">
+          <div className="videoSectionHeading">
+            <h2>AI Enhancements</h2>
+            <p>Choose which saved intelligence layers AdGen should apply to this video.</p>
+          </div>
 
-            {winnersLoading ? (
-              <div className="hint">Loading winners…</div>
-            ) : (
-              <div className="hint">
-                Adds guidance from your best-performing creatives (no metric text).
-              </div>
-            )}
+          <div className="videoEnhancementGrid">
+            <div className="videoEnhancementCard">
+              <label className="videoToggle">
+                <input
+                  type="checkbox"
+                  checked={useBrandKit}
+                  onChange={(e) => setUseBrandKit(e.target.checked)}
+                  disabled={isGenerating}
+                />
+
+                <span>
+                  <strong>Apply Brand Kit</strong>
+                  <small>Recommended</small>
+                </span>
+              </label>
+
+              <p>
+                Uses your saved logo, colors, fonts, brand voice, audience, messaging,
+                and creative rules to keep videos consistent with your brand.
+              </p>
+            </div>
+
+            <div className="videoEnhancementCard">
+              <label className="videoToggle">
+                <input
+                  type="checkbox"
+                  checked={useWinners}
+                  onChange={(e) => setUseWinners(e.target.checked)}
+                  disabled={!canUseWinners || isGenerating || winnersLoading}
+                />
+
+                <span>
+                  <strong>Apply Winner Profile</strong>
+                  <small>Pro/Business</small>
+                </span>
+              </label>
+
+              <p>
+                Uses patterns from your best-performing videos to guide pacing,
+                scene direction, platform style, and creative choices.
+              </p>
+            </div>
           </div>
 
           {!canUseWinners && (
-            <div className="hint" style={{ marginTop: 6 }}>
-              Available on <strong>Pro & Business</strong>. (Early Access can generate videos, but won’t use winners guidance.)
+            <div className="hint" style={{ marginTop: 10 }}>
+              Winner Profile is available on <strong>Pro &amp; Business</strong>.
             </div>
           )}
 
-          {!!winnerGuidance && useWinners && canUseWinners && (
-            <div className="hint" style={{ marginTop: 8 }}>
-              <strong>Applied guidance:</strong> {winnerGuidance}
+          {useWinners && winnersLoading && (
+            <div className="hint" style={{ marginTop: 10 }}>
+              Loading your winners…
             </div>
           )}
         </div>
@@ -712,6 +762,10 @@ export default function VideoAds() {
 
         {tab === "image" && (
           <>
+          <div className="videoSectionHeading videoModeHeading">
+            <h2>Image to Video</h2>
+            <p>Upload a product, lifestyle, or ad image and describe how it should move.</p>
+          </div>
             <div
               className={`dropzone ${dragOver ? "dragOver" : ""}`}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -771,7 +825,27 @@ export default function VideoAds() {
                 disabled={isGenerating}
               />
             </div>
+              <div className="videoHelperGrid">
+                <div className="videoHelperCard">
+                  <strong>Reference Image</strong>
+                  <p>The uploaded image anchors the product, scene, or visual identity for the video.</p>
+                </div>
 
+                <div className="videoHelperCard">
+                  <strong>Prompt Text</strong>
+                  <p>Controls motion, pacing, camera movement, and how the scene should evolve.</p>
+                </div>
+
+                <div className="videoHelperCard">
+                  <strong>Voiceover</strong>
+                  <p>Optional narration can explain the benefit, offer, or call to action.</p>
+                </div>
+
+                <div className="videoHelperCard">
+                  <strong>Format</strong>
+                  <p>AdGen formats the video for TikTok, Reels, Shorts, YouTube, or Meta placements.</p>
+                </div>
+              </div>
             <button
               className="primary"
               disabled={isGenerating || !canStartImage || scriptTooLong}
@@ -789,6 +863,10 @@ export default function VideoAds() {
 
         {tab === "prompt" && (
           <>
+          <div className="videoSectionHeading videoModeHeading">
+            <h2>Prompt to Video</h2>
+            <p>Describe the product, audience, offer, and creative direction for a generated video ad.</p>
+          </div>
             <div className="grid2">
               <div className="field">
                 <label>Product Name</label>
@@ -911,6 +989,40 @@ export default function VideoAds() {
                 <input value={fullCreativeDirection} onChange={(e) => setFullCreativeDirection(e.target.value)} placeholder="Optional" disabled={isGenerating} />
               </div>
             </div>
+
+            <div className="videoHelperGrid">
+              <div className="videoHelperCard">
+                <strong>Creative Direction</strong>
+                <p>
+                  Describe your product, audience, and desired visual style as clearly as
+                  possible.
+                </p>
+              </div>
+
+              <div className="videoHelperCard">
+                <strong>Brand Consistency</strong>
+                <p>
+                  Enable Brand Kit to apply your saved branding, messaging, and creative
+                  guidelines automatically.
+                </p>
+              </div>
+
+              <div className="videoHelperCard">
+                <strong>Winner Profile</strong>
+                <p>
+                  Use insights from your best-performing videos to guide pacing, scene
+                  selection, and creative style.
+                </p>
+              </div>
+
+              <div className="videoHelperCard">
+                <strong>Voiceover</strong>
+                <p>
+                  Optional AI narration helps reinforce your message and end with a strong
+                  call to action.
+                </p>
+              </div>
+            </div>          
 
             <button
               className="primary"

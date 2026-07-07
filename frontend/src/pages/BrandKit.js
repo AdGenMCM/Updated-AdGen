@@ -40,16 +40,28 @@ const defaultKit = {
   offerStyle: "",
 
   colors: {
-    primary: "#111827",
-    secondary: "#ffffff",
-    accent: "#2563eb",
-  },
+    primary: "",
+    secondary: "",
+    accent: "",
+    },
 
-  fonts: {
-    headline: "Inter",
-    body: "Open Sans",
-    cta: "Poppins",
-  },
+ colorEnabled: {
+    primary: false,
+    secondary: false,
+    accent: false,
+    },
+
+ fonts: {
+  headline: "",
+  body: "",
+  cta: "",
+},
+
+fontEnabled: {
+  headline: false,
+  body: false,
+  cta: false,
+},
 
   voice: "",
   notes: "",
@@ -138,9 +150,9 @@ export default function BrandKit() {
 
   const loadedFontUrl = useMemo(() => {
     return buildGoogleFontUrl([
-      kit.fonts.headline,
-      kit.fonts.body,
-      kit.fonts.cta,
+        kit.fonts.headline || "Inter",
+        kit.fonts.body || "Open Sans",
+        kit.fonts.cta || "Poppins",
     ]);
   }, [kit.fonts]);
 
@@ -165,10 +177,28 @@ export default function BrandKit() {
 
       if (existing) {
         setKit({
-          ...defaultKit,
-          ...existing,
-          colors: { ...defaultKit.colors, ...(existing.colors || {}) },
-          fonts: { ...defaultKit.fonts, ...(existing.fonts || {}) },
+            ...defaultKit,
+            ...existing,
+
+            colors: {
+                ...defaultKit.colors,
+                ...(existing.colors || {}),
+            },
+
+            colorEnabled: {
+                ...defaultKit.colorEnabled,
+                ...(existing.colorEnabled || {}),
+            },
+
+            fonts: {
+                ...defaultKit.fonts,
+                ...(existing.fonts || {}),
+            },
+
+            fontEnabled: {
+                ...defaultKit.fontEnabled,
+                ...(existing.fontEnabled || {}),
+            },
         });
       }
     }
@@ -312,12 +342,32 @@ export default function BrandKit() {
     }
   };
 
-  const FontSelect = ({ label, value, onChange }) => (
-    <div className="brandkit-field">
-      <label>{label}</label>
+  const FontSelect = ({ label, fontKey, fallback, value, onChange }) => {
+  const enabled = !!kit.fontEnabled?.[fontKey];
+  const selectedValue = value || fallback;
+
+  return (
+    <div className="brandkit-field brandkit-font-card">
+      <label className="brandkit-color-toggle">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+
+            updateKit(`fontEnabled.${fontKey}`, checked);
+            updateKit(
+              `fonts.${fontKey}`,
+              checked ? (kit.fonts?.[fontKey] || fallback) : ""
+            );
+          }}
+        />
+        <span>{label}</span>
+      </label>
+
       <Select
         options={fontOptions}
-        value={getSelectValue(value)}
+        value={getSelectValue(selectedValue)}
         onChange={(option) => onChange(option?.value || "")}
         placeholder="Search Google Fonts..."
         classNamePrefix="brandkit-select"
@@ -325,9 +375,15 @@ export default function BrandKit() {
         formatOptionLabel={formatFontOption}
         isSearchable
         openMenuOnFocus
+        isDisabled={!enabled}
       />
+
+      <small className="brandkit-helper-text">
+        {enabled ? selectedValue : "Disabled — this font will not influence AI generation"}
+      </small>
     </div>
   );
+};
 
   return (
     <div className="brandkit-page">
@@ -413,14 +469,25 @@ export default function BrandKit() {
                 </div>
 
                 {kit.logoUrl && (
-                  <button
+                <div className="brandkit-logo-actions">
+                    <button
                     type="button"
                     className="brandkit-small-btn"
                     onClick={() => logoInputRef.current?.click()}
                     disabled={logoUploading}
-                  >
+                    >
                     {logoUploading ? "Uploading..." : "Change Logo"}
-                  </button>
+                    </button>
+
+                    <button
+                    type="button"
+                    className="brandkit-small-btn brandkit-remove-btn"
+                    onClick={() => updateKit("logoUrl", "")}
+                    disabled={logoUploading}
+                    >
+                    Remove Logo
+                    </button>
+                </div>
                 )}
 
                 {logoErr && <p className="brandkit-error">{logoErr}</p>}
@@ -482,39 +549,57 @@ export default function BrandKit() {
             </div>
 
             <div className="brandkit-section">
-              <h2>Colors</h2>
+                <h2>Colors <span className="section-optional">Optional</span></h2>
 
-              <div className="brandkit-color-row">
-                <div className="brandkit-field">
-                  <label>Primary</label>
-                  <input
-                    className="brandkit-color-input"
-                    type="color"
-                    value={kit.colors.primary}
-                    onChange={(e) => updateKit("colors.primary", e.target.value)}
-                  />
-                </div>
+                <p className="brandkit-helper-text">
+                    Enable only the colors you want AdGen to use. Disabled colors will not be injected into AI prompts.
+                </p>
 
-                <div className="brandkit-field">
-                  <label>Secondary</label>
-                  <input
-                    className="brandkit-color-input"
-                    type="color"
-                    value={kit.colors.secondary}
-                    onChange={(e) => updateKit("colors.secondary", e.target.value)}
-                  />
-                </div>
+                <div className="brandkit-color-row">
+                    {[
+                    { key: "primary", label: "Primary", fallback: "#111827" },
+                    { key: "secondary", label: "Secondary", fallback: "#ffffff" },
+                    { key: "accent", label: "Accent", fallback: "#2563eb" },
+                    ].map((color) => {
+                    const enabled = !!kit.colorEnabled?.[color.key];
+                    const value = kit.colors?.[color.key] || color.fallback;
 
-                <div className="brandkit-field">
-                  <label>Accent</label>
-                  <input
-                    className="brandkit-color-input"
-                    type="color"
-                    value={kit.colors.accent}
-                    onChange={(e) => updateKit("colors.accent", e.target.value)}
-                  />
+                    return (
+                        <div className="brandkit-field brandkit-color-card" key={color.key}>
+                        <label className="brandkit-color-toggle">
+                            <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={(e) => {
+                                const checked = e.target.checked;
+
+                                updateKit(`colorEnabled.${color.key}`, checked);
+                                updateKit(
+                                `colors.${color.key}`,
+                                checked
+                                    ? (kit.colors[color.key] || color.fallback)
+                                    : ""
+                                );
+                            }}
+                            />
+                            <span>{color.label}</span>
+                        </label>
+
+                        <input
+                            className="brandkit-color-input"
+                            type="color"
+                            value={value}
+                            disabled={!enabled}
+                            onChange={(e) => updateKit(`colors.${color.key}`, e.target.value)}
+                        />
+
+                        <small className="brandkit-helper-text">
+                            {enabled ? value : "Disabled — this color will not influence AI generation"}
+                        </small>
+                        </div>
+                    );
+                    })}
                 </div>
-              </div>
             </div>
 
             <div className="brandkit-section">
@@ -522,55 +607,65 @@ export default function BrandKit() {
 
               <FontSelect
                 label="Headline Font"
+                fontKey="headline"
+                fallback="Inter"
                 value={kit.fonts.headline}
                 onChange={(value) => updateKit("fonts.headline", value)}
               />
 
               <FontSelect
                 label="Body Font"
+                fontKey="body"
+                fallback="Open Sans"
                 value={kit.fonts.body}
                 onChange={(value) => updateKit("fonts.body", value)}
               />
 
               <FontSelect
                 label="CTA Font"
+                fontKey="cta"
+                fallback="Poppins"
                 value={kit.fonts.cta}
                 onChange={(value) => updateKit("fonts.cta", value)}
               />
 
               <div
                 className="font-preview-card"
-                style={{ borderColor: kit.colors.accent }}
-              >
+                style={{
+                    borderColor: kit.colors.accent || "#2563eb",
+                }}
+            >
                 <span
-                  className="font-preview-label"
-                  style={{ color: kit.colors.accent }}
+                    className="font-preview-label"
+                    style={{
+                        color: kit.colors.accent || "#2563eb",
+                    }}
                 >
                   Quick Preview
                 </span>
                 <h3
-                  style={{
-                    fontFamily: kit.fonts.headline,
-                    color: kit.colors.primary,
-                  }}
+                    style={{
+                        fontFamily: kit.fonts.headline,
+                        color: kit.colors.primary || "#111827",
+                    }}
                 >
                   The perfect ad starts here.
                 </h3>
                 <p
-                  style={{
-                    fontFamily: kit.fonts.body,
-                    color: kit.colors.primary,
-                  }}
+                    style={{
+                        fontFamily: kit.fonts.body,
+                        color: kit.colors.primary || "#111827",
+                    }}
                 >
                   This is how supporting ad copy and brand messaging could appear in your creatives.
                 </p>
                 <button
-                  type="button"
-                  style={{
-                    fontFamily: kit.fonts.cta,
-                    background: kit.colors.accent,
-                    color: kit.colors.secondary,
-                  }}
+                    type="button"
+                    style={{
+                        fontFamily: kit.fonts.cta,
+                        background: kit.colors.accent || "#2563eb",
+                        color: kit.colors.secondary || "#ffffff",
+                    }}
                 >
                   {kit.preferredCta || "CTA Preview"}
                 </button>
@@ -787,12 +882,12 @@ export default function BrandKit() {
             <h2>Brand Preview</h2>
 
             <div
-              className="preview-logo"
-              style={{
-                background: kit.colors.secondary,
-                color: kit.colors.primary,
-                borderColor: kit.colors.accent,
-              }}
+                className="preview-logo"
+                style={{
+                    background: kit.colors.secondary || "#ffffff",
+                    color: kit.colors.primary || "#111827",
+                    borderColor: kit.colors.accent || "#2563eb",
+                }}
             >
               {kit.logoUrl ? (
                 <img
@@ -806,18 +901,30 @@ export default function BrandKit() {
             </div>
 
             <h3
-              style={{
-                fontFamily: kit.fonts.headline,
-                color: kit.colors.primary,
-              }}
+                style={{
+                    fontFamily: kit.fonts.headline,
+                    color: kit.colors.primary || "#111827",
+                }}
             >
               {kit.brandName || "Your Brand"}
             </h3>
 
             <div className="preview-swatches">
-              <div><span style={{ background: kit.colors.primary }} /> Primary</div>
-              <div><span style={{ background: kit.colors.secondary, border: "1px solid #d1d5db" }} /> Secondary</div>
-              <div><span style={{ background: kit.colors.accent }} /> Accent</div>
+                {kit.colors.primary && (
+                    <div><span style={{ background: kit.colors.primary }} /> Primary</div>
+                )}
+
+                {kit.colors.secondary && (
+                    <div><span style={{ background: kit.colors.secondary, border: "1px solid #d1d5db" }} /> Secondary</div>
+                )}
+
+                {kit.colors.accent && (
+                    <div><span style={{ background: kit.colors.accent }} /> Accent</div>
+                )}
+
+                {!kit.colors.primary && !kit.colors.secondary && !kit.colors.accent && (
+                    <p>No brand colors enabled.</p>
+                )}
             </div>
 
             <div className="preview-block">

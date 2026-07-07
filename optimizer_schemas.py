@@ -31,6 +31,8 @@ class OptimizeAdRequest(BaseModel):
     audience_temp: AudienceTemp = "cold"
     notes: Optional[str] = None
 
+    useBrandKit: bool = True
+
     # Extra optimization inputs
     flight_start: Optional[str] = None  # "YYYY-MM-DD"
     flight_end: Optional[str] = None    # "YYYY-MM-DD"

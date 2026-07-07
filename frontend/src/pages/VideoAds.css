@@ -446,3 +446,159 @@
 .videoAds .statusBlock{
   scroll-margin-top: 90px;
 }
+
+/* =========================
+   Video Ads V2 layout polish
+========================= */
+
+.videoAds .videoAdsHero {
+  text-align: center;
+}
+
+.videoAds .videoAdsHero p {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+.videoAds .videoTopCard {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  margin: 18px 0 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.videoAds .videoSectionHeading {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.videoAds .videoSectionHeading h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.videoAds .videoSectionHeading p {
+  margin: 6px auto 0;
+  max-width: 680px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.videoAds .videoTopCard .videoTabs {
+  justify-content: center;
+  margin: 0;
+}
+
+.videoAds .videoAiSection {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.videoAds .videoEnhancementCard {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 15px;
+}
+
+.videoAds .videoToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.videoAds .videoToggle input {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  accent-color: #0f172a;
+  flex: 0 0 auto;
+}
+
+.videoAds .videoToggle span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.videoAds .videoToggle strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.videoAds .videoToggle small {
+  margin-top: 3px;
+  color: #475569;
+  font-weight: 800;
+}
+
+.videoAds .videoEnhancementCard p {
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.videoAds .videoModeHeading {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.videoAds .videoHelperGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.videoAds .videoHelperCard {
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.videoAds .videoHelperCard strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.videoAds .videoHelperCard p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .videoAds .videoEnhancementGrid,
+  .videoAds .videoHelperGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoTabs {
+    flex-direction: column;
+  }
+}

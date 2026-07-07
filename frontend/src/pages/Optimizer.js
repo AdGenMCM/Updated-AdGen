@@ -62,6 +62,7 @@ export default function Optimizer() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [result, setResult] = useState(null);
+  const [useBrandKit, setUseBrandKit] = useState(true);
 
   // Regenerate state
   const [regenSize, setRegenSize] = useState("1024x1024");
@@ -260,6 +261,7 @@ export default function Optimizer() {
       const token = await user.getIdToken(true);
 
       const payload = {
+        useBrandKit,
         product_name: form.product_name,
         description: form.description,
         audience: form.audience,
@@ -350,10 +352,26 @@ export default function Optimizer() {
       const token = await user.getIdToken(true);
 
       const payload = {
+        // Brand Kit
+        useBrandKit,
+
+        // Campaign context
+        companyName: form.companyName,
+        product_name: form.product_name,
+        description: form.description,
+        productType: form.productType,
+        stylePreset: form.stylePreset,
+        tone: form.tone,
+        goal: form.goal,
+        platform: form.platform,
+
+        // Optimized creative
         improved_headline: result.improved_headline,
         improved_primary_text: result.improved_primary_text,
         improved_cta: result.improved_cta,
         improved_image_prompt: result.improved_image_prompt,
+
+        // Generation options
         imageSize: regenSize,
         creative_image_urls: uploadedUrls.length ? uploadedUrls : null,
       };
@@ -461,6 +479,33 @@ export default function Optimizer() {
         </div>
       ) : (
         <form className="opt-card" onSubmit={handleOptimize}>
+          {/* ========= AI Enhancements ========= */}
+            <h2 className="opt-h2">AI Enhancements</h2>
+            <p className="opt-subtext">
+              Choose which intelligence layers AdGen should use when analyzing and improving this creative.
+            </p>
+
+            <div className="opt-enhancementGrid">
+              <div className="opt-enhancementCard">
+                <label className="opt-toggle">
+                  <input
+                    type="checkbox"
+                    checked={useBrandKit}
+                    onChange={(e) => setUseBrandKit(e.target.checked)}
+                    disabled={loading || regenLoading}
+                  />
+                  <span>
+                    <strong>Apply Brand Kit</strong>
+                    <small>Recommended</small>
+                  </span>
+                </label>
+
+                <p>
+                  Uses your saved logo, colors, fonts, voice, messaging, audience,
+                  creative preferences, and brand rules while optimizing this ad.
+                </p>
+              </div>
+            </div>
           {/* ========= Campaign ========= */}
           <h2 className="opt-h2">1) Campaign</h2>
           <p className="opt-subtext">Provide the basics. More detail = better diagnosis.</p>
