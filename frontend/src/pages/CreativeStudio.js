@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import "./TextEditor.css";
+import "./CreativeStudio.css";
+
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import FieldLabel from "../components/ui/FieldLabel";
+import InfoTip from "../components/ui/InfoTip";
 
 /** Utilities */
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -551,6 +557,182 @@ export default function TextEditor() {
     [boxes, selectedId]
   );
 
+  const updateSelected = (patch) => {
+  if (!selectedId) return;
+
+  setBoxes((prev) =>
+    prev.map((b) =>
+      b.id === selectedId ? { ...b, ...patch } : b
+    )
+  );
+};
+
+const addPresetText = (preset) => {
+  const id = uid();
+
+  const presets = {
+    headline: {
+      text: "Your Big Headline",
+      fontSize: 72,
+      bold: true,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 120,
+      maxWidthPct: 0.82,
+    },
+    subheadline: {
+      text: "Add a short supporting line here",
+      fontSize: 36,
+      bold: false,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 230,
+      maxWidthPct: 0.78,
+    },
+    cta: {
+      text: "Shop Now",
+      fontSize: 34,
+      bold: true,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 340,
+      maxWidthPct: 0.45,
+    },
+    price: {
+      text: "$29",
+      fontSize: 58,
+      bold: true,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 430,
+      maxWidthPct: 0.45,
+    },
+    badge: {
+      text: "20% OFF",
+      fontSize: 42,
+      bold: true,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 520,
+      maxWidthPct: 0.5,
+    },
+    disclaimer: {
+      text: "Limited time offer. Terms apply.",
+      fontSize: 22,
+      bold: false,
+      color: "#ffffff",
+      shadow: true,
+      x: 100,
+      y: 620,
+      maxWidthPct: 0.72,
+    },
+  };
+
+  const chosen = presets[preset] || presets.headline;
+
+  setBoxes((prev) => [
+    ...prev,
+    {
+      id,
+      fontFamily: "Inter, system-ui, Arial",
+      align: "left",
+      italic: false,
+      underline: false,
+      lineHeightMult: 1.1,
+      ...chosen,
+    },
+  ]);
+
+  setSelectedId(id);
+};
+
+const applyQuickStyle = (style) => {
+  if (!selected) return;
+
+  const styles = {
+    boldWhite: {
+      color: "#ffffff",
+      bold: true,
+      shadow: true,
+    },
+    darkText: {
+      color: "#111827",
+      bold: true,
+      shadow: false,
+    },
+    purple: {
+      color: "#a78bfa",
+      bold: true,
+      shadow: true,
+    },
+    gold: {
+      color: "#facc15",
+      bold: true,
+      shadow: true,
+    },
+  };
+
+  updateSelected(styles[style] || {});
+};
+
+const centerSelected = () => {
+  if (!selected || !canvasRef.current) return;
+
+  const rect = getBoxRect(selected);
+  if (!rect) return;
+
+  const canvas = canvasRef.current;
+  const newLeft = canvas.width / 2 - rect.width / 2;
+  const newTop = canvas.height / 2 - rect.height / 2;
+
+  let newX = newLeft;
+  if (selected.align === "center") newX = newLeft + rect.width / 2;
+  if (selected.align === "right") newX = newLeft + rect.width;
+
+  updateSelected({
+    x: newX,
+    y: newTop,
+  });
+};
+
+const addShapePlaceholder = (type) => {
+  const labels = {
+    rectangle: "Rectangle Shape",
+    pill: "CTA Button",
+    badge: "SALE BADGE",
+    banner: "Promo Banner",
+  };
+
+  const id = uid();
+
+  setBoxes((prev) => [
+    ...prev,
+    {
+      id,
+      text: labels[type] || "Shape",
+      fontFamily: "Inter, system-ui, Arial",
+      fontSize: type === "badge" ? 34 : 30,
+      color: "#ffffff",
+      align: "center",
+      bold: true,
+      italic: false,
+      shadow: true,
+      underline: false,
+      x: 180,
+      y: 180,
+      maxWidthPct: type === "banner" ? 0.75 : 0.48,
+      lineHeightMult: 1.1,
+    },
+  ]);
+
+  setSelectedId(id);
+};
+
   /** Safe-area guide overlay renderer (UI only; not exported) */
   const renderGuide = (type) => {
     // margins in % (top, right, bottom, left)
@@ -626,27 +808,191 @@ export default function TextEditor() {
     );
   };
 
-  return (
-    <div className="texteditor-container">
-      <h1 style={{ marginBottom: 12 }}>Text Editor</h1>
-      <p style={{ marginBottom: 16 }}>
-        Upload a background image, add/drag text boxes, resize their wrap width, then download a flattened PNG.
-      </p>
+return (
+  <div className="texteditor-container">
+    <PageHeader
+      eyebrow="CREATIVE STUDIO"
+      title="Refine and customize your ad creatives"
+      description="Upload a creative, add branded text, use presets, adjust layout, apply safe-area guides, and export a polished PNG without leaving AdGen."
+    />
 
-      {/* Toolbar */}
-      <div className="texteditor-toolbar">
-        <div className="texteditor-row">
-          <label className="texteditor-label">
-            Background image
+    <div className="creative-studio-shell">
+      <main className="creative-canvas-panel">
+        <Card className="creative-canvas-card">
+          <div className="creative-canvas-topbar">
+            <div>
+              <h2>Creative Canvas</h2>
+              <p>Drag text directly on the image. Resize text width using the corner handles.</p>
+            </div>
+
+            <div className="creative-canvas-actions">
+              <Button type="button" onClick={centerSelected} disabled={!selected}>
+                Center
+              </Button>
+
+              <Button type="button" onClick={downloadComposite}>
+                Download PNG
+              </Button>
+            </div>
+          </div>
+
+          <div
+            className="texteditor-canvasWrap"
+            onMouseDown={onPointerDown}
+            onMouseMove={onPointerMove}
+            onMouseUp={onPointerUp}
+            onTouchStart={onPointerDown}
+            onTouchMove={onPointerMove}
+            onTouchEnd={onPointerUp}
+          >
+            <div
+              className="texteditor-inner"
+              style={{
+                height: canvasCssSize.height ? `${canvasCssSize.height}px` : "auto",
+              }}
+            >
+              <OverlayLines />
+
+              {guide !== "none" && (
+                <div className="texteditor-guides">{renderGuide(guide)}</div>
+              )}
+
+              <canvas ref={canvasRef} className="texteditor-canvas" />
+
+              {!bgUrl && (
+                <div className="texteditor-placeholder">
+                  <strong>Upload a creative to get started</strong>
+                  <span>Add text, presets, layout guides, and export a polished PNG.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      </main>
+
+      <aside className="creative-tools-panel">
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>
+              Start
+              <InfoTip text="Upload the image creative you want to edit inside Creative Studio." />
+            </h3>
+          </div>
+
+          <div className="creative-field">
+            <FieldLabel
+              label="Background Image"
+              info="Upload an existing ad creative, generated image, or design that you want to customize."
+            />
+
             <input
               type="file"
               accept="image/*"
               onChange={(e) => handleUpload(e.target.files?.[0])}
             />
-          </label>
+          </div>
+        </Card>
 
-          <label className="texteditor-label">
-            Guide
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>
+              Text Presets
+              <InfoTip text="Add common ad text elements with strong default sizing and placement." />
+            </h3>
+          </div>
+
+          <div className="creative-action-grid">
+            <button type="button" onClick={() => addPresetText("headline")}>
+              + Headline
+            </button>
+
+            <button type="button" onClick={() => addPresetText("subheadline")}>
+              + Subheadline
+            </button>
+
+            <button type="button" onClick={() => addPresetText("cta")}>
+              + CTA Text
+            </button>
+
+            <button type="button" onClick={() => addPresetText("price")}>
+              + Price
+            </button>
+
+            <button type="button" onClick={() => addPresetText("badge")}>
+              + Discount
+            </button>
+
+            <button type="button" onClick={() => addPresetText("disclaimer")}>
+              + Disclaimer
+            </button>
+          </div>
+        </Card>
+
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>
+              Quick Elements
+              <InfoTip text="Phase 1 elements use editable text placeholders. Shape drawing and button backgrounds can be expanded in Phase 2." />
+            </h3>
+          </div>
+
+          <div className="creative-action-grid">
+            <button type="button" onClick={addTextBox}>
+              + Text Box
+            </button>
+
+            <button type="button" onClick={() => addShapePlaceholder("pill")}>
+              + CTA Button
+            </button>
+
+            <button type="button" onClick={() => addShapePlaceholder("badge")}>
+              + Badge
+            </button>
+
+            <button type="button" onClick={() => addShapePlaceholder("banner")}>
+              + Banner
+            </button>
+          </div>
+        </Card>
+
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>Layer Actions</h3>
+          </div>
+
+          <div className="creative-action-grid">
+            <button type="button" onClick={duplicateSelected} disabled={!selectedId}>
+              Duplicate
+            </button>
+
+            <button type="button" onClick={deleteSelected} disabled={!selectedId}>
+              Delete
+            </button>
+
+            <button type="button" onClick={bringToFront} disabled={!selectedId}>
+              Bring Front
+            </button>
+
+            <button type="button" onClick={sendToBack} disabled={!selectedId}>
+              Send Back
+            </button>
+          </div>
+        </Card>
+
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>
+              Canvas Guides
+              <InfoTip text="Safe-area guides help keep text and important elements away from cropped or hidden platform areas." />
+            </h3>
+          </div>
+
+          <div className="creative-field">
+            <FieldLabel
+              label="Platform Guide"
+              info="Choose a platform guide to keep important text inside safe zones."
+            />
+
             <select value={guide} onChange={(e) => setGuide(e.target.value)}>
               <option value="none">None</option>
               <option value="ig_story">Instagram Story (9:16)</option>
@@ -654,9 +1000,9 @@ export default function TextEditor() {
               <option value="ig_feed">Instagram Feed (1:1)</option>
               <option value="fb_feed">Facebook Feed (1.91:1)</option>
             </select>
-          </label>
+          </div>
 
-          <label className="texteditor-checkbox">
+          <label className="creative-check">
             <input
               type="checkbox"
               checked={showCenters}
@@ -665,7 +1011,7 @@ export default function TextEditor() {
             Show center lines
           </label>
 
-          <label className="texteditor-checkbox">
+          <label className="creative-check">
             <input
               type="checkbox"
               checked={showBorders}
@@ -673,44 +1019,62 @@ export default function TextEditor() {
             />
             Show border lines
           </label>
+        </Card>
 
-          <button className="texteditor-btn" onClick={addTextBox}>Add Text Box</button>
-          <button className="texteditor-btn" onClick={duplicateSelected} disabled={!selectedId}>Duplicate</button>
-          <button className="texteditor-btn" onClick={deleteSelected} disabled={!selectedId}>Delete</button>
-          <button className="texteditor-btn" onClick={bringToFront} disabled={!selectedId}>Bring Front</button>
-          <button className="texteditor-btn" onClick={sendToBack} disabled={!selectedId}>Send Back</button>
-          <button className="texteditor-btnPrimary" onClick={downloadComposite}>Download PNG</button>
-        </div>
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>Quick Styles</h3>
+          </div>
 
-        {selected && (
-          <>
-            <div className="texteditor-row">
-              <label className="texteditor-labelWide">
-                Text
-                <textarea
-                  rows={3}
-                  value={selected.text}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) => (b.id === selected.id ? { ...b, text: e.target.value } : b))
-                    )
-                  }
+          <div className="creative-action-grid">
+            <button type="button" onClick={() => applyQuickStyle("boldWhite")} disabled={!selected}>
+              White Bold
+            </button>
+
+            <button type="button" onClick={() => applyQuickStyle("darkText")} disabled={!selected}>
+              Dark Text
+            </button>
+
+            <button type="button" onClick={() => applyQuickStyle("purple")} disabled={!selected}>
+              Purple
+            </button>
+
+            <button type="button" onClick={() => applyQuickStyle("gold")} disabled={!selected}>
+              Gold
+            </button>
+          </div>
+        </Card>
+
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>Selected Text</h3>
+          </div>
+
+          {!selected ? (
+            <p className="creative-muted">
+              Select a text box on the canvas or add a new element to edit typography.
+            </p>
+          ) : (
+            <>
+              <div className="creative-field">
+                <FieldLabel
+                  label="Text"
+                  info="Edit the selected text block. Text wraps based on the box width."
                 />
-              </label>
-            </div>
 
-            <div className="texteditor-row">
-              <label className="texteditor-label">
-                Font
+                <textarea
+                  rows={4}
+                  value={selected.text}
+                  onChange={(e) => updateSelected({ text: e.target.value })}
+                />
+              </div>
+
+              <div className="creative-field">
+                <FieldLabel label="Font" />
+
                 <select
                   value={selected.fontFamily}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) =>
-                        b.id === selected.id ? { ...b, fontFamily: e.target.value } : b
-                      )
-                    )
-                  }
+                  onChange={(e) => updateSelected({ fontFamily: e.target.value })}
                 >
                   <option>Inter, system-ui, Arial</option>
                   <option>Arial</option>
@@ -723,152 +1087,107 @@ export default function TextEditor() {
                   <option>Montserrat, Arial</option>
                   <option>Poppins, Arial</option>
                 </select>
-              </label>
+              </div>
 
-              <label className="texteditor-label">
-                Size
-                <input
-                  type="number"
-                  min="8"
-                  max="240"
-                  value={selected.fontSize}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) =>
-                        b.id === selected.id
-                          ? { ...b, fontSize: parseInt(e.target.value || "36", 10) }
-                          : b
-                      )
-                    )
-                  }
-                />
-              </label>
+              <div className="creative-two-grid">
+                <div className="creative-field">
+                  <FieldLabel label="Size" />
 
-              <label className="texteditor-label">
-                Color
-                <input
-                  type="color"
-                  value={selected.color}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) =>
-                        b.id === selected.id ? { ...b, color: e.target.value } : b
-                      )
-                    )
-                  }
-                />
-              </label>
+                  <input
+                    type="number"
+                    min="8"
+                    max="240"
+                    value={selected.fontSize}
+                    onChange={(e) =>
+                      updateSelected({
+                        fontSize: parseInt(e.target.value || "36", 10),
+                      })
+                    }
+                  />
+                </div>
 
-              <label className="texteditor-label">
-                Align
+                <div className="creative-field">
+                  <FieldLabel label="Color" />
+
+                  <input
+                    type="color"
+                    value={selected.color}
+                    onChange={(e) => updateSelected({ color: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="creative-field">
+                <FieldLabel label="Alignment" />
+
                 <select
                   value={selected.align}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) =>
-                        b.id === selected.id ? { ...b, align: e.target.value } : b
-                      )
-                    )
-                  }
+                  onChange={(e) => updateSelected({ align: e.target.value })}
                 >
                   <option value="left">Left</option>
                   <option value="center">Center</option>
                   <option value="right">Right</option>
                 </select>
-              </label>
+              </div>
 
-              <label className="texteditor-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selected.bold}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) => (b.id === selected.id ? { ...b, bold: e.target.checked } : b))
-                    )
-                  }
-                />
-                Bold
-              </label>
+              <div className="creative-toggle-grid">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selected.bold}
+                    onChange={(e) => updateSelected({ bold: e.target.checked })}
+                  />
+                  Bold
+                </label>
 
-              <label className="texteditor-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selected.italic}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) => (b.id === selected.id ? { ...b, italic: e.target.checked } : b))
-                    )
-                  }
-                />
-                Italic
-              </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selected.italic}
+                    onChange={(e) => updateSelected({ italic: e.target.checked })}
+                  />
+                  Italic
+                </label>
 
-              <label className="texteditor-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selected.shadow}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) => (b.id === selected.id ? { ...b, shadow: e.target.checked } : b))
-                    )
-                  }
-                />
-                Shadow
-              </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selected.shadow}
+                    onChange={(e) => updateSelected({ shadow: e.target.checked })}
+                  />
+                  Shadow
+                </label>
 
-              {/* NEW: Underline */}
-              <label className="texteditor-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selected.underline}
-                  onChange={(e) =>
-                    setBoxes((prev) =>
-                      prev.map((b) =>
-                        b.id === selected.id ? { ...b, underline: e.target.checked } : b
-                      )
-                    )
-                  }
-                />
-                Underline
-              </label>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Canvas area */}
-      <div
-        className="texteditor-canvasWrap"
-        onMouseDown={onPointerDown}
-        onMouseMove={onPointerMove}
-        onMouseUp={onPointerUp}
-        onTouchStart={onPointerDown}
-        onTouchMove={onPointerMove}
-        onTouchEnd={onPointerUp}
-      >
-        {/* Inner layer sized to visible canvas, so overlays align perfectly */}
-        <div
-          className="texteditor-inner"
-          style={{
-            height: canvasCssSize.height ? `${canvasCssSize.height}px` : "auto",
-          }}
-        >
-          {/* Alignment overlays */}
-          <OverlayLines />
-
-          {/* Safe-area overlay */}
-          {guide !== "none" && <div className="texteditor-guides">{renderGuide(guide)}</div>}
-
-          <canvas ref={canvasRef} className="texteditor-canvas" />
-          {!bgUrl && (
-            <div className="texteditor-placeholder">
-              Upload a background image to get started.
-            </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selected.underline}
+                    onChange={(e) => updateSelected({ underline: e.target.checked })}
+                  />
+                  Underline
+                </label>
+              </div>
+            </>
           )}
-        </div>
-      </div>
+        </Card>
+
+        <Card className="creative-tool-card">
+          <div className="creative-tool-heading">
+            <h3>Export</h3>
+          </div>
+
+          <Button type="button" className="creative-export-btn" onClick={downloadComposite}>
+            Download PNG
+          </Button>
+
+          <p className="creative-muted">
+            Export creates a flattened PNG with your background and text edits.
+          </p>
+        </Card>
+      </aside>
     </div>
-  );
+  </div>
+);
 }
 
 

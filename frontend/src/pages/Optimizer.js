@@ -3,6 +3,29 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Optimizer.css";
 import { auth } from "../firebaseConfig";
+import PageHeader from "../components/ui/PageHeader";
+import StepSection from "../components/ui/StepSection";
+import Card from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import InfoTip from "../components/ui/InfoTip";
+
+const optimizeMessages = [
+  "Reviewing campaign context...",
+  "Checking performance metrics...",
+  "Finding creative weaknesses...",
+  "Applying Brand Kit guidance if selected...",
+  "Writing improved copy...",
+  "Building optimized image direction...",
+];
+
+const generateMessages = [
+  "Reading optimizer recommendations...",
+  "Applying improved headline and copy...",
+  "Building the image prompt...",
+  "Applying Brand Kit direction if selected...",
+  "Generating updated creative...",
+  "Saving optimized creative...",
+];
 
 export default function Optimizer() {
   const navigate = useNavigate();
@@ -69,6 +92,23 @@ export default function Optimizer() {
   const [regenLoading, setRegenLoading] = useState(false);
   const [regenErr, setRegenErr] = useState(null);
   const [regenResult, setRegenResult] = useState(null); // { copy, imageUrl, usage }
+
+const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+useEffect(() => {
+  if (!loading && !regenLoading) {
+    setLoadingMessageIndex(0);
+    return;
+  }
+
+  const activeMessages = loading ? optimizeMessages : generateMessages;
+
+  const interval = setInterval(() => {
+    setLoadingMessageIndex((prev) => (prev + 1) % activeMessages.length);
+  }, 1400);
+
+  return () => clearInterval(interval);
+}, [loading, regenLoading]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -450,308 +490,450 @@ export default function Optimizer() {
 };
 
   return (
-    <div className="opt-container">
-      <h1 className="opt-title">Ad Optimizer</h1>
+  <div className="opt-page">
+    {(loading || regenLoading) && (
+      <div className="opt-loadingOverlay">
+        <div className="opt-loadingCard">
+          <div className="opt-spinner" />
 
-      {/* Under-headline description */}
-      <div className="opt-intro">
-        <p className="opt-introText">
-          Fill out your campaign context, upload or paste your current creative, and add any metrics you have.
-          Then click <strong>Analyze &amp; Improve</strong> to get recommendations + upgraded copy and an improved image prompt.
-        </p>
-        <p className="opt-introText opt-introMuted">
-          Best results: upload the creative you’re running + include CPM, CTR, CPC/CPA, and at least impressions/clicks.
-          Even partial metrics still help.
-        </p>
+          <p className="opt-loadingEyebrow">
+            {loading ? "AI OPTIMIZATION" : "CREATIVE GENERATION"}
+          </p>
+
+          <h3>{loading ? "Analyzing Campaign" : "Generating Updated Creative"}</h3>
+
+          <p className="opt-loadingMessage">
+            {(loading ? optimizeMessages : generateMessages)[loadingMessageIndex]}
+          </p>
+
+          <div className="opt-loadingSteps">
+            {(loading ? optimizeMessages : generateMessages).map((msg, index) => (
+              <div
+                key={msg}
+                className={`opt-loadingStep ${
+                  index <= loadingMessageIndex ? "active" : ""
+                }`}
+              >
+                <span>{index < loadingMessageIndex ? "✓" : index + 1}</span>
+                <p>{msg}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
+    )}
 
-      {!auth.currentUser ? (
-        <div className="opt-card">
-          <p className="opt-text">Please log in to use the optimizer.</p>
-          <button className="opt-btn" onClick={() => navigate("/login")}>Go to Login</button>
-        </div>
-      ) : !canUseOptimizer ? (
-        <div className="opt-card">
-          <h2 className="opt-h2">🔒 Early Access, Pro, & Business only</h2>
-          <p className="opt-text">Upgrade to unlock Ad Performance Optimization.</p>
-          <button className="opt-btn" onClick={() => navigate("/account")}>Upgrade</button>
-          {err && <p className="opt-error">{err}</p>}
-        </div>
-      ) : (
-        <form className="opt-card" onSubmit={handleOptimize}>
-          {/* ========= AI Enhancements ========= */}
-            <h2 className="opt-h2">AI Enhancements</h2>
-            <p className="opt-subtext">
-              Choose which intelligence layers AdGen should use when analyzing and improving this creative.
-            </p>
+    <div className="opt-shell">
+      <main className="opt-main">
+        <PageHeader
+          eyebrow="AI CREATIVE STUDIO"
+          title="Optimize Ad"
+          description="Analyze an existing ad, identify weak points, and generate stronger copy, creative direction, and performance-focused recommendations."
+        />
 
-            <div className="opt-enhancementGrid">
-              <div className="opt-enhancementCard">
-                <label className="opt-toggle">
-                  <input
-                    type="checkbox"
-                    checked={useBrandKit}
-                    onChange={(e) => setUseBrandKit(e.target.checked)}
-                    disabled={loading || regenLoading}
-                  />
-                  <span>
-                    <strong>Apply Brand Kit</strong>
-                    <small>Recommended</small>
-                  </span>
-                </label>
-
-                <p>
-                  Uses your saved logo, colors, fonts, voice, messaging, audience,
-                  creative preferences, and brand rules while optimizing this ad.
-                </p>
+        {!auth.currentUser ? (
+          <Card className="opt-authCard">
+            <p className="opt-text">Please log in to use the optimizer.</p>
+            <Button type="button" onClick={() => navigate("/login")}>
+              Go to Login
+            </Button>
+          </Card>
+        ) : !canUseOptimizer ? (
+          <Card className="opt-authCard">
+            <div className="opt-lockHeader">
+              <span className="step-badge">🔒</span>
+              <div>
+                <h2>Optimizer Locked</h2>
+                <p>Upgrade to unlock Ad Performance Optimization.</p>
               </div>
             </div>
-          {/* ========= Campaign ========= */}
-          <h2 className="opt-h2">1) Campaign</h2>
-          <p className="opt-subtext">Provide the basics. More detail = better diagnosis.</p>
 
-          <div className="opt-grid">
-            <input name="product_name" placeholder="Product / Offer name" value={form.product_name} onChange={handleChange} />
-            <input name="audience" placeholder="Audience" value={form.audience} onChange={handleChange} />
-            <input name="tone" placeholder="Tone (e.g. confident, friendly)" value={form.tone} onChange={handleChange} />
+            <Button type="button" onClick={() => navigate("/account")}>
+              Upgrade Plan
+            </Button>
 
-            <select name="platform" value={form.platform} onChange={handleChange}>
-              <option value="meta">Meta</option>
-              <option value="google">Google</option>
-              <option value="tiktok">TikTok</option>
-              <option value="linkedin">LinkedIn</option>
-              <option value="other">Other</option>
-            </select>
-
-            <input name="offer" placeholder="Offer (optional)" value={form.offer} onChange={handleChange} />
-
-            <select name="goal" value={form.goal} onChange={handleChange}>
-              <option value="sales">Sales</option>
-              <option value="leads">Leads</option>
-              <option value="traffic">Traffic</option>
-              <option value="awareness">Awareness</option>
-              <option value="engagement">Engagement</option>
-              <option value="app_installs">App Installs</option>
-            </select>
-          </div>
-
-          {/* Selected explanations only */}
-          <div className="opt-helpRow">
-            <div className="opt-helpItem">
-              <span className="opt-helpLabel">Platform: {String(form.platform || "").toUpperCase()}</span>
-              <span className="opt-helpText">{selectedPlatformHelp}</span>
-            </div>
-            <div className="opt-helpItem">
-              <span className="opt-helpLabel">Goal: {String(form.goal || "").replaceAll("_", " ").toUpperCase()}</span>
-              <span className="opt-helpText">{selectedGoalHelp}</span>
-            </div>
-          </div>
-
-          <textarea
-            className="opt-textarea"
-            name="description"
-            placeholder="Product description (what it is, why it’s better, key benefit)"
-            value={form.description}
-            onChange={handleChange}
-            rows={4}
-          />
-
-          <div className="opt-grid">
-            <select name="audience_temp" value={form.audience_temp} onChange={handleChange}>
-              <option value="cold">Cold</option>
-              <option value="warm">Warm</option>
-              <option value="retargeting">Retargeting</option>
-            </select>
-            <input name="placements" placeholder="Placements (optional)" value={form.placements} onChange={handleChange} />
-            <input name="objective" placeholder="Objective (optional)" value={form.objective} onChange={handleChange} />
-          </div>
-
-          <div className="opt-helpRow">
-            <div className="opt-helpItem">
-              <span className="opt-helpLabel">Audience temp: {String(form.audience_temp || "").toUpperCase()}</span>
-              <span className="opt-helpText">{selectedTempHelp}</span>
-            </div>
-          </div>
-
-          <div className="opt-grid">
-            <input name="flight_start" placeholder="Flight start (YYYY-MM-DD)" value={form.flight_start} onChange={handleChange} />
-            <input name="flight_end" placeholder="Flight end (YYYY-MM-DD)" value={form.flight_end} onChange={handleChange} />
-            <input name="audience_size" placeholder="Audience size (optional)" value={form.audience_size} onChange={handleChange} />
-            <input name="budget_type" placeholder="Budget type (Daily/Lifetime)" value={form.budget_type} onChange={handleChange} />
-            <input name="conversion_event" placeholder="Conversion event (optional)" value={form.conversion_event} onChange={handleChange} />
-            <input name="geo" placeholder="Geo (optional)" value={form.geo} onChange={handleChange} />
-            <input name="device" placeholder="Device (optional)" value={form.device} onChange={handleChange} />
-          </div>
-
-          <textarea
-            className="opt-textarea"
-            name="notes"
-            placeholder="Notes (optional): what you tested, what’s not working, constraints, etc."
-            value={form.notes}
-            onChange={handleChange}
-            rows={3}
-          />
-
-          {/* ========= Creative ========= */}
-          <h2 className="opt-h2 opt-sectionTop">2) Current creative</h2>
-          <p className="opt-subtext">Upload what you’re running (best), or paste copy below.</p>
-
-          <div className="opt-uploadRow">
-            <input
-              ref={fileInputRef}
-              className="opt-file"
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              multiple
-              onChange={onPickFiles}
-            />
-            <button
-              type="button"
-              className="opt-btn"
-              onClick={uploadCreatives}
-              disabled={uploading || !selectedFiles.length}
-            >
-              {uploading ? "Uploading..." : "Upload creatives"}
-            </button>
-          </div>
-
-          {uploadErr && <p className="opt-error">{uploadErr}</p>}
-
-          {uploadedUrls.length > 0 && (
-            <div className="opt-thumbGrid">
-              {uploadedUrls.map((u, i) => (
-                <img key={i} src={u} alt={`Creative ${i + 1}`} className="opt-thumb" />
-              ))}
-            </div>
-          )}
-
-          <div className="opt-grid">
-            <input name="current_headline" placeholder="Headline (optional)" value={form.current_headline} onChange={handleChange} />
-            <input name="current_cta" placeholder="CTA (optional)" value={form.current_cta} onChange={handleChange} />
-            <input name="current_image_prompt" placeholder="Creative notes (optional)" value={form.current_image_prompt} onChange={handleChange} />
-          </div>
-
-          <textarea
-            className="opt-textarea"
-            name="current_primary_text"
-            placeholder="Primary text (optional)"
-            value={form.current_primary_text}
-            onChange={handleChange}
-            rows={3}
-          />
-
-          {/* ========= Metrics ========= */}
-          <h2 className="opt-h2 opt-sectionTop">3) Performance metrics</h2>
-          <p className="opt-subtext">Even partial metrics help. Add CPM if you have it.</p>
-
-          <div className="opt-grid">
-            <input name="ctr" placeholder="CTR %" value={form.ctr} onChange={handleChange} />
-            <input name="cpc" placeholder="CPC" value={form.cpc} onChange={handleChange} />
-            <input name="cpa" placeholder="CPA" value={form.cpa} onChange={handleChange} />
-            <input name="cpm" placeholder="CPM" value={form.cpm} onChange={handleChange} />
-            <input name="spend" placeholder="Spend" value={form.spend} onChange={handleChange} />
-            <input name="impressions" placeholder="Impressions" value={form.impressions} onChange={handleChange} />
-            <input name="clicks" placeholder="Clicks" value={form.clicks} onChange={handleChange} />
-            <input name="conversions" placeholder="Conversions" value={form.conversions} onChange={handleChange} />
-            <input name="roas" placeholder="ROAS" value={form.roas} onChange={handleChange} />
-            <input name="frequency" placeholder="Frequency" value={form.frequency} onChange={handleChange} />
-          </div>
-
-          <button className="opt-btn" type="submit" disabled={loading}>
-            {loading ? "Analyzing..." : "Analyze & Improve"}
-          </button>
-
-          {err && <p className="opt-error">{err}</p>}
-
-          {/* ========= Results ========= */}
-          {result && (
-            <div className="opt-results">
-              <h2 className="opt-h2 opt-sectionTop">Results</h2>
-              <p className="opt-text">{result.summary}</p>
-
-              <h3 className="opt-h3">Likely issues</h3>
-              <ul className="opt-list">
-                {result.likely_issues?.map((x, i) => <li key={i}>{x}</li>)}
-              </ul>
-
-              <h3 className="opt-h3">Recommended changes</h3>
-              <ul className="opt-list">
-                {result.recommended_changes?.map((x, i) => <li key={i}>{x}</li>)}
-              </ul>
-
-              <h3 className="opt-h3">Improved copy</h3>
-              <p className="opt-text"><strong>Headline:</strong> {result.improved_headline}</p>
-              <p className="opt-text"><strong>Primary Text:</strong> {result.improved_primary_text}</p>
-              <p className="opt-text"><strong>CTA:</strong> {result.improved_cta}</p>
-
-              <h3 className="opt-h3">Improved image prompt</h3>
-              <p className="opt-text">{result.improved_image_prompt}</p>
-
-              {/* One-click regenerate */}
-              {uploadedUrls.length > 0 && (
+            {err && <p className="opt-error">{err}</p>}
+          </Card>
+        ) : (
+          <form className="adgen-form opt-form" onSubmit={handleOptimize}>
+            <StepSection
+              step="1"
+              title={
                 <>
-                  <h3 className="opt-h3"><i>Generate a new creative will count toward your monthly generation limit. </i></h3>
-
-                  <div className="opt-grid">
-                    <select value={regenSize} onChange={(e) => setRegenSize(e.target.value)}>
-                      <option value="1024x1024">Square (1024x1024)</option>
-                      <option value="1024x1792">Portrait (1024x1792)</option>
-                      <option value="1792x1024">Landscape (1792x1024)</option>
-                    </select>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="opt-btn"
-                    onClick={handleGenerateNewCreative}
-                    disabled={regenLoading}
-                  >
-                    {regenLoading ? "Generating..." : "Generate New Creative"}
-                  </button>
-
-                  {regenErr && <p className="opt-error">{regenErr}</p>}
-
-                  {regenResult?.imageUrl && (
-  <div className="opt-inlineImage">
-    <img
-      src={regenResult.imageUrl}
-      alt="Regenerated creative"
-      className="opt-generated"
-      onError={() => alert("Image failed to load")}
-    />
-
-    <button
-  type="button"
-  className="opt-btn"
-  onClick={downloadOptimizedImage}
-  style={{ marginTop: 10 }}
->
-  Download Image
-</button>
-
-
-    {regenResult?.usage && (
-      <p className="opt-subtext" style={{ marginTop: 8 }}>
-        Usage: {regenResult.usage.used}/{regenResult.usage.cap} (remaining {regenResult.usage.remaining})
-      </p>
-    )}
-  </div>
-)}
-
+                  Campaign Details
+                  <InfoTip text="Add product, audience, offer, platform, and campaign goal so AdGen can diagnose the ad accurately." />
                 </>
+              }
+              description="Provide the campaign context AdGen should use for analysis."
+            >
+              <div className="opt-grid">
+                <input name="product_name" placeholder="Product / Offer name" value={form.product_name} onChange={handleChange} />
+                <input name="audience" placeholder="Audience" value={form.audience} onChange={handleChange} />
+                <input name="tone" placeholder="Tone (e.g. confident, friendly)" value={form.tone} onChange={handleChange} />
+
+                <select name="platform" value={form.platform} onChange={handleChange}>
+                  <option value="meta">Meta</option>
+                  <option value="google">Google</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="other">Other</option>
+                </select>
+
+                <input name="offer" placeholder="Offer (optional)" value={form.offer} onChange={handleChange} />
+
+                <select name="goal" value={form.goal} onChange={handleChange}>
+                  <option value="sales">Sales</option>
+                  <option value="leads">Leads</option>
+                  <option value="traffic">Traffic</option>
+                  <option value="awareness">Awareness</option>
+                  <option value="engagement">Engagement</option>
+                  <option value="app_installs">App Installs</option>
+                </select>
+              </div>
+
+              <div className="opt-helpRow">
+                <div className="opt-helpItem">
+                  <span className="opt-helpLabel">Platform: {String(form.platform || "").toUpperCase()}</span>
+                  <span className="opt-helpText">{selectedPlatformHelp}</span>
+                </div>
+                <div className="opt-helpItem">
+                  <span className="opt-helpLabel">Goal: {String(form.goal || "").replaceAll("_", " ").toUpperCase()}</span>
+                  <span className="opt-helpText">{selectedGoalHelp}</span>
+                </div>
+              </div>
+
+              <textarea
+                className="opt-textarea"
+                name="description"
+                placeholder="Product description (what it is, why it’s better, key benefit)"
+                value={form.description}
+                onChange={handleChange}
+                rows={4}
+              />
+
+              <div className="opt-grid">
+                <select name="audience_temp" value={form.audience_temp} onChange={handleChange}>
+                  <option value="cold">Cold</option>
+                  <option value="warm">Warm</option>
+                  <option value="retargeting">Retargeting</option>
+                </select>
+                <input name="placements" placeholder="Placements (optional)" value={form.placements} onChange={handleChange} />
+                <input name="objective" placeholder="Objective (optional)" value={form.objective} onChange={handleChange} />
+              </div>
+
+              <div className="opt-helpRow">
+                <div className="opt-helpItem">
+                  <span className="opt-helpLabel">Audience temp: {String(form.audience_temp || "").toUpperCase()}</span>
+                  <span className="opt-helpText">{selectedTempHelp}</span>
+                </div>
+              </div>
+
+              <div className="opt-grid">
+                <input name="flight_start" placeholder="Flight start (YYYY-MM-DD)" value={form.flight_start} onChange={handleChange} />
+                <input name="flight_end" placeholder="Flight end (YYYY-MM-DD)" value={form.flight_end} onChange={handleChange} />
+                <input name="audience_size" placeholder="Audience size (optional)" value={form.audience_size} onChange={handleChange} />
+                <input name="budget_type" placeholder="Budget type (Daily/Lifetime)" value={form.budget_type} onChange={handleChange} />
+                <input name="conversion_event" placeholder="Conversion event (optional)" value={form.conversion_event} onChange={handleChange} />
+                <input name="geo" placeholder="Geo (optional)" value={form.geo} onChange={handleChange} />
+                <input name="device" placeholder="Device (optional)" value={form.device} onChange={handleChange} />
+              </div>
+
+              <textarea
+                className="opt-textarea"
+                name="notes"
+                placeholder="Notes (optional): what you tested, what’s not working, constraints, etc."
+                value={form.notes}
+                onChange={handleChange}
+                rows={3}
+              />
+            </StepSection>
+
+            <StepSection
+              step="2"
+              title={
+                <>
+                  Current Creative
+                  <InfoTip text="Upload the actual ad creative or paste current copy so AdGen can find what may be hurting performance." />
+                </>
+              }
+              description="Upload the creative you are running or paste the existing ad copy."
+            >
+              <div className="opt-uploadBox">
+                <input
+                  ref={fileInputRef}
+                  className="opt-file"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  multiple
+                  onChange={onPickFiles}
+                />
+
+                <Button
+                  type="button"
+                  className="opt-secondaryBtn"
+                  onClick={uploadCreatives}
+                  disabled={uploading || !selectedFiles.length}
+                >
+                  {uploading ? "Uploading..." : "Upload Creatives"}
+                </Button>
+              </div>
+
+              {uploadErr && <p className="opt-error">{uploadErr}</p>}
+
+              {uploadedUrls.length > 0 && (
+                <div className="opt-thumbGrid">
+                  {uploadedUrls.map((u, i) => (
+                    <img key={i} src={u} alt={`Creative ${i + 1}`} className="opt-thumb" />
+                  ))}
+                </div>
               )}
 
-              {uploadedUrls.length === 0 && (
-                <p className="opt-subtext">
-                  Upload at least one creative above to unlock one-click “Generate New Creative”.
-                </p>
-              )}
-            </div>
-          )}
-        </form>
-      )}
+              <div className="opt-grid">
+                <input name="current_headline" placeholder="Headline (optional)" value={form.current_headline} onChange={handleChange} />
+                <input name="current_cta" placeholder="CTA (optional)" value={form.current_cta} onChange={handleChange} />
+                <input name="current_image_prompt" placeholder="Creative notes (optional)" value={form.current_image_prompt} onChange={handleChange} />
+              </div>
+
+              <textarea
+                className="opt-textarea"
+                name="current_primary_text"
+                placeholder="Primary text (optional)"
+                value={form.current_primary_text}
+                onChange={handleChange}
+                rows={3}
+              />
+            </StepSection>
+
+            <StepSection
+              step="3"
+              title={
+                <>
+                  Performance Metrics
+                  <InfoTip text="CTR, CPM, CPC, CPA, ROAS, impressions, clicks, and conversions help AdGen make stronger recommendations." />
+                </>
+              }
+              description="Add any available performance data. Partial metrics still help."
+            >
+              <div className="opt-grid">
+                <input name="ctr" placeholder="CTR %" value={form.ctr} onChange={handleChange} />
+                <input name="cpc" placeholder="CPC" value={form.cpc} onChange={handleChange} />
+                <input name="cpa" placeholder="CPA" value={form.cpa} onChange={handleChange} />
+                <input name="cpm" placeholder="CPM" value={form.cpm} onChange={handleChange} />
+                <input name="spend" placeholder="Spend" value={form.spend} onChange={handleChange} />
+                <input name="impressions" placeholder="Impressions" value={form.impressions} onChange={handleChange} />
+                <input name="clicks" placeholder="Clicks" value={form.clicks} onChange={handleChange} />
+                <input name="conversions" placeholder="Conversions" value={form.conversions} onChange={handleChange} />
+                <input name="roas" placeholder="ROAS" value={form.roas} onChange={handleChange} />
+                <input name="frequency" placeholder="Frequency" value={form.frequency} onChange={handleChange} />
+              </div>
+            </StepSection>
+
+            <StepSection
+              step="4"
+              title={
+                <>
+                  AI Enhancements
+                  <InfoTip text="Brand Kit lets AdGen use your saved logo, colors, fonts, voice, audience, and brand rules during optimization." />
+                </>
+              }
+              description="Choose which intelligence layers AdGen should use during optimization."
+            >
+              <div className="opt-enhancementGrid">
+                <div className="opt-enhancementCard">
+                  <label className="opt-toggle">
+                    <input
+                      type="checkbox"
+                      checked={useBrandKit}
+                      onChange={(e) => setUseBrandKit(e.target.checked)}
+                      disabled={loading || regenLoading}
+                    />
+                    <span>
+                      <strong>Apply Brand Kit</strong>
+                      <small>Recommended</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </StepSection>
+
+            <Button className="opt-mainCta" type="submit" disabled={loading}>
+              {loading ? "Analyzing..." : "✨ Analyze & Improve"}
+            </Button>
+
+            {err && <p className="opt-error">{err}</p>}
+
+            {result && (
+              <Card className="opt-resultsPanel">
+                <div className="section-heading">
+                  <span className="step-badge">5</span>
+                  <div>
+                    <h2>
+                      Optimization Results
+                      <InfoTip text="These results include diagnosis, recommendations, improved copy, and a stronger image prompt." />
+                    </h2>
+                    <p>Review AdGen’s diagnosis, recommendations, and improved creative direction.</p>
+                  </div>
+                </div>
+
+                <div className="opt-resultGrid">
+                  <Card className="opt-resultCard opt-resultWide">
+                    <h3>Executive Summary</h3>
+                    <p>{result.summary}</p>
+                  </Card>
+
+                  <Card className="opt-resultCard">
+                    <h3>Likely Issues</h3>
+                    <ul>
+                      {result.likely_issues?.map((x, i) => <li key={i}>{x}</li>)}
+                    </ul>
+                  </Card>
+
+                  <Card className="opt-resultCard">
+                    <h3>AI Recommendations</h3>
+                    <ul>
+                      {result.recommended_changes?.map((x, i) => <li key={i}>{x}</li>)}
+                    </ul>
+                  </Card>
+
+                  <Card className="opt-resultCard opt-resultWide">
+                    <h3>Improved Copy</h3>
+                    <div className="opt-copyBlock">
+                      <span>Headline</span>
+                      <p>{result.improved_headline}</p>
+                    </div>
+                    <div className="opt-copyBlock">
+                      <span>Primary Text</span>
+                      <p>{result.improved_primary_text}</p>
+                    </div>
+                    <div className="opt-copyBlock">
+                      <span>CTA</span>
+                      <p>{result.improved_cta}</p>
+                    </div>
+                  </Card>
+
+                  <Card className="opt-resultCard opt-resultWide">
+                    <h3>Optimized Image Prompt</h3>
+                    <p>{result.improved_image_prompt}</p>
+                  </Card>
+                </div>
+
+                {uploadedUrls.length > 0 ? (
+                  <Card className="opt-generatePanel">
+                    <h3>Generate Optimized Creative</h3>
+                    <p>
+                      Generate a new creative using the improved copy and image direction.
+                      This will count toward your monthly generation limit.
+                    </p>
+
+                    <div className="opt-grid">
+                      <select value={regenSize} onChange={(e) => setRegenSize(e.target.value)}>
+                        <option value="1024x1024">Square (1024x1024)</option>
+                        <option value="1024x1792">Portrait (1024x1792)</option>
+                        <option value="1792x1024">Landscape (1792x1024)</option>
+                      </select>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={handleGenerateNewCreative}
+                      disabled={regenLoading}
+                    >
+                      {regenLoading ? "Generating..." : "Generate New Creative"}
+                    </Button>
+
+                    {regenErr && <p className="opt-error">{regenErr}</p>}
+
+                    {regenResult?.imageUrl && (
+                      <Card className="opt-updatedCreativeCard">
+                        <div className="opt-updatedCreativeHeader">
+                          <div>
+                            <p className="opt-miniKicker">UPDATED CREATIVE</p>
+                            <h3>Optimized Creative Ready</h3>
+                            <p>
+                              This creative was generated from your optimization results,
+                              improved copy, Brand Kit settings, and selected aspect ratio.
+                            </p>
+                          </div>
+                        </div>
+
+                        <img
+                          src={regenResult.imageUrl}
+                          alt="Regenerated creative"
+                          className="opt-generated"
+                          onError={() => alert("Image failed to load")}
+                        />
+
+                        <div className="opt-updatedCopyGrid">
+                          <div>
+                            <span>Headline</span>
+                            <p>{result.improved_headline}</p>
+                          </div>
+
+                          <div>
+                            <span>CTA</span>
+                            <p>{result.improved_cta}</p>
+                          </div>
+
+                          <div className="opt-copyWide">
+                            <span>Primary Text</span>
+                            <p>{result.improved_primary_text}</p>
+                          </div>
+                        </div>
+
+                        <Button
+                          type="button"
+                          className="opt-secondaryBtn"
+                          onClick={downloadOptimizedImage}
+                        >
+                          Download Image
+                        </Button>
+
+                        {regenResult?.usage && (
+                          <p className="opt-subtext">
+                            Usage: {regenResult.usage.used}/{regenResult.usage.cap}{" "}
+                            remaining {regenResult.usage.remaining}
+                          </p>
+                        )}
+                      </Card>
+                    )}
+                  </Card>
+                ) : (
+                  <p className="opt-subtext">
+                    Upload at least one creative above to unlock one-click “Generate New Creative”.
+                  </p>
+                )}
+              </Card>
+            )}
+          </form>
+        )}
+      </main>
+
+      <aside className="opt-side">
+        <Card className="opt-sideCard">
+          <h3>Tips for better analysis</h3>
+          <p>
+            The more campaign context and performance data you include, the stronger the recommendations will be.
+          </p>
+          <ul>
+            <li>Upload the actual creative you are running</li>
+            <li>Include CTR, CPM, CPC, CPA, and ROAS when available</li>
+            <li>Add placement, objective, and audience details</li>
+            <li>Describe what feels weak or underperforming</li>
+          </ul>
+        </Card>
+
+        <Card className="opt-sideCard">
+          <h3>Analysis Preview</h3>
+          <p>
+            {result
+              ? "Your optimization results are ready below."
+              : "Your AI recommendations will appear after analysis."}
+          </p>
+        </Card>
+      </aside>
     </div>
-  );
+  </div>
+);
 }
 
 

@@ -10,6 +10,11 @@ import {
 import { auth } from "../firebaseConfig";
 import googleFonts from "../data/googleFonts";
 import "./BrandKit.css";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import InfoTip from "../components/ui/InfoTip";
+import FieldLabel from "../components/ui/FieldLabel";
 
 const db = getFirestore();
 
@@ -98,6 +103,32 @@ export default function BrandKit() {
   const [saveMsg, setSaveMsg] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoErr, setLogoErr] = useState("");
+
+  const brandCompletion = useMemo(() => {
+  const checks = [
+    { label: "Brand name", done: !!kit.brandName },
+    { label: "Logo", done: !!kit.logoUrl },
+    { label: "Website", done: !!kit.websiteUrl },
+    { label: "Industry", done: !!kit.industry },
+    { label: "Audience", done: !!kit.targetAudience },
+    { label: "Brand DNA", done: !!kit.brandDna },
+    { label: "Colors", done: !!(kit.colors?.primary || kit.colors?.secondary || kit.colors?.accent) },
+    { label: "Fonts", done: !!(kit.fonts?.headline || kit.fonts?.body || kit.fonts?.cta) },
+    { label: "Voice", done: !!kit.voice },
+    { label: "Rules", done: !!(kit.doList || kit.dontList || kit.complianceRules) },
+  ];
+
+  const completed = checks.filter((item) => item.done).length;
+  const score = Math.round((completed / checks.length) * 100);
+
+  return {
+    score,
+    completed,
+    total: checks.length,
+    checks,
+    missing: checks.filter((item) => !item.done),
+  };
+}, [kit]);
 
   const fontOptions = useMemo(() => {
     return googleFonts.map((font) => ({
@@ -388,29 +419,59 @@ export default function BrandKit() {
   return (
     <div className="brandkit-page">
       <div className="brandkit-shell">
-        <section className="brandkit-hero">
-          <div>
-            <p className="brandkit-eyebrow">Brand Kit</p>
-            <h1>Keep every creative on-brand.</h1>
-            <p>
-              Configure your Brand Kit once and AdGen can apply it across Image
-              Generation, Video Ads, the Ad Optimizer, and future platform features.
-              Defaults are optional and only used when filled in.
-            </p>
-          </div>
-        </section>
+        <PageHeader
+          eyebrow="BRAND KIT"
+          title="Build your AI Brand Identity"
+          description="Upload your logo, colors, fonts, messaging, audience, and creative preferences once. AdGen uses your Brand Kit across Image Generation, Video Ads, the Optimizer, and future platform features."
+        />
 
-        <section className="brandkit-tips">
-          <h2>💡 Best Practices</h2>
-          <div className="tips-grid">
-            <p><strong>✓ Use a transparent PNG or SVG logo</strong><br />Transparent logos blend naturally into ads without white boxes.</p>
-            <p><strong>✓ Upload a high-resolution logo</strong><br />Recommended minimum size: 1000 × 1000 pixels.</p>
-            <p><strong>✓ Select official brand colors</strong><br />These help AdGen keep future creatives visually consistent.</p>
-            <p><strong>✓ Choose Google Fonts</strong><br />AdGen can better reference known fonts or close visual matches.</p>
-            <p><strong>✓ Optional defaults are safe to leave blank</strong><br />Blank defaults will not influence generation.</p>
-            <p><strong>✓ Keep your Brand Kit updated</strong><br />Changes will apply to future generated creatives.</p>
-          </div>
-        </section>
+        <div className="brandkit-topGrid">
+          <Card className="brandkit-healthCard">
+            <div className="brandkit-healthTop">
+              <div>
+                <span>Brand Kit Health</span>
+                <h2>{brandCompletion.score}%</h2>
+                <p>{brandCompletion.completed}/{brandCompletion.total} identity signals configured</p>
+              </div>
+
+              <div className="brandkit-healthRing">
+                {brandCompletion.score}%
+              </div>
+            </div>
+
+            <div className="brandkit-progressTrack">
+              <div style={{ width: `${brandCompletion.score}%` }} />
+            </div>
+
+            <div className="brandkit-checkGrid">
+              {brandCompletion.checks.map((item) => (
+                <div key={item.label} className={item.done ? "complete" : ""}>
+                  <span>{item.done ? "✓" : "○"}</span>
+                  {item.label}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="brandkit-aiCard">
+            <h3>
+              AI Brand Usage
+              <InfoTip text="AdGen uses these fields to keep generated images, videos, optimizer outputs, and future recommendations on-brand." />
+            </h3>
+
+            <p>
+              Your Brand Kit is automatically available inside the Image Generator,
+              Video Ads, and Ad Optimizer whenever Brand Kit is enabled.
+            </p>
+
+            <ul>
+              <li>Applies logo, colors, and fonts when available</li>
+              <li>Preserves brand voice and messaging rules</li>
+              <li>Improves creative consistency across campaigns</li>
+              <li>Supports future Meta and Google Ads intelligence</li>
+            </ul>
+          </Card>
+        </div>
 
         <div className="brandkit-grid">
           <section className="brandkit-card">
@@ -418,8 +479,13 @@ export default function BrandKit() {
               <h2>Brand Identity</h2>
 
               <div className="brandkit-field">
-                <label>Brand Name</label>
+                <FieldLabel
+                  htmlFor="brandName"
+                  label="Brand Name"
+                  info="The public name AdGen should use when understanding your company and keeping creatives consistent."
+                />
                 <input
+                  id="brandName"
                   value={kit.brandName}
                   onChange={(e) => updateKit("brandName", e.target.value)}
                   placeholder="Example: AdGen MCM"
@@ -427,8 +493,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Website URL <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="websiteUrl"
+                  label="Website URL"
+                  optional
+                  info="Used for future website import and extra brand context. AdGen can eventually use this to detect your logo, colors, products, and messaging."
+                />
                 <input
+                  id="websiteUrl"
                   value={kit.websiteUrl}
                   onChange={(e) => updateKit("websiteUrl", e.target.value)}
                   placeholder="https://yourbrand.com"
@@ -436,7 +508,10 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Logo</label>
+                <FieldLabel
+                  label="Logo"
+                  info="Upload your brand logo so AdGen can use it as a visual reference when Brand Kit is enabled."
+                />
 
                 <input
                   ref={logoInputRef}
@@ -453,41 +528,35 @@ export default function BrandKit() {
                   tabIndex={0}
                 >
                   {kit.logoUrl ? (
-                    <img
-                      src={kit.logoUrl}
-                      alt="Brand logo"
-                      className="brandkit-logo-preview"
-                    />
+                    <img src={kit.logoUrl} alt="Brand logo" className="brandkit-logo-preview" />
                   ) : (
                     <>
                       <span>{logoUploading ? "Uploading..." : "Upload Logo"}</span>
-                      <small>
-                        Recommended: transparent PNG or SVG, 1000 × 1000 px or larger.
-                      </small>
+                      <small>Recommended: transparent PNG or SVG, 1000 × 1000 px or larger.</small>
                     </>
                   )}
                 </div>
 
                 {kit.logoUrl && (
-                <div className="brandkit-logo-actions">
+                  <div className="brandkit-logo-actions">
                     <button
-                    type="button"
-                    className="brandkit-small-btn"
-                    onClick={() => logoInputRef.current?.click()}
-                    disabled={logoUploading}
+                      type="button"
+                      className="brandkit-small-btn"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={logoUploading}
                     >
-                    {logoUploading ? "Uploading..." : "Change Logo"}
+                      {logoUploading ? "Uploading..." : "Change Logo"}
                     </button>
 
                     <button
-                    type="button"
-                    className="brandkit-small-btn brandkit-remove-btn"
-                    onClick={() => updateKit("logoUrl", "")}
-                    disabled={logoUploading}
+                      type="button"
+                      className="brandkit-small-btn brandkit-remove-btn"
+                      onClick={() => updateKit("logoUrl", "")}
+                      disabled={logoUploading}
                     >
-                    Remove Logo
+                      Remove Logo
                     </button>
-                </div>
+                  </div>
                 )}
 
                 {logoErr && <p className="brandkit-error">{logoErr}</p>}
@@ -495,7 +564,10 @@ export default function BrandKit() {
 
               <div className="brandkit-import-disabled">
                 <div>
-                  <h3>Import Brand from Website</h3>
+                  <h3>
+                    Import Brand from Website
+                    <InfoTip text="Coming later: AdGen will scan your website to detect brand colors, fonts, products, tone, and messaging automatically." />
+                  </h3>
                   <p>
                     Paste your website URL and AdGen will detect your logo, colors,
                     fonts, products, and brand voice.
@@ -512,8 +584,14 @@ export default function BrandKit() {
               <h2>Brand Strategy <span className="section-optional">Optional</span></h2>
 
               <div className="brandkit-field">
-                <label>Industry <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="industry"
+                  label="Industry"
+                  optional
+                  info="Helps AdGen understand your market, category norms, customer expectations, and common ad patterns."
+                />
                 <input
+                  id="industry"
                   value={kit.industry}
                   onChange={(e) => updateKit("industry", e.target.value)}
                   placeholder="Example: Fitness, SaaS, Real Estate, Skincare"
@@ -521,8 +599,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Brand Personality <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="brandPersonality"
+                  label="Brand Personality"
+                  optional
+                  info="Defines how your brand should feel visually and verbally, such as premium, bold, friendly, trustworthy, luxury, or playful."
+                />
                 <input
+                  id="brandPersonality"
                   value={kit.brandPersonality}
                   onChange={(e) => updateKit("brandPersonality", e.target.value)}
                   placeholder="Example: Premium, bold, trustworthy, modern"
@@ -530,8 +614,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Target Audience <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="targetAudience"
+                  label="Target Audience"
+                  optional
+                  info="Helps AdGen shape hooks, messaging, visuals, offers, and CTAs around the people most likely to buy."
+                />
                 <textarea
+                  id="targetAudience"
                   value={kit.targetAudience}
                   onChange={(e) => updateKit("targetAudience", e.target.value)}
                   placeholder="Example: Busy professionals aged 30–50 who want simple, premium solutions."
@@ -539,8 +629,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Brand DNA <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="brandDna"
+                  label="Brand DNA"
+                  optional
+                  info="A deeper description of your positioning, values, messaging style, and what makes your company different."
+                />
                 <textarea
+                  id="brandDna"
                   value={kit.brandDna}
                   onChange={(e) => updateKit("brandDna", e.target.value)}
                   placeholder="Example: We are a premium fitness brand. We speak like a coach, not a salesperson. We emphasize science-backed results, simplicity, and trust."
@@ -549,61 +645,80 @@ export default function BrandKit() {
             </div>
 
             <div className="brandkit-section">
-                <h2>Colors <span className="section-optional">Optional</span></h2>
+              <h2>
+                Colors <span className="section-optional">Optional</span>
+              </h2>
 
-                <p className="brandkit-helper-text">
-                    Enable only the colors you want AdGen to use. Disabled colors will not be injected into AI prompts.
-                </p>
+              <p className="brandkit-helper-text">
+                Enable only the colors you want AdGen to use. Disabled colors will not be injected into AI prompts.
+              </p>
 
-                <div className="brandkit-color-row">
-                    {[
-                    { key: "primary", label: "Primary", fallback: "#111827" },
-                    { key: "secondary", label: "Secondary", fallback: "#ffffff" },
-                    { key: "accent", label: "Accent", fallback: "#2563eb" },
-                    ].map((color) => {
-                    const enabled = !!kit.colorEnabled?.[color.key];
-                    const value = kit.colors?.[color.key] || color.fallback;
+              <div className="brandkit-color-row">
+                {[
+                  {
+                    key: "primary",
+                    label: "Primary",
+                    fallback: "#111827",
+                    info: "Your main brand color. AdGen can use this for dominant accents, branded layouts, and visual identity.",
+                  },
+                  {
+                    key: "secondary",
+                    label: "Secondary",
+                    fallback: "#ffffff",
+                    info: "Your supporting brand color. AdGen can use this for backgrounds, contrast, and secondary design elements.",
+                  },
+                  {
+                    key: "accent",
+                    label: "Accent",
+                    fallback: "#2563eb",
+                    info: "Your highlight color. AdGen can use this for CTA buttons, badges, emphasis, and key conversion elements.",
+                  },
+                ].map((color) => {
+                  const enabled = !!kit.colorEnabled?.[color.key];
+                  const value = kit.colors?.[color.key] || color.fallback;
 
-                    return (
-                        <div className="brandkit-field brandkit-color-card" key={color.key}>
-                        <label className="brandkit-color-toggle">
-                            <input
-                            type="checkbox"
-                            checked={enabled}
-                            onChange={(e) => {
-                                const checked = e.target.checked;
-
-                                updateKit(`colorEnabled.${color.key}`, checked);
-                                updateKit(
-                                `colors.${color.key}`,
-                                checked
-                                    ? (kit.colors[color.key] || color.fallback)
-                                    : ""
-                                );
-                            }}
-                            />
-                            <span>{color.label}</span>
-                        </label>
-
+                  return (
+                    <div className="brandkit-field brandkit-color-card" key={color.key}>
+                      <label className="brandkit-color-toggle">
                         <input
-                            className="brandkit-color-input"
-                            type="color"
-                            value={value}
-                            disabled={!enabled}
-                            onChange={(e) => updateKit(`colors.${color.key}`, e.target.value)}
-                        />
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
 
-                        <small className="brandkit-helper-text">
-                            {enabled ? value : "Disabled — this color will not influence AI generation"}
-                        </small>
-                        </div>
-                    );
-                    })}
-                </div>
+                            updateKit(`colorEnabled.${color.key}`, checked);
+                            updateKit(
+                              `colors.${color.key}`,
+                              checked ? kit.colors[color.key] || color.fallback : ""
+                            );
+                          }}
+                        />
+                        <span>{color.label}</span>
+                        <InfoTip text={color.info} />
+                      </label>
+
+                      <input
+                        className="brandkit-color-input"
+                        type="color"
+                        value={value}
+                        disabled={!enabled}
+                        onChange={(e) => updateKit(`colors.${color.key}`, e.target.value)}
+                      />
+
+                      <small className="brandkit-helper-text">
+                        {enabled ? value : "Disabled — this color will not influence AI generation"}
+                      </small>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="brandkit-section">
-              <h2>Brand Typography</h2>
+              <h2>
+                Brand Typography
+                <InfoTip text="Fonts help AdGen understand the visual style your ads should reference when Brand Kit is enabled." />
+              </h2>
 
               <FontSelect
                 label="Headline Font"
@@ -632,40 +747,43 @@ export default function BrandKit() {
               <div
                 className="font-preview-card"
                 style={{
-                    borderColor: kit.colors.accent || "#2563eb",
+                  borderColor: kit.colors.accent || "#2563eb",
                 }}
-            >
+              >
                 <span
-                    className="font-preview-label"
-                    style={{
-                        color: kit.colors.accent || "#2563eb",
-                    }}
+                  className="font-preview-label"
+                  style={{
+                    color: kit.colors.accent || "#2563eb",
+                  }}
                 >
                   Quick Preview
                 </span>
+
                 <h3
-                    style={{
-                        fontFamily: kit.fonts.headline,
-                        color: kit.colors.primary || "#111827",
-                    }}
+                  style={{
+                    fontFamily: kit.fonts.headline,
+                    color: kit.colors.primary || "#ffffff",
+                  }}
                 >
                   The perfect ad starts here.
                 </h3>
+
                 <p
-                    style={{
-                        fontFamily: kit.fonts.body,
-                        color: kit.colors.primary || "#111827",
-                    }}
+                  style={{
+                    fontFamily: kit.fonts.body,
+                    color: kit.colors.primary || "#ffffff",
+                  }}
                 >
                   This is how supporting ad copy and brand messaging could appear in your creatives.
                 </p>
+
                 <button
-                    type="button"
-                    style={{
-                        fontFamily: kit.fonts.cta,
-                        background: kit.colors.accent || "#2563eb",
-                        color: kit.colors.secondary || "#ffffff",
-                    }}
+                  type="button"
+                  style={{
+                    fontFamily: kit.fonts.cta,
+                    background: kit.colors.accent || "#2563eb",
+                    color: kit.colors.secondary || "#ffffff",
+                  }}
                 >
                   {kit.preferredCta || "CTA Preview"}
                 </button>
@@ -676,9 +794,15 @@ export default function BrandKit() {
               <h2>Generation Defaults <span className="section-optional">Optional</span></h2>
 
               <div className="brandkit-field">
-                <label>Default CTA <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="preferredCta"
+                  label="Default CTA"
+                  optional
+                  info="If set, AdGen can use this as your preferred call-to-action when Brand Kit is enabled."
+                />
 
                 <select
+                  id="preferredCta"
                   value={
                     kit.preferredCta === ""
                       ? ""
@@ -709,12 +833,16 @@ export default function BrandKit() {
               </div>
 
               {(kit.preferredCta === "" ||
-                (!COMMON_CTAS.includes(kit.preferredCta) &&
-                  kit.preferredCta !== "")) && (
+                (!COMMON_CTAS.includes(kit.preferredCta) && kit.preferredCta !== "")) && (
                 <div className="brandkit-field">
-                  <label>Custom CTA</label>
+                  <FieldLabel
+                    htmlFor="customCta"
+                    label="Custom CTA"
+                    info="Use this only if your brand has a specific call-to-action that is not in the default list."
+                  />
 
                   <input
+                    id="customCta"
                     type="text"
                     value={kit.preferredCta}
                     onChange={(e) => updateKit("preferredCta", e.target.value)}
@@ -729,8 +857,15 @@ export default function BrandKit() {
               )}
 
               <div className="brandkit-field">
-                <label>Default Platform <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="preferredPlatform"
+                  label="Default Platform"
+                  optional
+                  info="Lets AdGen bias creative recommendations toward the advertising platform you most often use."
+                />
+
                 <select
+                  id="preferredPlatform"
                   value={kit.preferredPlatform}
                   onChange={(e) => updateKit("preferredPlatform", e.target.value)}
                 >
@@ -745,8 +880,15 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Default Aspect Ratio <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="aspectRatioPreference"
+                  label="Default Aspect Ratio"
+                  optional
+                  info="Lets AdGen use your preferred image format by default, such as square, portrait, or landscape."
+                />
+
                 <select
+                  id="aspectRatioPreference"
                   value={kit.aspectRatioPreference}
                   onChange={(e) => updateKit("aspectRatioPreference", e.target.value)}
                 >
@@ -762,8 +904,15 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Default Image Style <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="imageStyle"
+                  label="Default Image Style"
+                  optional
+                  info="Gives AdGen a preferred visual direction for future creatives when Brand Kit is enabled."
+                />
+
                 <select
+                  id="imageStyle"
                   value={kit.imageStyle}
                   onChange={(e) => updateKit("imageStyle", e.target.value)}
                 >
@@ -782,8 +931,15 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Offer Style <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="offerStyle"
+                  label="Offer Style"
+                  optional
+                  info="Helps AdGen understand how your brand usually frames offers, such as discounts, free trials, demos, bundles, or consultations."
+                />
+
                 <input
+                  id="offerStyle"
                   value={kit.offerStyle}
                   onChange={(e) => updateKit("offerStyle", e.target.value)}
                   placeholder="Example: Free trial, discount, demo, appointment, bundle"
@@ -795,8 +951,14 @@ export default function BrandKit() {
               <h2>Advanced AI Controls <span className="section-optional">Optional</span></h2>
 
               <div className="brandkit-field">
-                <label>Voice <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="voice"
+                  label="Voice"
+                  optional
+                  info="Controls how AdGen writes headlines, body copy, CTAs, and messaging for your brand."
+                />
                 <textarea
+                  id="voice"
                   value={kit.voice}
                   onChange={(e) => updateKit("voice", e.target.value)}
                   placeholder="Example: Modern, confident, friendly, premium, and conversion-focused."
@@ -804,8 +966,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Extra Instructions <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="notes"
+                  label="Extra Instructions"
+                  optional
+                  info="Extra creative rules AdGen should follow when Brand Kit is enabled."
+                />
                 <textarea
+                  id="notes"
                   value={kit.notes}
                   onChange={(e) => updateKit("notes", e.target.value)}
                   placeholder="Example: Always use clean backgrounds. Never crop the logo. Avoid red. Mention free shipping when relevant."
@@ -813,8 +981,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Do List <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="doList"
+                  label="Do List"
+                  optional
+                  info="Things AdGen should actively include or prioritize in future creatives."
+                />
                 <textarea
+                  id="doList"
                   value={kit.doList}
                   onChange={(e) => updateKit("doList", e.target.value)}
                   placeholder="Example: Use bright backgrounds, show product in use, include clear CTA buttons."
@@ -822,8 +996,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Don't List <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="dontList"
+                  label="Don't List"
+                  optional
+                  info="Things AdGen should avoid, such as styles, claims, colors, layouts, or restricted creative elements."
+                />
                 <textarea
+                  id="dontList"
                   value={kit.dontList}
                   onChange={(e) => updateKit("dontList", e.target.value)}
                   placeholder="Example: No cartoon style, no children, no fake testimonials, no clutter."
@@ -831,8 +1011,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Brand Keywords <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="brandKeywords"
+                  label="Brand Keywords"
+                  optional
+                  info="Words and themes that represent your brand and can guide copy, visual tone, and positioning."
+                />
                 <input
+                  id="brandKeywords"
                   value={kit.brandKeywords}
                   onChange={(e) => updateKit("brandKeywords", e.target.value)}
                   placeholder="Example: innovation, trust, performance, simplicity"
@@ -840,8 +1026,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Negative Keywords <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="negativeKeywords"
+                  label="Negative Keywords"
+                  optional
+                  info="Words, claims, or themes AdGen should avoid using in generated copy or creative direction."
+                />
                 <input
+                  id="negativeKeywords"
                   value={kit.negativeKeywords}
                   onChange={(e) => updateKit("negativeKeywords", e.target.value)}
                   placeholder="Example: cheap, risky, aggressive, medical claims"
@@ -849,8 +1041,14 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Compliance Rules <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="complianceRules"
+                  label="Compliance Rules"
+                  optional
+                  info="Important for regulated categories or brands that need to avoid certain claims, wording, guarantees, or imagery."
+                />
                 <textarea
+                  id="complianceRules"
                   value={kit.complianceRules}
                   onChange={(e) => updateKit("complianceRules", e.target.value)}
                   placeholder="Example: Never mention guaranteed results. Always avoid before/after claims. Include disclaimers when needed."
@@ -858,21 +1056,28 @@ export default function BrandKit() {
               </div>
 
               <div className="brandkit-field">
-                <label>Products / Services Notes <span className="optional-label">Optional</span></label>
+                <FieldLabel
+                  htmlFor="productsServices"
+                  label="Products / Services Notes"
+                  optional
+                  info="Helps AdGen understand your main products, secondary offers, bundles, services, and positioning."
+                />
                 <textarea
+                  id="productsServices"
                   value={kit.productsServices}
                   onChange={(e) => updateKit("productsServices", e.target.value)}
                   placeholder="Example: Main product is a premium coaching plan. Secondary offer is a free consultation."
                 />
               </div>
 
-              <button
+              <Button
+                type="button"
                 className="brandkit-save-btn"
                 onClick={saveBrandKit}
                 disabled={saving}
               >
                 {saving ? "Saving..." : "Save & Apply Across AdGen"}
-              </button>
+              </Button>
 
               {saveMsg && <p className="brandkit-save-message">{saveMsg}</p>}
             </div>
@@ -885,7 +1090,7 @@ export default function BrandKit() {
                 className="preview-logo"
                 style={{
                     background: kit.colors.secondary || "#ffffff",
-                    color: kit.colors.primary || "#111827",
+                    color: kit.colors.primary || "#ffffff",
                     borderColor: kit.colors.accent || "#2563eb",
                 }}
             >
@@ -903,7 +1108,7 @@ export default function BrandKit() {
             <h3
                 style={{
                     fontFamily: kit.fonts.headline,
-                    color: kit.colors.primary || "#111827",
+                    color: kit.colors.primary || "#ffffff",
                 }}
             >
               {kit.brandName || "Your Brand"}

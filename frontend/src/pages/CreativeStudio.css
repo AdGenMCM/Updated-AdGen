@@ -1,0 +1,555 @@
+.texteditor-container {
+  padding: 24px;
+  align-items: center;
+}
+
+.texteditor-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+.texteditor-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.texteditor-label,
+.texteditor-labelWide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+
+}
+.texteditor-labelWide {
+  flex: 1;
+}
+
+.texteditor-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid #e3e5ee;
+  border-radius: 8px;
+  background: #fafbff;
+}
+
+.texteditor-btn {
+  padding: 10px 14px;
+  border: 1px solid #d5d7e0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+.texteditor-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.texteditor-btnPrimary {
+  padding: 10px 14px;
+  border: 1px solid #1f7aed;
+  border-radius: 10px;
+  background: #1f7aed;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* Canvas area */
+.texteditor-canvasWrap {
+  position: relative;
+  width: 100%;
+  max-width: 1024px;        /* keeps huge images from taking the whole screen */
+  margin: 0 auto;           /* center it */
+  min-height: 360px;
+  border: 1px dashed #cfd2dc;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f6f7fb;
+}
+
+/* The inner box is sized to match the canvas' CSS height so overlays align */
+.texteditor-inner {
+  position: relative;
+  width: 100%;
+}
+
+.texteditor-canvas {
+  width: 100%;
+  height: auto; /* keep aspect ratio */
+  display: block;
+}
+
+.texteditor-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #6c7280;
+  font-size: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+/* --- Safe-area guides --- */
+.texteditor-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* don't block dragging */
+  z-index: 2;
+}
+
+.texteditor-guide-safe {
+  position: absolute;
+  border: 2px dashed #00e0ff;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.35); /* darken outside */
+  border-radius: 8px;
+}
+
+.texteditor-guide-label {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(0,0,0,.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+p{
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+/* Center the whole toolbar block horizontally */
+.texteditor-toolbar {
+  justify-items: center;   /* for grid children */
+  margin-inline: auto;
+}
+
+/* Center ONLY the first row (Background image + Guide) */
+.texteditor-toolbar .texteditor-row:first-child {
+  justify-content: center; /* center its flex children */
+}
+
+/* Center the label stacks and their controls in that first row */
+.texteditor-toolbar .texteditor-row:first-child .texteditor-label,
+.texteditor-toolbar .texteditor-row:first-child .texteditor-labelWide {
+  align-items: center;   /* centers label text + control vertically */
+  text-align: center;    /* centers the label text */
+}
+
+/* Ensure the file input and select actually center */
+.texteditor-toolbar .texteditor-row:first-child input[type="file"],
+.texteditor-toolbar .texteditor-row:first-child select {
+  display: block;        /* margin auto works on block elements */
+  margin: 0 auto;
+}
+
+/* Creative Studio base refresh */
+
+.texteditor-container {
+  min-height: 100vh;
+  padding: 64px 56px 104px;
+  color: #fff;
+  background:
+    radial-gradient(circle at top left, rgba(124, 58, 237, 0.18), transparent 34%),
+    linear-gradient(180deg, #080d18 0%, #060a13 100%);
+}
+
+.texteditor-container .ui-page-header {
+  display: block;
+  margin-bottom: 42px;
+}
+
+.texteditor-container .ui-page-header-copy {
+  max-width: 820px;
+}
+
+.texteditor-container .ui-page-eyebrow,
+.texteditor-container .ui-page-header h1,
+.texteditor-container .ui-page-header p {
+  text-align: left;
+}
+
+.texteditor-toolbar {
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.texteditor-label,
+.texteditor-labelWide {
+  color: #cbd5e1;
+}
+
+.texteditor-label input,
+.texteditor-label select,
+.texteditor-labelWide textarea {
+  background: #1f2937;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 12px;
+  padding: 11px 12px;
+}
+
+.texteditor-labelWide textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.texteditor-checkbox {
+  background: rgba(31, 41, 55, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+}
+
+.texteditor-checkbox input {
+  accent-color: #8b5cf6;
+}
+
+.texteditor-btn {
+  background: rgba(31, 41, 55, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 800;
+}
+
+.texteditor-btnPrimary {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  border: none;
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 0 14px 32px rgba(109, 40, 217, 0.28);
+}
+
+.texteditor-canvasWrap {
+  max-width: 1180px;
+  margin-top: 28px;
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.texteditor-placeholder {
+  color: #9ca3af;
+}
+
+@media (max-width: 900px) {
+  .texteditor-container {
+    padding: 32px 20px 72px;
+  }
+}
+
+.creative-studio-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: start;
+}
+
+.creative-canvas-card,
+.creative-tool-card {
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 24px;
+  color: #fff;
+}
+
+.creative-canvas-card {
+  padding: 28px;
+}
+
+.creative-canvas-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.creative-canvas-topbar h2,
+.creative-tool-heading h3 {
+  margin: 0;
+  color: #fff;
+}
+
+.creative-canvas-topbar p,
+.creative-muted {
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+.creative-canvas-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.creative-tools-panel {
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 88px;
+}
+
+.creative-tool-card {
+  padding: 20px;
+}
+
+.creative-tool-heading {
+  margin-bottom: 16px;
+}
+
+.creative-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.creative-action-grid button,
+.creative-field input,
+.creative-field select,
+.creative-field textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #1f2937;
+  color: #fff;
+}
+
+.creative-action-grid button {
+  padding: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.creative-action-grid button:hover:not(:disabled) {
+  background: rgba(124,58,237,.22);
+}
+
+.creative-action-grid button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.creative-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.creative-field input,
+.creative-field select,
+.creative-field textarea {
+  padding: 12px 14px;
+  outline: none;
+}
+
+.creative-field textarea {
+  resize: vertical;
+}
+
+.creative-field input:focus,
+.creative-field select:focus,
+.creative-field textarea:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139,92,246,.18);
+}
+
+.creative-two-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.creative-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.creative-toggle-grid label,
+.creative-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(31,41,55,.75);
+  color: #d1d5db;
+  font-weight: 800;
+}
+
+.creative-toggle-grid input,
+.creative-check input {
+  accent-color: #8b5cf6;
+}
+
+.creative-export-btn {
+  width: 100%;
+}
+
+.texteditor-canvasWrap {
+  max-width: none;
+  width: 100%;
+  min-height: 560px;
+  margin: 0;
+  background: rgba(8, 13, 24, 0.86);
+  border: 1px dashed rgba(255,255,255,.16);
+  border-radius: 24px;
+}
+
+.texteditor-placeholder {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  color: #9ca3af;
+}
+
+.texteditor-placeholder strong {
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 1200px) {
+  .creative-studio-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .creative-tools-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 700px) {
+  .creative-canvas-topbar {
+    flex-direction: column;
+  }
+
+  .creative-action-grid,
+  .creative-two-grid,
+  .creative-toggle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Match Ad Generator page sizing */
+
+.texteditor-container {
+  padding: 64px 56px 104px !important;
+  color: var(--ag-text);
+}
+
+.texteditor-container .ui-page-header {
+  max-width: none !important;
+  margin: 0 0 52px !important;
+}
+
+.texteditor-container .ui-page-header-copy {
+  max-width: 780px !important;
+}
+
+.creative-studio-shell {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr) !important;
+  gap: 34px !important;
+  align-items: start !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.creative-canvas-panel {
+  min-width: 0;
+}
+
+.creative-tools-panel {
+  width: auto !important;
+  position: sticky;
+  top: 106px;
+  display: grid;
+  gap: 32px;
+}
+
+.creative-canvas-card,
+.creative-tool-card {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.creative-canvas-card {
+  padding: 40px;
+}
+
+.creative-tool-card {
+  padding: 32px;
+}
+
+.texteditor-canvasWrap {
+  min-height: 520px;
+}
+
+@media (max-width: 1180px) {
+  .creative-studio-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  .creative-tools-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .texteditor-container {
+    padding: 32px 20px 72px !important;
+  }
+
+  .creative-canvas-card,
+  .creative-tool-card {
+    padding: 26px;
+  }
+}
+
+/* Keep Creative Canvas visible while editing */
+
+.creative-canvas-panel {
+  position: sticky;
+  top: 106px;
+  align-self: start;
+}
+
+.creative-canvas-card {
+  max-height: calc(100vh - 132px);
+  overflow: auto;
+}
+
+@media (max-width: 1180px) {
+  .creative-canvas-panel {
+    position: static;
+  }
+
+  .creative-canvas-card {
+    max-height: none;
+    overflow: visible;
+  }
+}

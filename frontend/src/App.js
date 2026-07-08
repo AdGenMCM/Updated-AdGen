@@ -4,7 +4,6 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Home from "./pages/Home";
 import AdGenerator from "./pages/AdGenerator";
-import TextEditor from "./pages/TextEditor";
 import ProtectedRoute from "./ProtectedRoute"; // auth-only, for /subscribe
 import PaidRoute from "./PaidRoute"; // auth + active sub
 import AuthForm from "./AuthForm";
@@ -15,6 +14,7 @@ import Library from "./pages/Library";
 import Insights from "./pages/Insights";
 import BrandKit from "./pages/BrandKit";
 import Dashboard from "./pages/Dashboard";
+import CreativeStudio from "./pages/CreativeStudio";
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -52,7 +52,7 @@ function ConditionalNavbar() {
     "/dashboard",
     "/adgenerator",
     "/video-ads",
-    "/texteditor",
+    "/creative-studio",
     "/optimizer",
     "/library",
     "/insights",
@@ -91,16 +91,16 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardRoute><Dashboard /></DashboardRoute>} />
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
-            <Route path="/brand-kit" element={<BrandKit />} />
-            <Route path="/optimizer" element={<Optimizer />} />
-            <Route path="/library" element={<Library />} />
-            <Route path="/insights" element={<Insights />} />
+            <Route path="/brand-kit" element={<DashboardRoute><BrandKit /></DashboardRoute>} />
+            <Route path="/optimizer" element={<DashboardRoute><Optimizer /></DashboardRoute>} />
+            <Route path="/library" element={<DashboardRoute><Library /></DashboardRoute>} />
+            <Route path="/insights" element={<DashboardRoute><Insights /></DashboardRoute>} />
           </Route>
 
           {/* Paid features (require active sub) */}
           <Route element={<PaidRoute />}>
             <Route path="/adgenerator" element={<DashboardRoute><AdGenerator /></DashboardRoute>} />
-            <Route path="/texteditor" element={<TextEditor />} />
+            <Route path="/creative-studio" element={<DashboardRoute><CreativeStudio /></DashboardRoute>} />
             <Route path="/video-ads" element={<DashboardRoute><VideoAds /></DashboardRoute>} />
           </Route>
 

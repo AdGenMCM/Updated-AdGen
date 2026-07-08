@@ -308,3 +308,48 @@
   background: rgba(255, 255, 255, 0.07);
 }
 
+/* Sidebar scroll fix */
+
+.dash-sidebar {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dash-brand,
+.dash-new-button,
+.dash-sidebar-card,
+.dash-sidebar-footer {
+  flex-shrink: 0;
+}
+
+.dash-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 18px;
+}
+
+.dash-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dash-nav::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 999px;
+}
+
+.dash-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dash-sidebar-card {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.dash-sidebar-footer {
+  position: static;
+}

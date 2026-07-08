@@ -1693,6 +1693,7 @@ It should be visually impressive enough to appear in a professional design portf
 
 
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
+# ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
 async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = Header(default=None)):
     uid, _email, claims = require_user(authorization)
@@ -1701,8 +1702,10 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     db = get_db()
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
+
+    brand_kit = (user_doc.get("brandKit") or {}) if getattr(payload, "useBrandKit", True) else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
+
     tier, status = get_tier_and_status(user_doc)
 
     if not admin:
@@ -1724,7 +1727,6 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     creative_urls = payload.creative_image_urls or []
     creative_analysis = await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
 
-    # include extra context fields (even if model ignores, it’s useful)
     extra = {
         "flight_start": payload.flight_start,
         "flight_end": payload.flight_end,
@@ -1747,7 +1749,12 @@ Your job is to analyze the current ad, uploaded creative, campaign context, and 
 4. A production-ready image prompt for generating a stronger finished advertisement
 
 RULES:
-- Output ONLY valid JSON. No markdown, no commentary.
+- Output ONLY valid JSON.
+- Do not include markdown.
+- Do not include commentary outside the JSON object.
+- likely_issues must be an array of strings.
+- recommended_changes must be an array of strings.
+- confidence must be exactly one of: low, medium, high.
 - improved_headline <= 40 characters.
 - improved_primary_text <= 150 characters.
 - improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now.
@@ -1789,10 +1796,9 @@ offer: {offer or "N/A"}
 audience_temp: {payload.audience_temp}
 notes: {payload.notes or ""}
 
-
 {brand_kit_context}
-When Brand Kit information is provided:
 
+When Brand Kit information is provided:
 • Treat it as the established visual identity.
 • Only use colors, fonts, logo, voice, and rules that are present.
 • If colors or fonts are blank, ignore them completely.
@@ -1847,29 +1853,100 @@ improved_cta,
 improved_image_prompt,
 confidence
 """.strip()
-    
+
     try:
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
                 model="gpt-4-turbo",
+                response_format={"type": "json_object"},
                 messages=[
-                    {"role": "system", "content": "Output ONLY valid JSON."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "You output only valid JSON. "
+                            "Return arrays where arrays are requested. "
+                            "Return confidence as lowercase: low, medium, or high."
+                        ),
+                    },
                     {"role": "user", "content": optimizer_prompt},
                 ],
-                max_tokens=650,
+                max_tokens=750,
             )
         )
+
         raw = (resp.choices[0].message.content or "").strip()
         obj = _extract_json_object(raw)
 
         if not obj or "improved_headline" not in obj:
             raise HTTPException(status_code=502, detail="Optimizer returned invalid JSON.")
 
-        obj.setdefault("summary", "Here are recommended improvements based on the metrics provided.")
-        obj.setdefault("likely_issues", [])
-        obj.setdefault("recommended_changes", [])
-        obj.setdefault("improved_cta", "Learn More")
-        obj.setdefault("confidence", "medium")
+        obj.setdefault(
+            "summary",
+            "Here are recommended improvements based on the metrics provided."
+        )
+
+        # Normalize likely_issues
+        issues = obj.get("likely_issues", [])
+
+        if isinstance(issues, dict):
+            issues = list(issues.values())
+        elif isinstance(issues, str):
+            issues = [issues]
+        elif not isinstance(issues, list):
+            issues = []
+
+        obj["likely_issues"] = [str(x).strip() for x in issues if str(x).strip()]
+
+        # Normalize recommended_changes
+        changes = obj.get("recommended_changes", [])
+
+        if isinstance(changes, dict):
+            changes = list(changes.values())
+        elif isinstance(changes, str):
+            changes = [changes]
+        elif not isinstance(changes, list):
+            changes = []
+
+        obj["recommended_changes"] = [str(x).strip() for x in changes if str(x).strip()]
+
+        # Normalize headline
+        obj["improved_headline"] = str(obj.get("improved_headline") or product_name or "Better Results").strip()[:80]
+
+        # Normalize primary text
+        obj["improved_primary_text"] = str(
+            obj.get("improved_primary_text") or "Discover a clearer, stronger offer designed to drive action."
+        ).strip()[:250]
+
+        # Normalize image prompt
+        obj["improved_image_prompt"] = str(
+            obj.get("improved_image_prompt") or "Create a premium, professional paid social advertisement with strong product focus, clean typography, clear CTA, balanced spacing, and modern commercial design."
+        ).strip()
+
+        # Normalize CTA
+        allowed_ctas = {
+            "Shop Now",
+            "Learn More",
+            "Sign Up",
+            "Get Offer",
+            "Download",
+            "Contact Us",
+            "Book Now",
+        }
+
+        cta = str(obj.get("improved_cta", "Learn More")).strip()
+
+        if cta not in allowed_ctas:
+            cta = "Learn More"
+
+        obj["improved_cta"] = cta
+
+        # Normalize confidence
+        confidence = str(obj.get("confidence", "medium")).strip().lower()
+
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "medium"
+
+        obj["confidence"] = confidence
 
         return OptimizeAdResponse(**obj)
 

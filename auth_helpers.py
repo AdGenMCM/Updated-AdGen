@@ -5,47 +5,57 @@ from typing import Optional, Dict, Any, Tuple
 import firebase_admin
 from firebase_admin import credentials, auth as fb_auth, firestore
 from fastapi import HTTPException
+import threading
+
+_firebase_init_lock = threading.Lock()
 
 
 def init_firebase_once() -> None:
     """
     Initialize Firebase Admin SDK once.
-
-    Env:
-      - FIREBASE_SERVICE_ACCOUNT_JSON: either
-          a) absolute file path to service account json, OR
-          b) raw JSON string of the service account
-      - FIREBASE_STORAGE_BUCKET (optional): e.g. "<project>.appspot.com"
+    Safe for reloads and simultaneous requests.
     """
     try:
         firebase_admin.get_app()
         return
     except ValueError:
-        pass  # not initialized yet
+        pass
 
-    sa_value = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
-    if not sa_value:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not set.")
+    with _firebase_init_lock:
+        try:
+            firebase_admin.get_app()
+            return
+        except ValueError:
+            pass
 
-    bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
-    init_options = {"storageBucket": bucket_name} if bucket_name else None
+        sa_value = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+        if not sa_value:
+            raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not set.")
 
-    # Case 1: file path
-    if os.path.exists(sa_value):
-        cred = credentials.Certificate(sa_value)
-        firebase_admin.initialize_app(cred, init_options) if init_options else firebase_admin.initialize_app(cred)
-        return
+        bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
+        init_options = {"storageBucket": bucket_name} if bucket_name else None
 
-    # Case 2: raw JSON string
-    try:
-        sa_dict = json.loads(sa_value)
-        cred = credentials.Certificate(sa_dict)
-        firebase_admin.initialize_app(cred, init_options) if init_options else firebase_admin.initialize_app(cred)
-        return
-    except Exception as e:
-        raise RuntimeError(
-            "FIREBASE_SERVICE_ACCOUNT_JSON must be a valid file path or a valid JSON string."
-        ) from e
+        try:
+            if os.path.exists(sa_value):
+                cred = credentials.Certificate(sa_value)
+            else:
+                sa_dict = json.loads(sa_value)
+                cred = credentials.Certificate(sa_dict)
+
+            try:
+                if init_options:
+                    firebase_admin.initialize_app(cred, init_options)
+                else:
+                    firebase_admin.initialize_app(cred)
+            except ValueError as e:
+                if "already exists" in str(e):
+                    return
+                raise
+
+        except Exception as e:
+            raise RuntimeError(
+                "FIREBASE_SERVICE_ACCOUNT_JSON must be a valid file path or a valid JSON string."
+            ) from e
 
 
 def get_db():

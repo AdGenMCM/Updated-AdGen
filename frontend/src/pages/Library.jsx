@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { auth } from "../firebaseConfig";
 import "./Library.css";
 
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import InfoTip from "../components/ui/InfoTip";
+
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
 async function safeJson(res) {
@@ -14,9 +19,12 @@ async function safeJson(res) {
 
 function formatDate(ts) {
   if (!ts) return "";
-  // createdAt is unix seconds
   const d = new Date(ts * 1000);
-  return d.toLocaleString();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function keyFor(kind, id) {
@@ -35,6 +43,11 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function metricLabel(value, suffix = "") {
+  if (value === null || value === undefined || value === "") return "—";
+  return `${value}${suffix}`;
+}
+
 export default function Library() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -42,17 +55,24 @@ export default function Library() {
   const [videos, setVideos] = useState([]);
   const [images, setImages] = useState([]);
 
-  const [filter, setFilter] = useState("all"); // all | video | image
-
-  // ✅ NEW: sort + quick filters
-  const [sortBy, setSortBy] = useState("newest"); // newest | ctr | cpa | roas | spend
+  const [filter, setFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
   const [onlyWithPerf, setOnlyWithPerf] = useState(false);
   const [onlySuccessful, setOnlySuccessful] = useState(false);
+  const [search, setSearch] = useState("");
+  const [expandedPerf, setExpandedPerf] = useState({});
 
-  // Performance form state (keyed by kind-id)
   const [perfDrafts, setPerfDrafts] = useState({});
   const [perfSaving, setPerfSaving] = useState({});
   const [perfNotice, setPerfNotice] = useState({});
+  const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
+ 
+  const canTrackPerformance = useMemo(() => {
+  if (me.isAdmin) return true;
+  const tier = (me.tier || "").toLowerCase();
+  return tier === "pro_monthly" || tier === "business_monthly";
+  }, [me]);
+
 
   const getToken = async () => {
     const user = auth.currentUser;
@@ -66,6 +86,20 @@ export default function Library() {
 
     try {
       const token = await getToken();
+
+      const meRes = await fetch(`${API_BASE}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const meData = await safeJson(meRes);
+
+      if (meRes.ok && meData) {
+        setMe({
+          tier: meData.tier || null,
+          status: meData.status || null,
+          isAdmin: !!meData.isAdmin,
+        });
+      }
 
       const [vRes, iRes] = await Promise.all([
         fetch(`${API_BASE}/video/jobs?limit=50`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -84,7 +118,6 @@ export default function Library() {
       setVideos(vItems);
       setImages(iItems);
 
-      // Seed drafts from stored performance
       setPerfDrafts((prev) => {
         const next = { ...prev };
 
@@ -92,6 +125,7 @@ export default function Library() {
           const k = keyFor("video", v.id);
           if (next[k] == null) next[k] = { ...(v.performance || {}) };
         }
+
         for (const i of iItems) {
           const k = keyFor("image", i.id);
           if (next[k] == null) next[k] = { ...(i.performance || {}) };
@@ -143,19 +177,39 @@ export default function Library() {
       error: i.error || null,
     }));
 
-    let out = [...mappedVideos, ...mappedImages];
-    out = out.filter((item) => item.status === "succeeded");
+    let out = [...mappedVideos, ...mappedImages].filter((item) => item.status === "succeeded");
 
-    // Type filter
     if (filter === "video") out = out.filter((x) => x.kind === "video");
     if (filter === "image") out = out.filter((x) => x.kind === "image");
 
-    // Quick filters
     if (onlyWithPerf) {
       out = out.filter((x) => x.performance && Object.keys(x.performance).length > 0);
     }
+
     if (onlySuccessful) {
       out = out.filter((x) => x.performance?.marked_successful === true);
+    }
+
+    const q = search.trim().toLowerCase();
+    if (q) {
+      out = out.filter((x) => {
+        const copyText = x.copy
+          ? `${x.copy.headline || ""} ${x.copy.primary_text || ""} ${x.copy.cta || ""}`
+          : "";
+
+        return [
+          x.title,
+          x.kind,
+          x.ratio,
+          x.model,
+          x.prompt,
+          copyText,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      });
     }
 
     const metric = (item, key) => {
@@ -163,22 +217,30 @@ export default function Library() {
       return numOrNull(p[key]);
     };
 
-    // Sort
     out = [...out].sort((a, b) => {
       if (sortBy === "newest") return (b.createdAt || 0) - (a.createdAt || 0);
-
       if (sortBy === "ctr") return (metric(b, "ctr") ?? -Infinity) - (metric(a, "ctr") ?? -Infinity);
       if (sortBy === "roas") return (metric(b, "roas") ?? -Infinity) - (metric(a, "roas") ?? -Infinity);
       if (sortBy === "spend") return (metric(b, "spend") ?? -Infinity) - (metric(a, "spend") ?? -Infinity);
-
-      // lowest CPA first
       if (sortBy === "cpa") return (metric(a, "cpa") ?? Infinity) - (metric(b, "cpa") ?? Infinity);
-
       return 0;
     });
 
     return out;
-  }, [videos, images, filter, onlyWithPerf, onlySuccessful, sortBy]);
+  }, [videos, images, filter, onlyWithPerf, onlySuccessful, sortBy, search]);
+
+  const stats = useMemo(() => {
+    const imageCount = images.filter((x) => x.status === "succeeded").length;
+    const videoCount = videos.filter((x) => x.status === "succeeded").length;
+    const withPerf = [...images, ...videos].filter(
+      (x) => x.performance && Object.keys(x.performance).length > 0
+    ).length;
+    const winners = [...images, ...videos].filter(
+      (x) => x.performance?.marked_successful === true
+    ).length;
+
+    return { imageCount, videoCount, withPerf, winners };
+  }, [images, videos]);
 
   const onPerfChange = (kind, id, field, value) => {
     const k = keyFor(kind, id);
@@ -202,12 +264,11 @@ export default function Library() {
       const d = perfDrafts[k] || {};
       const payload = {};
 
-      // ✅ ROAS is NOT sent. Backend calculates ROAS from spend + revenue.
       const numFields = [
         "ctr",
         "cpc",
         "cpa",
-        "cpm", // ✅ NEW
+        "cpm",
         "spend",
         "revenue",
         "thumb_stop_rate",
@@ -244,7 +305,6 @@ export default function Library() {
             ? data.detail
             : "Failed to save performance.";
 
-        // friendly gating message
         if (res.status === 402 || res.status === 403) {
           setPerfNotice((prev) => ({
             ...prev,
@@ -258,7 +318,6 @@ export default function Library() {
 
       setPerfNotice((prev) => ({ ...prev, [k]: "Saved ✓" }));
 
-      // Update local lists with server response (includes computed ROAS)
       const perfSaved = data?.performance || payload;
 
       if (kind === "image") {
@@ -267,7 +326,6 @@ export default function Library() {
         setVideos((prev) => prev.map((x) => (x.id === id ? { ...x, performance: perfSaved } : x)));
       }
 
-      // Also reflect saved values into drafts
       setPerfDrafts((prev) => ({ ...prev, [k]: { ...(prev[k] || {}), ...perfSaved } }));
     } catch (e) {
       setPerfNotice((prev) => ({ ...prev, [k]: e?.message || "Failed to save performance." }));
@@ -275,7 +333,7 @@ export default function Library() {
       setPerfSaving((prev) => ({ ...prev, [k]: false }));
     }
   };
-  
+
   const downloadLibraryImage = async (item) => {
     try {
       if (item.kind !== "image") return;
@@ -310,12 +368,63 @@ export default function Library() {
     }
   };
 
-  return (
-    <div className="lib-wrap">
-      <div className="lib-header">
-        <h1 className="lib-title">Creative Library</h1>
+  const togglePerf = (key) => {
+    setExpandedPerf((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
-        <div className="lib-controls">
+  return (
+    <div className="lib-page">
+      <PageHeader
+        eyebrow="CREATIVE LIBRARY"
+        title="Your ad creative workspace"
+        description="Browse, search, download, and track the performance of every image and video creative generated inside AdGen."
+        actions={
+          <Button type="button" onClick={load} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh Library"}
+          </Button>
+        }
+      />
+
+      <div className="lib-statGrid">
+        <Card className="lib-statCard">
+          <span>Images</span>
+          <strong>{stats.imageCount}</strong>
+          <p>Generated image creatives</p>
+        </Card>
+
+        <Card className="lib-statCard">
+          <span>Videos</span>
+          <strong>{stats.videoCount}</strong>
+          <p>Generated video creatives</p>
+        </Card>
+
+        <Card className="lib-statCard">
+          <span>Tracked</span>
+          <strong>{stats.withPerf}</strong>
+          <p>Creatives with performance data</p>
+        </Card>
+
+        <Card className="lib-statCard">
+          <span>Winners</span>
+          <strong>{stats.winners}</strong>
+          <p>Marked successful</p>
+        </Card>
+      </div>
+
+      <Card className="lib-toolbar">
+        <div className="lib-searchWrap">
+          <label>
+            Search Library
+            <InfoTip text="Search by product name, creative type, prompt, headline, CTA, model, or aspect ratio." />
+          </label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by product, prompt, headline, CTA..."
+          />
+        </div>
+
+        <div className="lib-filterRow">
           <button className={`lib-pill ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
             All
           </button>
@@ -325,15 +434,9 @@ export default function Library() {
           <button className={`lib-pill ${filter === "video" ? "active" : ""}`} onClick={() => setFilter("video")}>
             Videos
           </button>
-          <button className="lib-pill" onClick={load}>
-            Refresh
-          </button>
-        </div>
 
-        {/* ✅ NEW: Sort + quick filters */}
-        <div className="lib-sortRow">
-          <label className="lib-inline">
-            <span>Sort</span>
+          <label className="lib-sort">
+            Sort
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               <option value="newest">Newest</option>
               <option value="ctr">Highest CTR</option>
@@ -342,37 +445,41 @@ export default function Library() {
               <option value="spend">Highest Spend</option>
             </select>
           </label>
+        </div>
 
-          <label className="lib-check">
+        <div className="lib-checkRow">
+          <label>
             <input
               type="checkbox"
               checked={onlyWithPerf}
               onChange={(e) => setOnlyWithPerf(e.target.checked)}
             />
-            <span>Has performance</span>
+            Has performance
           </label>
 
-          <label className="lib-check">
+          <label>
             <input
               type="checkbox"
               checked={onlySuccessful}
               onChange={(e) => setOnlySuccessful(e.target.checked)}
             />
-            <span>Successful only</span>
+            Successful only
           </label>
         </div>
-      </div>
+      </Card>
 
       <div className="lib-hint">
-        Add performance metrics to track what works over time. Performance tracking is available on{" "}
-        <b>Pro</b> and <b>Business</b>.
+        Performance tracking helps AdGen identify winners over time and improve future creative recommendations.
       </div>
 
-      {loading && <div className="lib-muted">Loading…</div>}
-      {err && <div className="lib-error">{err}</div>}
+      {loading && <Card className="lib-stateCard">Loading your creative library...</Card>}
+      {err && <Card className="lib-error">{err}</Card>}
 
       {!loading && !err && combined.length === 0 && (
-        <div className="lib-muted">No creatives yet. Generate an image or video and they’ll appear here.</div>
+        <Card className="lib-empty">
+          <h3>No creatives found</h3>
+          <p>Generate an image or video and it will appear here automatically.</p>
+        </Card>
       )}
 
       <div className="lib-grid">
@@ -381,183 +488,165 @@ export default function Library() {
           const d = perfDrafts[k] || {};
           const saving = !!perfSaving[k];
           const notice = perfNotice[k];
+          const isExpanded = !!expandedPerf[k];
 
           const roasDisplay =
             d.roas != null && d.roas !== ""
               ? String(d.roas)
               : calcRoas(d.spend, d.revenue);
 
+          const hasPerf = item.performance && Object.keys(item.performance).length > 0;
+          const isWinner = item.performance?.marked_successful === true;
+
           return (
-            <div key={k} className="lib-card">
+            <Card key={k} className={`lib-card ${isWinner ? "winner" : ""}`}>
               <div className="lib-media">
                 {item.kind === "image" && item.thumb && <img src={item.thumb} alt={item.title} />}
-
                 {item.kind === "video" && item.url && <video src={item.url} controls preload="metadata" />}
-
                 {item.kind === "video" && !item.url && <div className="lib-placeholder">Video not ready</div>}
-              </div>
 
-              <div className="lib-meta">
-                <div className="lib-row">
-                  <span className="lib-badge">{item.kind.toUpperCase()}</span>
-                  <span className={`lib-status ${item.status || ""}`}>{item.status || "unknown"}</span>
-                </div>
-
-                <div className="lib-name">{item.title}</div>
-                <div className="lib-sub">{formatDate(item.createdAt)}</div>
-
-                {item.error && <div className="lib-errorSmall">{String(item.error).slice(0, 140)}</div>}
-
-                <div className="lib-buttons">
+                <div className="lib-mediaOverlay">
                   {item.url && (
-                    <a
-                      className="lib-linkBtn"
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a className="lib-overlayBtn" href={item.url} target="_blank" rel="noreferrer">
                       Open
                     </a>
                   )}
 
                   {item.kind === "image" && item.url && (
-                    <button
-                      type="button"
-                      className="lib-linkBtn"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log("Library download clicked:", item);
-                        downloadLibraryImage(item);
-                      }}
-                    >
+                    <button type="button" className="lib-overlayBtn" onClick={() => downloadLibraryImage(item)}>
                       Download
                     </button>
                   )}
 
                   {item.kind === "video" && item.url && (
-                    <a
-                      className="lib-linkBtn"
-                      href={item.url}
-                      download
-                    >
+                    <a className="lib-overlayBtn" href={item.url} download>
                       Download
                     </a>
                   )}
                 </div>
+              </div>
 
-                {/* Performance Tracking */}
-                <div className="lib-perf">
-                  <div className="lib-perfTitle">Performance</div>
+              <div className="lib-meta">
+                <div className="lib-topRow">
+                  <span className={`lib-badge ${item.kind}`}>{item.kind.toUpperCase()}</span>
+                  {isWinner && <span className="lib-winnerBadge">Winner</span>}
+                  {!isWinner && hasPerf && <span className="lib-trackedBadge">Tracked</span>}
+                </div>
 
-                  <div className="lib-perfGrid">
-                    <label className="lib-field">
-                      <span>CTR %</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.ctr ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "ctr", e.target.value)}
-                        placeholder="e.g. 1.25"
-                      />
-                    </label>
+                <h3>{item.title}</h3>
+                <p className="lib-date">{formatDate(item.createdAt)}</p>
 
-                    <label className="lib-field">
-                      <span>CPC $</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.cpc ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "cpc", e.target.value)}
-                        placeholder="e.g. 0.85"
-                      />
-                    </label>
+                {item.error && <div className="lib-errorSmall">{String(item.error).slice(0, 140)}</div>}
 
-                    <label className="lib-field">
-                      <span>CPA $</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.cpa ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "cpa", e.target.value)}
-                        placeholder="e.g. 18.40"
-                      />
-                    </label>
-
-                    {/* ✅ NEW: CPM */}
-                    <label className="lib-field">
-                      <span>CPM $</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.cpm ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "cpm", e.target.value)}
-                        placeholder="e.g. 12.50"
-                      />
-                    </label>
-
-                    <label className="lib-field">
-                      <span>Spend $</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.spend ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "spend", e.target.value)}
-                        placeholder="e.g. 120"
-                      />
-                    </label>
-
-                    <label className="lib-field">
-                      <span>Revenue $</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={d.revenue ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "revenue", e.target.value)}
-                        placeholder="e.g. 600"
-                      />
-                    </label>
-
-                    <label className="lib-field">
-                      <span>ROAS</span>
-                      <input type="text" value={roasDisplay ?? ""} placeholder="Auto-calculated" readOnly />
-                    </label>
-
-                    <label className="lib-field lib-fieldWide">
-                      <span>Successful?</span>
-                      <select
-                        value={typeof d.marked_successful === "boolean" ? String(d.marked_successful) : ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          onPerfChange(item.kind, item.id, "marked_successful", v === "" ? null : v === "true");
-                        }}
-                      >
-                        <option value="">Not set</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                      </select>
-                    </label>
-
-                    <label className="lib-field lib-fieldWide">
-                      <span>Notes</span>
-                      <textarea
-                        value={d.notes ?? ""}
-                        onChange={(e) => onPerfChange(item.kind, item.id, "notes", e.target.value)}
-                        placeholder="What happened? (hook, placement, audience, etc.)"
-                        rows={3}
-                      />
-                    </label>
+                <div className="lib-metricStrip">
+                  <div>
+                    <span>CTR</span>
+                    <strong>{metricLabel(d.ctr, "%")}</strong>
                   </div>
-
-                  <div className="lib-perfActions">
-                    <button className="lib-saveBtn" onClick={() => savePerformance(item.kind, item.id)} disabled={saving}>
-                      {saving ? "Saving…" : "Save performance"}
-                    </button>
-                    {notice && <div className="lib-perfNotice">{notice}</div>}
+                  <div>
+                    <span>CPA</span>
+                    <strong>{d.cpa ? `$${d.cpa}` : "—"}</strong>
+                  </div>
+                  <div>
+                    <span>ROAS</span>
+                    <strong>{roasDisplay || "—"}</strong>
                   </div>
                 </div>
+
+                {canTrackPerformance ? (
+                  <button type="button" className="lib-perfToggle" onClick={() => togglePerf(k)}>
+                    {isExpanded ? "Hide Performance" : "Edit Performance"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="lib-perfToggle lib-upgradePerf"
+                    onClick={() => window.location.href = "/account"}
+                  >
+                    Upgrade to Track Performance
+                    <p className="upgradeNotice">Click to upgrade! Available on Pro/Business plans</p>
+                  </button>
+                )}
+
+                {isExpanded && (
+                  <div className="lib-perf">
+                    <div className="lib-perfTitle">
+                      Performance Data
+                      <InfoTip text="These metrics power Insights, Winners Profile, and future optimization recommendations." />
+                    </div>
+
+                    <div className="lib-perfGrid">
+                      <label className="lib-field">
+                        <span>CTR %</span>
+                        <input type="number" step="0.01" value={d.ctr ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "ctr", e.target.value)} placeholder="1.25" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>CPC $</span>
+                        <input type="number" step="0.01" value={d.cpc ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "cpc", e.target.value)} placeholder="0.85" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>CPA $</span>
+                        <input type="number" step="0.01" value={d.cpa ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "cpa", e.target.value)} placeholder="18.40" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>CPM $</span>
+                        <input type="number" step="0.01" value={d.cpm ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "cpm", e.target.value)} placeholder="12.50" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>Spend $</span>
+                        <input type="number" step="0.01" value={d.spend ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "spend", e.target.value)} placeholder="120" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>Revenue $</span>
+                        <input type="number" step="0.01" value={d.revenue ?? ""} onChange={(e) => onPerfChange(item.kind, item.id, "revenue", e.target.value)} placeholder="600" />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>ROAS</span>
+                        <input type="text" value={roasDisplay ?? ""} placeholder="Auto" readOnly />
+                      </label>
+
+                      <label className="lib-field lib-fieldWide">
+                        <span>Successful?</span>
+                        <select
+                          value={typeof d.marked_successful === "boolean" ? String(d.marked_successful) : ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            onPerfChange(item.kind, item.id, "marked_successful", v === "" ? null : v === "true");
+                          }}
+                        >
+                          <option value="">Not set</option>
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      </label>
+
+                      <label className="lib-field lib-fieldWide">
+                        <span>Notes</span>
+                        <textarea
+                          value={d.notes ?? ""}
+                          onChange={(e) => onPerfChange(item.kind, item.id, "notes", e.target.value)}
+                          placeholder="What happened? Hook, placement, audience, creative notes..."
+                          rows={3}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="lib-perfActions">
+                      <Button type="button" onClick={() => savePerformance(item.kind, item.id)} disabled={saving}>
+                        {saving ? "Saving..." : "Save Performance"}
+                      </Button>
+                      {notice && <div className="lib-perfNotice">{notice}</div>}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>

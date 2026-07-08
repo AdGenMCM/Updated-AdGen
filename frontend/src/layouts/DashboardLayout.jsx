@@ -11,6 +11,7 @@ import {
   Library,
   LineChart,
   Palette,
+  Brush,
   FolderKanban,
   CircleHelp,
   Settings,
@@ -60,6 +61,11 @@ export default function DashboardLayout({ children }) {
     icon: Clapperboard,
   },
   {
+    to: "/creative-studio",
+    label: "Creative Studio",
+    icon: Brush,
+  },
+  {
     to: "/optimizer",
     label: "Optimizer",
     icon: BarChart3,
@@ -93,7 +99,7 @@ export default function DashboardLayout({ children }) {
   return (
     <div className="dash-shell">
       <aside className="dash-sidebar">
-        <Link to="/dashboard" className="dash-brand">
+        <Link to="/home" className="dash-brand">
           <span className="dash-brand-mark">
             <Sparkles size={18} />
           </span>

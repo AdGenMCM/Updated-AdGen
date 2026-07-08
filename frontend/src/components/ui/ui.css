@@ -207,3 +207,64 @@
   opacity: 1;
   transform: translateX(-50%) translateY(-2px);
 }
+
+/* ===========================
+   Field Label
+=========================== */
+
+.ui-field-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-bottom: 10px;
+
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.ui-field-label-text {
+  line-height: 1;
+}
+
+.ui-field-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 3px 9px;
+
+  border-radius: 999px;
+
+  font-size: .60rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+
+  line-height: 1;
+}
+
+.ui-field-badge.optional {
+  background: rgba(124,58,237,.15);
+  color: #b794f6;
+}
+
+.ui-field-badge.required {
+  background: rgba(239,68,68,.18);
+  color: #fca5a5;
+}
+
+.ui-field-badge.beta {
+  background: rgba(59,130,246,.18);
+  color: #93c5fd;
+}
+
+.ui-field-label .ui-info-tip {
+  margin-left: 10px;
+}
+
+.ui-field-badge.optional {
+  margin-left: 10px;
+}
