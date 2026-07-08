@@ -13,6 +13,7 @@ import {
   Video,
   CreditCard,
 } from "lucide-react";
+import { auth } from "../firebaseConfig";
 
 export default function Dashboard() {
   const { usage, videoUsage, planLabel, recentCreatives, brandKitStatus } =
@@ -61,12 +62,15 @@ export default function Dashboard() {
     };
   })();
 
+  const fullName = auth.currentUser?.displayName || "";
+  const firstName = fullName.trim().split(" ")[0] || "there";
+
   return (
     <div className="dashboard-page">
       <section className="dashboard-hero">
         <SectionTitle
           eyebrow="Workspace"
-          title="Welcome back, Matthew"
+          title={`Welcome back, ${firstName}`}
           description="Generate, optimize, and track high-performing ad creative from one command center."
         />
       </section>

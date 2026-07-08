@@ -24,6 +24,16 @@ export default function DashboardLayout({ children }) {
   const [accountOpen, setAccountOpen] = useState(false);
 
   const { usage, videoUsage, planLabel } = useWorkspace() || {};
+  const fullName = auth.currentUser?.displayName || "";
+
+  const initials =
+  fullName
+    .trim()
+    .split(/\s+/)
+    .map((name) => name[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "U";
 
     const imageUsed = usage?.used ?? 0;
     const imageCap = usage?.cap ?? 0;
@@ -179,9 +189,9 @@ export default function DashboardLayout({ children }) {
                     className="dash-avatar"
                     onClick={() => setAccountOpen((v) => !v)}
                 >
-                    MM
+                    {initials}
                 </button>
-
+                
                 {accountOpen && (
                     <div className="dash-account-dropdown">
                     <Link to="/account" onClick={() => setAccountOpen(false)}>
