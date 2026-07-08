@@ -1,0 +1,183 @@
+/* ==========================================================
+   AdGen MCM Design System
+========================================================== */
+
+.ag-page {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 42px 28px 80px;
+}
+
+.ag-section {
+  margin-bottom: 32px;
+}
+
+.ag-glass {
+  background: var(--ag-surface);
+  backdrop-filter: var(--ag-blur);
+  -webkit-backdrop-filter: var(--ag-blur);
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-lg);
+  box-shadow: var(--ag-shadow-sm);
+}
+
+.ag-card {
+  background: var(--ag-surface);
+  backdrop-filter: var(--ag-blur);
+  -webkit-backdrop-filter: var(--ag-blur);
+
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-lg);
+
+  padding: 24px;
+
+  transition:
+    transform var(--ag-transition),
+    box-shadow var(--ag-transition),
+    border-color var(--ag-transition);
+}
+
+.ag-card:hover {
+  transform: translateY(-4px);
+
+  border-color: rgba(124,58,237,.30);
+
+  box-shadow:
+    var(--ag-shadow-sm),
+    var(--ag-shadow-glow);
+}
+
+.ag-eyebrow {
+  color: var(--ag-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.ag-title {
+  margin: 10px 0;
+  font-size: clamp(2rem,4vw,3.5rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -.04em;
+}
+
+.ag-subtitle {
+  max-width: 760px;
+  color: var(--ag-text-soft);
+  line-height: 1.7;
+  font-size: 1.05rem;
+}
+
+.ag-section-title {
+  margin-bottom: 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.ag-section-description {
+  color: var(--ag-muted);
+}
+
+.ag-btn{
+  border:none;
+  border-radius:14px;
+  padding:14px 20px;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--ag-primary),
+      var(--ag-primary-dark)
+    );
+
+  color:white;
+
+  font-weight:700;
+
+  transition:all var(--ag-transition);
+
+  box-shadow:
+    0 12px 35px rgba(124,58,237,.25);
+}
+
+.ag-btn:hover{
+
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    0 18px 45px rgba(124,58,237,.35);
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--ag-primary-hover),
+      var(--ag-primary)
+    );
+}
+
+.ag-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ag-label {
+  color: var(--ag-text-soft);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.ag-input,
+.ag-textarea,
+.ag-select {
+  width: 100%;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-sm);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text);
+  padding: 13px 14px;
+  outline: none;
+  transition: border-color var(--ag-transition-fast), box-shadow var(--ag-transition-fast), background var(--ag-transition-fast);
+}
+
+.ag-input:focus,
+.ag-textarea:focus,
+.ag-select:focus {
+  border-color: rgba(124, 58, 237, 0.55);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.14);
+}
+
+.ag-textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ag-input::placeholder,
+.ag-textarea::placeholder {
+  color: rgba(203, 213, 225, 0.48);
+}
+
+.ag-select option {
+  color: #0f172a;
+}
+
+.ag-btn-secondary {
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ag-text);
+  font-weight: 700;
+  transition: all var(--ag-transition);
+}
+
+.ag-btn-secondary:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+  background: rgba(255, 255, 255, 0.09);
+  transform: translateY(-2px);
+}

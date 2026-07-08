@@ -14,6 +14,7 @@ import VideoAds from "./pages/VideoAds";
 import Library from "./pages/Library";
 import Insights from "./pages/Insights";
 import BrandKit from "./pages/BrandKit";
+import Dashboard from "./pages/Dashboard";
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -28,6 +29,9 @@ import Optimizer from "./pages/Optimizer";
 import AdminRoute from "./AdminRoute";
 import AdminUsers from "./pages/AdminUsers";
 
+//App Styling 
+import DashboardRoute from "./components/DashboardRoute";
+
 // Meta Pixel tracking component
 function MetaPixelPageView() {
   const location = useLocation();
@@ -41,12 +45,34 @@ function MetaPixelPageView() {
   return null;
 }
 
+function ConditionalNavbar() {
+  const location = useLocation();
+
+  const dashboardRoutes = [
+    "/dashboard",
+    "/adgenerator",
+    "/video-ads",
+    "/texteditor",
+    "/optimizer",
+    "/library",
+    "/insights",
+    "/brand-kit",
+    "/account",
+    "/admin/users",
+  ];
+
+  const isDashboardRoute = dashboardRoutes.some((route) =>
+    location.pathname.startsWith(route)
+  );
+
+  return isDashboardRoute ? null : <Navbar />;
+}
 
 export default function App() {
   return (
     <>
-      <Navbar />
-      <div className="container">
+    <ConditionalNavbar />
+    <div className="container">
         <MetaPixelPageView />
         <Routes>
           {/* Public */}
@@ -62,6 +88,7 @@ export default function App() {
 
           {/* Auth-only */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardRoute><Dashboard /></DashboardRoute>} />
             <Route path="/subscribe" element={<Subscribe />} />
             <Route path="/account" element={<MyAccount />} />
             <Route path="/brand-kit" element={<BrandKit />} />
@@ -72,9 +99,9 @@ export default function App() {
 
           {/* Paid features (require active sub) */}
           <Route element={<PaidRoute />}>
-            <Route path="/adgenerator" element={<AdGenerator />} />
+            <Route path="/adgenerator" element={<DashboardRoute><AdGenerator /></DashboardRoute>} />
             <Route path="/texteditor" element={<TextEditor />} />
-            <Route path="/video-ads" element={<VideoAds />} />
+            <Route path="/video-ads" element={<DashboardRoute><VideoAds /></DashboardRoute>} />
           </Route>
 
           {/* Admin */}

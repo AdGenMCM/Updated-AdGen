@@ -1,0 +1,40 @@
+:root {
+  --ag-bg: #070b14;
+  --ag-bg-soft: #0b1020;
+  --ag-surface: rgba(17, 24, 39, 0.78);
+  --ag-surface-strong: #111827;
+  --ag-surface-soft: #161f2f;
+
+  --ag-border: rgba(255, 255, 255, 0.08);
+  --ag-border-strong: rgba(255, 255, 255, 0.14);
+
+  --ag-text: #f9fafb;
+  --ag-text-soft: #cbd5e1;
+  --ag-muted: #94a3b8;
+
+  --ag-primary: #7c3aed;
+  --ag-primary-hover: #8b5cf6;
+  --ag-primary-dark: #5b21b6;
+  --ag-blue: #3b82f6;
+  --ag-green: #22c55e;
+  --ag-yellow: #f59e0b;
+  --ag-red: #ef4444;
+
+  --ag-radius-sm: 12px;
+  --ag-radius-md: 16px;
+  --ag-radius-lg: 20px;
+  --ag-radius-xl: 28px;
+
+  --ag-shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --ag-shadow-md: 0 18px 55px rgba(0, 0, 0, 0.28);
+  --ag-shadow-glow: 0 18px 60px rgba(124, 58, 237, 0.24);
+
+  --ag-blur: blur(18px);
+
+  --ag-transition-fast: 150ms ease;
+  --ag-transition: 220ms ease;
+  --ag-transition-slow: 420ms ease;
+
+  --ag-sidebar-width: 280px;
+  --ag-topbar-height: 72px;
+}

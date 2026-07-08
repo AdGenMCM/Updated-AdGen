@@ -1,0 +1,209 @@
+.ui-card {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.ui-button {
+  border: none;
+  border-radius: 14px;
+  padding: 13px 18px;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ui-section-title {
+  margin-bottom: 24px;
+}
+
+.ui-section-title span {
+  color: var(--ag-primary-hover);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ui-section-title h2 {
+  margin: 8px 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.ui-section-title p {
+  margin: 0;
+  color: var(--ag-muted);
+  line-height: 1.6;
+}
+
+.ui-stat-card {
+  padding: 32px;
+  min-height: 180px;
+}
+
+.ui-stat-icon,
+.ui-action-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(124, 58, 237, 0.16);
+  color: var(--ag-primary-hover);
+  margin-bottom: 24px;
+}
+
+.ui-stat-card p {
+  margin: 0;
+  color: var(--ag-muted);
+}
+
+.ui-stat-card h3 {
+  margin: 16px 0 6px;
+  font-size: 2.35rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.ui-stat-card span {
+  color: var(--ag-muted);
+  line-height: 1.5;
+}
+
+.ui-action-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.ui-action-card {
+  padding: 34px;
+  min-height: 176px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ui-action-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+.ui-action-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.ui-action-arrow {
+  color: var(--ag-muted);
+  font-size: 1.1rem;
+}
+
+.ui-action-card h3 {
+  margin: 0 0 14px;
+  font-size: 1.12rem;
+}
+
+.ui-action-card p {
+  margin: 0;
+  color: var(--ag-muted);
+  line-height: 1.6;
+}
+
+.ui-stat-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ui-stat-card-clickable {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ui-stat-card-clickable:hover {
+  transform: translateY(-4px);
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+.ui-page-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:32px;
+    margin-bottom:56px;
+}
+
+.ui-page-header-copy{
+    max-width:760px;
+}
+
+.ui-page-eyebrow{
+    display:inline-flex;
+    margin-bottom:12px;
+    color:var(--ag-primary-hover);
+    font-size:.75rem;
+    font-weight:900;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+}
+
+.ui-page-header h1{
+    margin:0;
+    font-size:clamp(2.2rem,4vw,3.4rem);
+    line-height:1;
+    letter-spacing:-.05em;
+}
+
+.ui-page-header p{
+    margin-top:20px;
+    color:var(--ag-text-soft);
+    line-height:1.7;
+    font-size:1.05rem;
+}
+
+.ui-info-tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--ag-primary-hover);
+  font-size: 0.68rem;
+  font-weight: 900;
+  cursor: help;
+}
+
+.ui-info-tip-box {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  width: 260px;
+  padding: 12px 14px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.98);
+  color: var(--ag-text-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.ui-info-tip:hover .ui-info-tip-box,
+.ui-info-tip:focus .ui-info-tip-box {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-2px);
+}

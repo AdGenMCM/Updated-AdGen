@@ -1,131 +1,146 @@
-/* VideoAds.css — FULLY SCOPED (no global leakage)
-   Keeps your current class names exactly the same.
-*/
-
-.videoAds{
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 28px 18px 80px;
-  color: #0f172a;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+.videoAds {
+  padding: 64px 56px 104px;
+  color: var(--ag-text);
 }
 
-.videoAds .videoAdsHeader h1{
+.videoAds .videoAdsHeader {
+  margin-bottom: 52px;
+}
+
+.videoAds .videoAdsHeader h1 {
   margin: 0;
-  font-size: 32px;
-  letter-spacing: -0.02em;
+  text-align: left;
+  font-size: clamp(2.1rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-weight: 900;
 }
 
-.videoAds .videoAdsHeader p{
-  margin: 8px 0 18px;
-  color: #475569;
-  font-size: 14px;
+.videoAds .videoAdsHeader p {
+  max-width: 820px;
+  margin: 22px 0 0;
+  color: var(--ag-text-soft);
+  font-size: 1.05rem;
+  line-height: 1.7;
 }
 
-/* Tabs */
-.videoAds .videoTabs{
+.videoAds .videoTopCard,
+.videoAds .videoPanel,
+.videoAds .box {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.videoAds .videoTopCard,
+.videoAds .videoPanel {
+  padding: 40px;
+  margin-bottom: 40px;
+}
+
+.videoAds .videoSectionHeading {
+  text-align: left;
+  margin-bottom: 30px;
+}
+
+.videoAds .videoSectionHeading h2 {
+  margin: 0;
+  color: var(--ag-text);
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+.videoAds .videoSectionHeading p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--ag-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.videoAds .videoTabs {
   display: flex;
-  gap: 10px;
-  margin: 18px 0 14px;
+  gap: 14px;
+  margin: 0;
 }
 
-.videoAds .videoTabs button{
+.videoAds .videoTabs button {
   appearance: none;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #0f172a;
-  padding: 10px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 800;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.videoAds .videoTabs button:hover{
-  background: #f8fafc;
-}
-
-.videoAds .videoTabs button.active{
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
-}
-
-/* Panel */
-.videoAds .videoPanel{
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ag-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text-soft);
+  padding: 14px 18px;
   border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  font-weight: 900;
 }
 
-/* Rows + grids */
-.videoAds .row{
+.videoAds .videoTabs button:hover {
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.videoAds .videoTabs button.active {
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.videoAds .row {
   display: grid;
   grid-template-columns: 190px 1fr 170px 190px;
-  gap: 12px;
+  gap: 24px;
   align-items: end;
-  margin-bottom: 14px;
+  margin-bottom: 30px;
 }
 
-.videoAds .grid2{
+.videoAds .grid2,
+.videoAds .videoEnhancementGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 28px;
 }
 
-@media (max-width: 900px){
-  .videoAds .row{ grid-template-columns: 1fr; }
-  .videoAds .grid2{ grid-template-columns: 1fr; }
-}
-
-/* Checkbox pill */
-.videoAds .checkbox{
-  display: flex;
-  align-items: center;
+.videoAds .field {
+  display: grid;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #f8fafc;
-  font-weight: 800;
-  user-select: none;
 }
 
-.videoAds .checkbox input{
-  margin: 0;
+.videoAds .field {
+  display: grid;
+  gap: 10px;
 }
 
-/* Field */
-.videoAds .field label{
+.videoAds .field label {
   display: block;
-  font-size: 13px;
+  color: var(--ag-text-soft);
+  font-size: 0.84rem;
   font-weight: 900;
-  color: #334155;
-  margin-bottom: 6px;
 }
 
-/* IMPORTANT: scoped inputs only */
 .videoAds .field input,
 .videoAds .field select,
 .videoAds .field textarea,
 .videoAds textarea,
 .videoAds select,
-.videoAds input{
+.videoAds input {
   width: 100%;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 10px 12px;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  padding: 15px 16px;
   font-size: 14px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text);
   outline: none;
   box-sizing: border-box;
 }
 
-.videoAds textarea{
+.videoAds textarea {
+  min-height: 160px;
   resize: vertical;
+  line-height: 1.55;
 }
 
 .videoAds .field input:focus,
@@ -133,394 +148,249 @@
 .videoAds .field textarea:focus,
 .videoAds textarea:focus,
 .videoAds select:focus,
-.videoAds input:focus{
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.35);
+.videoAds input:focus {
+  border-color: rgba(124, 58, 237, 0.55);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.14);
 }
 
-/* Box cards */
-.videoAds .box{
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #f8fafc;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-
-/* Small headings used in voice box */
-.videoAds .boxTitle{
-  font-weight: 900;
+.videoAds select option {
   color: #0f172a;
 }
 
-.videoAds .hint{
-  font-size: 13px;
-  opacity: 0.80;
-  margin-top: 2px;
+.videoAds .checkbox,
+.videoAds .videoEnhancementCard,
+.videoAds .videoHelperCard {
+  border: 1px solid var(--ag-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 24px;
 }
 
-/* Buttons (scoped) */
+.videoAds .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 900;
+  user-select: none;
+}
+
+.videoAds .checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.videoAds .box {
+  padding: 32px;
+  margin-bottom: 32px;
+}
+
+.videoAds .boxTitle {
+  color: var(--ag-text);
+  font-weight: 900;
+}
+
+.videoAds .hint {
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  margin-top: 6px;
+  line-height: 1.55;
+}
+
 .videoAds .primary,
-.videoAds .secondary{
-  border-radius: 12px;
-  padding: 10px 14px;
+.videoAds .secondary,
+.videoAds .linkBtn {
+  border-radius: 16px;
+  padding: 15px 18px;
   font-weight: 900;
   cursor: pointer;
-  border: 1px solid transparent;
   box-sizing: border-box;
+  text-decoration: none;
 }
 
-.videoAds .primary{
-  background: #0f172a;
-  color: #ffffff;
+.videoAds .primary,
+.videoAds .linkBtn {
   width: 100%;
   display: flex;
   justify-content: center;
-  margin-top: 24px;
+  border: none;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #ffffff;
+  margin-top: 34px;
 }
 
-.videoAds .primary:hover{
-  background: #111c33;
+.videoAds .secondary {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text);
+  border: 1px solid var(--ag-border);
 }
 
-.videoAds .primary:disabled{
-  opacity: 0.65;
-  cursor: not-allowed;
+.videoAds .secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.videoAds .secondary{
-  background: #ffffff;
-  color: #0f172a;
-  border-color: #e5e7eb;
-}
-
-.videoAds .secondary:hover{
-  background: #f1f5f9;
-}
-
-.videoAds .miniBtn{
-  padding: 8px 12px;
-  border-radius: 10px;
+.videoAds .miniBtn {
+  padding: 9px 12px;
+  border-radius: 12px;
   font-weight: 900;
 }
 
-/* Voice header row */
-.videoAds .voiceHeader{
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  align-items:flex-start;
-  margin-bottom:10px;
+.videoAds .voiceHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
 }
 
-/* Audio preview row */
-.videoAds .audioPreview{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  margin-top:10px;
+.videoAds .audioPreview {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
 }
 
-.videoAds .audioPreview audio{
+.videoAds .audioPreview audio {
   width: 100%;
   max-width: 520px;
 }
 
-/* Disabled voice UX (dim + lock feel) */
-.videoAds .voBox{
+.videoAds .voBox {
   position: relative;
 }
 
-.videoAds .voBoxDisabled{
+.videoAds .voBoxDisabled {
   opacity: 0.72;
 }
 
-.videoAds .voBoxDisabled textarea{
-  background:#f1f5f9;
-  color:#64748b;
+.videoAds .voBoxDisabled textarea {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--ag-muted);
 }
 
-.videoAds .voBoxDisabled .secondary{
-  opacity:0.55;
-  cursor:not-allowed;
-}
-
-.videoAds .voOverlay{
-  position:absolute;
-  inset:0;
-  border-radius:14px;
-  background: rgba(248,250,252,0.55);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  pointer-events:none;
-}
-
-.videoAds .voOverlayCard{
-  display:flex;
-  gap:12px;
-  align-items:center;
-  border:1px solid #e5e7eb;
-  background: rgba(255,255,255,0.9);
-  padding:10px 12px;
-  border-radius:12px;
-  box-shadow: 0 8px 20px rgba(15,23,42,0.08);
-  max-width:520px;
-}
-
-.videoAds .voOverlayTitle{ font-weight:900; color:#0f172a; }
-.videoAds .voOverlaySub{ font-size:13px; color:#64748b; margin-top:2px; }
-
-/* Dropzone */
-.videoAds .dropzone{
-  border: 2px dashed #cbd5e1;
-  border-radius: 16px;
-  padding: 18px;
-  background: #fbfdff;
-  cursor: pointer;
-  margin-bottom: 14px;
-}
-
-.videoAds .dropzone.dragOver{
-  border-color: #0f172a;
-  background: #f1f5f9;
-}
-
-.videoAds .hiddenFile{ display: none; }
-
-.videoAds .dzTitle{
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.videoAds .dzSub{
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-/* Image preview */
-.videoAds .previewWrap{
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
-
-.videoAds .previewImg{
-  width: 96px;
-  height: 96px;
-  object-fit: cover;
-  border-radius: 14px;
-  border: 1px solid #e5e7eb;
-}
-
-.videoAds .previewMeta{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.videoAds .uploadTip{
-  margin: 14px 0 18px;
-  padding: 14px 16px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  border-radius: 12px;
-}
-
-.videoAds .uploadTip strong{
-  display: block;
-  color: #1d4ed8;
-  font-size: 14px;
-  margin-bottom: 6px;
-}
-
-.videoAds .uploadTip p{
-  margin: 0;
-  color: #334155;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.videoAds .previewName{
-  font-weight: 900;
-}
-
-/* Status / Errors / Result */
-.videoAds .statusBlock{
-  margin-top: 16px;
-}
-
-.videoAds .statusLine{
-  color: #334155;
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
-.videoAds .error{
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-weight: 800;
-}
-
-.videoAds .result{
-  margin-top: 12px;
-}
-
-.videoAds .videoPlayer{
-  width: 100%;
-  border-radius: 16px;
-  border: 1px solid #e5e7eb;
-  background: #000;
-}
-
-/* Link button */
-.videoAds .linkBtn{
-  display: inline-block;
-  margin-top: 10px;
-  text-decoration: none;
-  text-align: center;
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #0f172a;
-  color: #ffffff;
-  font-weight: 900;
-}
-
-.videoAds .linkBtn:hover{
-  background: #111c33;
-}
-
-/* ===== VideoAds loading overlay (scoped) ===== */
-.videoAds .videoLoadingOverlay{
-  position: fixed;
+.videoAds .voOverlay {
+  position: absolute;
   inset: 0;
-  display: none;
+  border-radius: 24px;
+  background: rgba(7, 11, 20, 0.48);
+  display: flex;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
-  gap: 12px;
-  background: rgba(15, 23, 42, 0.55);
-  z-index: 9999;
+  pointer-events: none;
 }
 
-.videoAds .videoLoadingOverlay.show{
+.videoAds .voOverlayCard {
   display: flex;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--ag-border);
+  background: rgba(17, 24, 39, 0.95);
+  padding: 14px 16px;
+  border-radius: 16px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+  max-width: 520px;
 }
 
-.videoAds .videoSpinner{
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 6px solid rgba(255,255,255,0.35);
-  border-top-color: rgba(255,255,255,0.95);
-  animation: videoSpin 0.9s linear infinite;
+.videoAds .voOverlayTitle {
+  font-weight: 900;
+  color: var(--ag-text);
 }
 
-.videoAds .videoLoadingText{
-  color: #fff;
-  font-weight: 700;
+.videoAds .voOverlaySub {
+  font-size: 0.84rem;
+  color: var(--ag-muted);
+  margin-top: 3px;
+}
+
+.videoAds .dropzone {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 22px;
+  padding: 32px;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  margin-bottom: 28px;
+}
+
+.videoAds .dropzone.dragOver {
+  border-color: rgba(124, 58, 237, 0.65);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.videoAds .hiddenFile {
+  display: none;
+}
+
+.videoAds .dzTitle {
+  color: var(--ag-text);
   font-size: 1rem;
-  text-align: center;
+  font-weight: 900;
 }
 
-@keyframes videoSpin{
-  to { transform: rotate(360deg); }
-}
-
-/* Disabled states */
-.videoAds button:disabled{
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.videoAds .videoTabs button:disabled{
-  opacity: 0.55;
-}
-
-/* Make status anchor scroll nicely under sticky headers (if any) */
-.videoAds .statusBlock{
-  scroll-margin-top: 90px;
-}
-
-/* =========================
-   Video Ads V2 layout polish
-========================= */
-
-.videoAds .videoAdsHero {
-  text-align: center;
-}
-
-.videoAds .videoAdsHero p {
-  max-width: 760px;
-  margin-left: auto;
-  margin-right: auto;
+.videoAds .dzSub {
+  margin-top: 8px;
+  color: var(--ag-muted);
+  font-size: 0.88rem;
   line-height: 1.5;
 }
 
-.videoAds .videoTopCard {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 16px;
-  margin: 18px 0 14px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+.videoAds .previewWrap {
+  display: flex;
+  gap: 18px;
+  align-items: center;
 }
 
-.videoAds .videoSectionHeading {
-  text-align: center;
-  margin-bottom: 14px;
+.videoAds .previewImg {
+  width: 108px;
+  height: 108px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid var(--ag-border);
 }
 
-.videoAds .videoSectionHeading h2 {
+.videoAds .previewMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.videoAds .previewName {
+  color: var(--ag-text);
+  font-weight: 900;
+}
+
+.videoAds .uploadTip {
+  margin: 24px 0 30px;
+  padding: 20px;
+  border: 1px solid rgba(124, 58, 237, 0.24);
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: 18px;
+}
+
+.videoAds .uploadTip strong {
+  display: block;
+  color: var(--ag-primary-hover);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.videoAds .uploadTip p {
   margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
-  color: #0f172a;
-}
-
-.videoAds .videoSectionHeading p {
-  margin: 6px auto 0;
-  max-width: 680px;
-  color: #475569;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.videoAds .videoTopCard .videoTabs {
-  justify-content: center;
-  margin: 0;
+  color: var(--ag-text-soft);
+  line-height: 1.6;
 }
 
 .videoAds .videoAiSection {
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  background: #f8fafc;
-  padding: 16px;
-  margin: 16px 0;
-}
-
-.videoAds .videoEnhancementGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-.videoAds .videoEnhancementCard {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: 15px;
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 32px;
+  margin: 32px 0;
 }
 
 .videoAds .videoToggle {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 14px;
   cursor: pointer;
   user-select: none;
 }
@@ -529,76 +399,318 @@
   width: 18px;
   height: 18px;
   margin-top: 3px;
-  accent-color: #0f172a;
+  accent-color: var(--ag-primary);
   flex: 0 0 auto;
 }
 
 .videoAds .videoToggle span {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
+  display: grid;
+  gap: 5px;
+  line-height: 1.2;
 }
 
 .videoAds .videoToggle strong {
-  color: #0f172a;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  white-space: nowrap;
+  color: var(--ag-text);
+  font-size: 0.95rem;
+}
+
+.videoAds .videoToggle strong .ui-info-tip {
+  margin-left: 0;
+  display: inline-grid;
+  flex: 0 0 auto;
 }
 
 .videoAds .videoToggle small {
-  margin-top: 3px;
-  color: #475569;
+  color: var(--ag-muted);
   font-weight: 800;
 }
 
-.videoAds .videoEnhancementCard p {
-  margin: 10px 0 0;
-  color: #475569;
-  font-size: 14px;
-  line-height: 1.45;
+.videoAds .videoEnhancementCard p,
+.videoAds .videoHelperCard p {
+  margin: 12px 0 0;
+  color: var(--ag-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 .videoAds .videoModeHeading {
-  margin-top: 6px;
-  padding-top: 14px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.videoAds .videoHelperGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0 0;
+  margin-top: 10px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ag-border);
 }
 
 .videoAds .videoHelperCard {
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #f8fafc;
-  text-align: center;
+  text-align: left;
 }
 
 .videoAds .videoHelperCard strong {
   display: block;
-  margin-bottom: 5px;
-  color: #0f172a;
-  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--ag-text);
+  font-size: 0.92rem;
 }
 
-.videoAds .videoHelperCard p {
-  margin: 0;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.4;
+.videoAds .statusBlock {
+  margin-top: 32px;
+  scroll-margin-top: 90px;
 }
 
-@media (max-width: 760px) {
+.videoAds .statusLine {
+  color: var(--ag-text-soft);
+  font-size: 0.95rem;
+  margin-bottom: 16px;
+}
+
+.videoAds .error {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.videoAds .result {
+  margin-top: 18px;
+}
+
+.videoAds .videoPlayer {
+  width: 100%;
+  border-radius: 22px;
+  border: 1px solid var(--ag-border);
+  background: #000;
+}
+
+.videoAds .videoLoadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 10, 20, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.videoAds .videoLoadingOverlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.videoAds .videoSpinner {
+  width: 54px;
+  height: 54px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: videoSpin 0.9s linear infinite;
+}
+
+.videoAds .videoLoadingText {
+  margin-top: 18px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+@keyframes videoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.videoAds button:disabled,
+.videoAds .videoTabs button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1180px) {
+  .videoAds .row,
+  .videoAds .grid2,
   .videoAds .videoEnhancementGrid,
   .videoAds .videoHelperGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .videoAds {
+    padding: 32px 20px 72px;
+  }
+
+  .videoAds .videoTopCard,
+  .videoAds .videoPanel,
+  .videoAds .box {
+    padding: 26px;
   }
 
   .videoAds .videoTabs {
     flex-direction: column;
   }
+
+  .videoAds .previewWrap {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.videoAds .videoAdsHeader {
+  max-width: 820px;
+}
+
+.videoAds .videoAdsHeader h1,
+.videoAds .videoAdsHeader p {
+  text-align: left;
+}
+
+.videoAds .videoTopCard,
+.videoAds .videoPanel {
+  max-width: 1180px;
+}
+
+.videoAds .videoPanel {
+  display: grid;
+  gap: 40px;
+}
+
+.videoAds .videoSectionHeading {
+  margin-bottom: 34px;
+}
+
+.videoAds .videoAiSection,
+.videoAds .box,
+.videoAds .dropzone,
+.videoAds .uploadTip {
+  margin-top: 10px;
+}
+
+.videoAds .primary {
+  margin-top: 44px;
+  padding: 17px 20px;
+}
+
+.videoAdsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.videoAdsMain {
+  min-width: 0;
+}
+
+.videoAdsSide {
+  position: sticky;
+  top: 106px;
+  display: grid;
+  gap: 32px;
+}
+
+.videoAdsSide .side-card {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+  padding: 32px;
+}
+
+@media (max-width: 900px) {
+  .videoAdsLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAdsSide {
+    position: static;
+  }
+}
+
+.videoSpecList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.videoSpecRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.videoSpecRow:last-child {
+  border-bottom: none;
+}
+
+.videoSpecRow span {
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.videoSpecRow strong {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-align: right;
+  max-width: 60%;
+}
+
+.videoStatusPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem !important;
+  font-weight: 900 !important;
+  max-width: none !important;
+}
+
+.videoStatusPill.on {
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--ag-primary-hover);
+}
+
+.videoStatusPill.off {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ag-muted);
+}
+
+.videoAds .videoToggleCopy {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 5px !important;
+}
+
+.videoAds .videoToggleTitle {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  color: var(--ag-text);
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.videoAds .videoToggleTitle .ui-info-tip {
+  margin-left: 0 !important;
+  display: inline-grid !important;
+  flex: 0 0 auto !important;
 }

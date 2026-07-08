@@ -144,6 +144,7 @@ export default function Library() {
     }));
 
     let out = [...mappedVideos, ...mappedImages];
+    out = out.filter((item) => item.status === "succeeded");
 
     // Type filter
     if (filter === "video") out = out.filter((x) => x.kind === "video");

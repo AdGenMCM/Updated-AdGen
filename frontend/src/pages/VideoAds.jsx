@@ -4,6 +4,8 @@ import "./VideoAds.css";
 import "./AdGenerator.css"; // ✅ reuse AdGenerator overlay + spinner styles
 import { auth } from "../firebaseConfig";
 import { useWinnersProfile } from "../hooks/useWinnersProfile";
+import StepSection from "../components/ui/StepSection";
+import InfoTip from "../components/ui/InfoTip";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -57,6 +59,16 @@ function estimateSpeechSeconds(text) {
   return Math.round(((words / 2.5) + 0.6) * 10) / 10;
 }
 
+const VIDEO_LOADING_MESSAGES = [
+  "Analyzing your video request...",
+  "Building video direction...",
+  "Applying your Brand Kit if selected...",
+  "Applying Winner Profile if selected...",
+  "Preparing motion and pacing...",
+  "Generating your video...",
+  "Adding final polish...",
+];
+
 // --- helpers for winners guidance ---
 
 export default function VideoAds() {
@@ -75,6 +87,7 @@ export default function VideoAds() {
 
   // ========== Shared video settings ==========
   const [duration, setDuration] = useState(6);
+  const [videoLoadingMessage, setVideoLoadingMessage] = useState(VIDEO_LOADING_MESSAGES[0]);
 
   // Combined dropdown state
   const [formatId, setFormatId] = useState(FORMAT_OPTIONS[0].id);
@@ -181,6 +194,21 @@ export default function VideoAds() {
     if (!user) throw new Error("You must be logged in.");
     return await user.getIdToken(true);
   };
+  useEffect(() => {
+    if (!isGenerating) {
+      setVideoLoadingMessage(VIDEO_LOADING_MESSAGES[0]);
+      return;
+    }
+
+    let index = 0;
+
+    const interval = setInterval(() => {
+      index = (index + 1) % VIDEO_LOADING_MESSAGES.length;
+      setVideoLoadingMessage(VIDEO_LOADING_MESSAGES[index]);
+    }, 2400);
+
+    return () => clearInterval(interval);
+  }, [isGenerating]);
 
   // Fetch /me
   useEffect(() => {
@@ -536,111 +564,128 @@ export default function VideoAds() {
       </div>
     );
   }
-
-  return (
-    <div className="videoAds">
-      {/* ✅ Spinner overlay (same as AdGenerator) */}
-      <div className={`loading-overlay ${isGenerating ? "show" : ""}`} role="status" aria-live="polite">
+return (
+  <div className="videoAds">
+    <div
+      className={`loading-overlay ${isGenerating ? "show" : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="loading-overlay-content">
         <div className="adgen-spinner" />
-        <div className="loading-text">Generating your video… please wait</div>
-      </div>
-
-      <div className="videoAdsHeader videoAdsHero">
-  <h1>Video Ads</h1>
-  <p>
-    Create short-form video ads from a product image or written prompt using your Brand Kit,
-    past winners, format settings, and optional AI voiceover.
-  </p>
-</div>
-
-    <div className="videoTopCard">
-      <div className="videoSectionHeading">
-        <h2>Creation Mode</h2>
-        <p>Choose whether to animate an uploaded image or generate a video from a written prompt.</p>
-      </div>
-
-      <div className="videoTabs">
-        <button
-          type="button"
-          disabled={isGenerating}
-          className={tab === "image" ? "active" : ""}
-          onClick={() => { setTab("image"); resetJob(); }}
-        >
-          Image → Video
-        </button>
-
-        <button
-          type="button"
-          disabled={isGenerating}
-          className={tab === "prompt" ? "active" : ""}
-          onClick={() => { setTab("prompt"); resetJob(); }}
-        >
-          Prompt → Video
-        </button>
+        <div className="loading-text">{videoLoadingMessage}</div>
       </div>
     </div>
 
-      <div className="videoPanel">
-        <div className="videoSectionHeading">
-          <h2>Video Settings</h2>
-          <p>Set the voiceover, duration, and target platform format before generating.</p>
-        </div>
-        {/* Shared settings row */}
-        <div className="row">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={voiceEnabled}
-              onChange={(e) => setVoiceEnabled(e.target.checked)}
+    <div className="videoAdsHeader videoAdsHero">
+      <h1>Generate Video</h1>
+      <p>
+        Create high-performing AI video advertisements from prompts or images using your Brand Kit,
+        winning creative insights, and optional AI voiceover.
+      </p>
+    </div>
+
+    <div className="videoAdsLayout">
+      <main className="videoAdsMain">
+        <StepSection
+          step="1"
+          title="Creation Mode"
+          description="Choose whether to animate an uploaded image or generate a video from a written prompt."
+        >
+          <div className="videoTabs">
+            <button
+              type="button"
               disabled={isGenerating}
-            />
-            AI voiceover
-          </label>
-
-          <div className="field">
-            <label>Voice</label>
-            <select
-              value={presetVoice}
-              onChange={(e) => setPresetVoice(e.target.value)}
-              disabled={!voiceEnabled || isGenerating}
+              className={tab === "image" ? "active" : ""}
+              onClick={() => {
+                setTab("image");
+                resetJob();
+              }}
             >
-              {RUNWAY_VOICES.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
+              Image → Video
+            </button>
 
-          <div className="field">
-            <label>Duration</label>
-            <select
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
+            <button
+              type="button"
               disabled={isGenerating}
+              className={tab === "prompt" ? "active" : ""}
+              onClick={() => {
+                setTab("prompt");
+                resetJob();
+              }}
             >
-              <option value={6}>6 seconds</option>
-              <option value={10}>10 seconds</option>
-            </select>
+              Prompt → Video
+            </button>
           </div>
+        </StepSection>
 
-          <div className="field">
-            <label>Format</label>
-            <select
-              value={formatId}
-              onChange={(e) => setFormatId(e.target.value)}
-              disabled={isGenerating}
-            >
-              {FORMAT_OPTIONS.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <StepSection
+          step="2"
+          title="Video Settings"
+          description="Configure duration, format, voiceover, Brand Kit, and AI enhancements."
+        >
+          <div className="row videoSettingsCompact">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={voiceEnabled}
+                onChange={(e) => setVoiceEnabled(e.target.checked)}
+                disabled={isGenerating}
+              />
+              AI Voiceover
+              <InfoTip text="Reads your script using an AI-generated voice. Disable this if you do not want narration." />
+            </label>
 
-        {/* ===== AI Enhancements ===== */}
-        <div className="videoAiSection">
-          <div className="videoSectionHeading">
-            <h2>AI Enhancements</h2>
-            <p>Choose which saved intelligence layers AdGen should apply to this video.</p>
+            <div className="field">
+              <label>
+                Voice
+                <InfoTip text="Choose which AI voice will narrate your script." />
+              </label>
+              <select
+                value={presetVoice}
+                onChange={(e) => setPresetVoice(e.target.value)}
+                disabled={!voiceEnabled || isGenerating}
+              >
+                {RUNWAY_VOICES.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>
+                Duration
+                <InfoTip text="Controls the maximum length of the generated video." />
+              </label>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                disabled={isGenerating}
+              >
+                <option value={6}>6 seconds</option>
+                <option value={10}>10 seconds</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label>
+                Format
+                <InfoTip text="Optimizes framing and aspect ratio for your chosen platform." />
+              </label>
+              <select
+                value={formatId}
+                onChange={(e) => setFormatId(e.target.value)}
+                disabled={isGenerating}
+              >
+                {FORMAT_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="videoEnhancementGrid">
@@ -653,16 +698,14 @@ export default function VideoAds() {
                   disabled={isGenerating}
                 />
 
-                <span>
-                  <strong>Apply Brand Kit</strong>
+                <span className="videoToggleCopy">
+                  <span className="videoToggleTitle">
+                    <span>Apply Brand Kit</span>
+                    <InfoTip text="Applies your saved logo, colors, fonts, messaging, and creative preferences automatically." />
+                  </span>
                   <small>Recommended</small>
                 </span>
               </label>
-
-              <p>
-                Uses your saved logo, colors, fonts, brand voice, audience, messaging,
-                and creative rules to keep videos consistent with your brand.
-              </p>
             </div>
 
             <div className="videoEnhancementCard">
@@ -674,19 +717,16 @@ export default function VideoAds() {
                   disabled={!canUseWinners || isGenerating || winnersLoading}
                 />
 
-                <span>
-                  <strong>Apply Winner Profile</strong>
+                <span className="videoToggleCopy">
+                  <span className="videoToggleTitle">
+                    <span>Apply Winner Profile</span>
+                    <InfoTip text="Uses your highest-performing videos to guide pacing, scene direction, and creative style." />
+                  </span>
                   <small>Pro/Business</small>
                 </span>
               </label>
-
-              <p>
-                Uses patterns from your best-performing videos to guide pacing,
-                scene direction, platform style, and creative choices.
-              </p>
             </div>
           </div>
-
           {!canUseWinners && (
             <div className="hint" style={{ marginTop: 10 }}>
               Winner Profile is available on <strong>Pro &amp; Business</strong>.
@@ -698,364 +738,479 @@ export default function VideoAds() {
               Loading your winners…
             </div>
           )}
-        </div>
 
-        {/* Voiceover script + preview */}
-        <div className={`box voBox ${!voiceEnabled ? "voBoxDisabled" : ""}`}>
-          <div className="voiceHeader">
-            <div>
-              <div className="boxTitle">Voiceover Script</div>
-              <div className="hint">If enabled, the voice will read this script.</div>
-            </div>
-
-            <button
-              className="secondary miniBtn"
-              disabled={!voiceEnabled || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
-              onClick={() => previewVoice()}
-              type="button"
-            >
-              {previewLoading ? "Previewing..." : "Preview Voice"}
-            </button>
-          </div>
-
-          <textarea
-            value={voiceoverScript}
-            onChange={(e) => setVoiceoverScript(e.target.value)}
-            rows={4}
-            disabled={!voiceEnabled || isGenerating}
-            placeholder="Type your voiceover script here…"
-          />
-
-          {scriptHint && (
-            <div className={scriptTooLong ? "error" : "hint"} style={{ marginTop: 8 }}>
-              {scriptHint}
-            </div>
-          )}
-
-          {!voiceEnabled && (
-            <div className="voOverlay" aria-hidden="true">
-              <div className="voOverlayCard">
-                <div className="voLock">🔒</div>
-                <div>
-                  <div className="voOverlayTitle">Voiceover disabled</div>
-                  <div className="voOverlaySub">Turn on “AI voiceover” to edit and preview.</div>
+          <div className={`box voBox ${!voiceEnabled ? "voBoxDisabled" : ""}`}>
+            <div className="voiceHeader">
+              <div>
+                <div className="boxTitle">
+                  Voiceover Script
+                  <InfoTip text="Optional narration spoken by the AI voice. Keep it concise so it fits the selected duration." />
                 </div>
+                <div className="hint">If enabled, the voice will read this script.</div>
               </div>
-            </div>
-          )}
 
-          {previewUrl && (
-            <div className="audioPreview">
-              <audio ref={audioRef} controls src={previewUrl} />
               <button
-                type="button"
                 className="secondary miniBtn"
-                onClick={() => { try { audioRef.current?.play(); } catch {} }}
-                style={{ marginLeft: 10 }}
-                disabled={isGenerating}
+                disabled={!voiceEnabled || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
+                onClick={() => previewVoice()}
+                type="button"
               >
-                Play
+                {previewLoading ? "Previewing..." : "Preview Voice"}
               </button>
             </div>
-          )}
-        </div>
 
-        {tab === "image" && (
-          <>
-          <div className="videoSectionHeading videoModeHeading">
-            <h2>Image to Video</h2>
-            <p>Upload a product, lifestyle, or ad image and describe how it should move.</p>
-          </div>
-            <div
-              className={`dropzone ${dragOver ? "dragOver" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-              onClick={() => !isGenerating && fileInputRef.current?.click()}
-              role="button"
-              tabIndex={0}
-            >
-              <input
-                ref={fileInputRef}
-                className="hiddenFile"
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                onChange={(e) => onPickFile(e.target.files?.[0])}
-                disabled={isGenerating}
-              />
+            <textarea
+              value={voiceoverScript}
+              onChange={(e) => setVoiceoverScript(e.target.value)}
+              rows={4}
+              disabled={!voiceEnabled || isGenerating}
+              placeholder="Type your voiceover script here…"
+            />
 
-              {!imagePreview ? (
-                <div className="dropzoneInner">
-                  <div className="dzTitle">Drag & drop an image</div>
-                  <div className="dzSub">or click to upload (PNG/JPG/WEBP)</div>
-                </div>
-              ) : (
-                <div className="previewWrap">
-                  <img src={imagePreview} alt="preview" className="previewImg" />
-                  <div className="previewMeta">
-                    <div className="previewName">{imageFile?.name}</div>
-                    <button
-                      className="secondary"
-                      onClick={(e) => { e.stopPropagation(); onPickFile(null); }}
-                      type="button"
-                      disabled={isGenerating}
-                    >
-                      Remove
-                    </button>
+            {scriptHint && (
+              <div className={scriptTooLong ? "error" : "hint"} style={{ marginTop: 8 }}>
+                {scriptHint}
+              </div>
+            )}
+
+            {!voiceEnabled && (
+              <div className="voOverlay" aria-hidden="true">
+                <div className="voOverlayCard">
+                  <div className="voLock">🔒</div>
+                  <div>
+                    <div className="voOverlayTitle">Voiceover disabled</div>
+                    <div className="voOverlaySub">Turn on “AI voiceover” to edit and preview.</div>
                   </div>
                 </div>
-              )}
-            </div>
-
-           <div className="uploadTip">
-              <strong>💡 Best Results</strong>
-              <p>
-                Upload clean product or lifestyle images with little or no text.
-                Flyer-style images, posters, or graphics with heavy text may not
-                generate successfully.
-              </p>
-            </div>
-
-            <div className="field">
-              <label>Prompt Text</label>
-              <textarea
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                rows={3}
-                disabled={isGenerating}
-              />
-            </div>
-              <div className="videoHelperGrid">
-                <div className="videoHelperCard">
-                  <strong>Reference Image</strong>
-                  <p>The uploaded image anchors the product, scene, or visual identity for the video.</p>
-                </div>
-
-                <div className="videoHelperCard">
-                  <strong>Prompt Text</strong>
-                  <p>Controls motion, pacing, camera movement, and how the scene should evolve.</p>
-                </div>
-
-                <div className="videoHelperCard">
-                  <strong>Voiceover</strong>
-                  <p>Optional narration can explain the benefit, offer, or call to action.</p>
-                </div>
-
-                <div className="videoHelperCard">
-                  <strong>Format</strong>
-                  <p>AdGen formats the video for TikTok, Reels, Shorts, YouTube, or Meta placements.</p>
-                </div>
               </div>
-            <button
-              className="primary"
-              disabled={isGenerating || !canStartImage || scriptTooLong}
-              onClick={async () => { try { await startImageVideo(); } catch {} }}
-              title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
-            >
-              {isGenerating ? "Generating..." : "Generate Video"}
-            </button>
+            )}
 
-            <div className="hint" style={{ marginTop: 8 }}>
-              Typical time: ~30–90 seconds (can vary by demand).
-            </div>
-          </>
-        )}
-
-        {tab === "prompt" && (
-          <>
-          <div className="videoSectionHeading videoModeHeading">
-            <h2>Prompt to Video</h2>
-            <p>Describe the product, audience, offer, and creative direction for a generated video ad.</p>
-          </div>
-            <div className="grid2">
-              <div className="field">
-                <label>Product Name</label>
-                <input value={productName} onChange={(e) => setProductName(e.target.value)} disabled={isGenerating} />
-              </div>
-              <div className="field">
-                <label>Platform / Format</label>
-                <select
-                  value={formatId}
-                  onChange={(e) => setFormatId(e.target.value)}
+            {previewUrl && (
+              <div className="audioPreview">
+                <audio ref={audioRef} controls src={previewUrl} />
+                <button
+                  type="button"
+                  className="secondary miniBtn"
+                  onClick={() => {
+                    try {
+                      audioRef.current?.play();
+                    } catch {}
+                  }}
+                  style={{ marginLeft: 10 }}
                   disabled={isGenerating}
                 >
-                  {FORMAT_OPTIONS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  Play
+                </button>
               </div>
-            </div>
+            )}
+          </div>
+        </StepSection>
+                <StepSection
+          step="3"
+          title={tab === "image" ? "Image to Video" : "Prompt to Video"}
+          description={
+            tab === "image"
+              ? "Upload an image and describe how it should move."
+              : "Describe the video you want to generate."
+          }
+        >
+          {tab === "image" && (
+            <>
+              <div
+                className={`dropzone ${dragOver ? "dragOver" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => !isGenerating && fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                <input
+                  ref={fileInputRef}
+                  className="hiddenFile"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => onPickFile(e.target.files?.[0])}
+                  disabled={isGenerating}
+                />
 
-            <div className="field">
-              <label>Video Prompt & Product Description</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} disabled={isGenerating} />
-            </div>
+                {!imagePreview ? (
+                  <div className="dropzoneInner">
+                    <div className="dzTitle">
+                      Drag & drop an image
+                      <InfoTip text="Upload a clean product or lifestyle image that will become the starting frame of the animation." />
+                    </div>
+                    <div className="dzSub">or click to upload (PNG/JPG/WEBP)</div>
+                  </div>
+                ) : (
+                  <div className="previewWrap">
+                    <img src={imagePreview} alt="preview" className="previewImg" />
+                    <div className="previewMeta">
+                      <div className="previewName">{imageFile?.name}</div>
+                      <button
+                        className="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPickFile(null);
+                        }}
+                        type="button"
+                        disabled={isGenerating}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-            <div className="grid2">
-              <div className="field">
-                <label>Offer</label>
-                <input value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="Optional" disabled={isGenerating} />
-              </div>
-              <div className="field">
-                <label>Audience</label>
-                <input value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Optional" disabled={isGenerating} />
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="field">
-                <label>Goal</label>
-                <select value={goal} onChange={(e) => setGoal(e.target.value)} disabled={isGenerating}>
-                  <option value="conversions">Conversions</option>
-                  <option value="leads">Leads</option>
-                  <option value="traffic">Traffic</option>
-                  <option value="awareness">Awareness</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Tone</label>
-                <input value={tone} onChange={(e) => setTone(e.target.value)} disabled={isGenerating} />
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="field">
-                <label>Hook Style</label>
-                <select value={hookStyle} onChange={(e) => setHookStyle(e.target.value)} disabled={isGenerating}>
-                  <option value="bold claim">Bold claim</option>
-                  <option value="question">Question</option>
-                  <option value="problem solution">Problem → Solution</option>
-                  <option value="social proof">Social proof</option>
-                  <option value="before after">Before / After</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Pace</label>
-                <select value={pace} onChange={(e) => setPace(e.target.value)} disabled={isGenerating}>
-                  <option value="fast">Fast (scroll-stopping)</option>
-                  <option value="medium">Medium</option>
-                  <option value="slow cinematic">Slow / cinematic</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="field">
-                <label>Scene Style</label>
-                <select value={sceneStyle} onChange={(e) => setSceneStyle(e.target.value)} disabled={isGenerating}>
-                  <option value="studio product">Studio product</option>
-                  <option value="lifestyle">Lifestyle</option>
-                  <option value="ugc">UGC style</option>
-                  <option value="cinematic">Cinematic</option>
-                  <option value="minimal abstract">Minimal / abstract</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Camera Motion</label>
-                <select value={cameraMotion} onChange={(e) => setCameraMotion(e.target.value)} disabled={isGenerating}>
-                  <option value="none">None</option>
-                  <option value="subtle">Subtle</option>
-                  <option value="dynamic">Dynamic</option>
-                  <option value="fast cuts">Fast cuts</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="field">
-                <label>Lighting</label>
-                <select value={lightingStyle} onChange={(e) => setLightingStyle(e.target.value)} disabled={isGenerating}>
-                  <option value="bright clean">Bright / clean</option>
-                  <option value="natural">Natural</option>
-                  <option value="dramatic">Dramatic</option>
-                  <option value="high contrast">High contrast</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Call to Action</label>
-                <input value={callToAction} onChange={(e) => setCallToAction(e.target.value)} disabled={isGenerating} />
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="field">
-                <label>Extra direction (short)</label>
-                <input value={userPrompt} onChange={(e) => setUserPrompt(e.target.value)} placeholder="Optional" disabled={isGenerating} />
-              </div>
-              <div className="field">
-                <label>Full creative direction (detailed)</label>
-                <input value={fullCreativeDirection} onChange={(e) => setFullCreativeDirection(e.target.value)} placeholder="Optional" disabled={isGenerating} />
-              </div>
-            </div>
-
-            <div className="videoHelperGrid">
-              <div className="videoHelperCard">
-                <strong>Creative Direction</strong>
+              <div className="uploadTip">
+                <strong>💡 Best Results</strong>
                 <p>
-                  Describe your product, audience, and desired visual style as clearly as
-                  possible.
+                  Upload clean product or lifestyle images with little or no text. Flyer-style images,
+                  posters, or graphics with heavy text may not generate successfully.
                 </p>
               </div>
 
-              <div className="videoHelperCard">
-                <strong>Brand Consistency</strong>
-                <p>
-                  Enable Brand Kit to apply your saved branding, messaging, and creative
-                  guidelines automatically.
-                </p>
+              <div className="field">
+                <label>
+                  Prompt Text
+                  <InfoTip text="Describe how the image should move, what happens in the scene, and any camera movement." />
+                </label>
+                <textarea
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
               </div>
 
-              <div className="videoHelperCard">
-                <strong>Winner Profile</strong>
-                <p>
-                  Use insights from your best-performing videos to guide pacing, scene
-                  selection, and creative style.
-                </p>
+              <button
+                className="primary"
+                disabled={isGenerating || !canStartImage || scriptTooLong}
+                onClick={async () => {
+                  try {
+                    await startImageVideo();
+                  } catch {}
+                }}
+                title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
+              >
+                {isGenerating ? "Generating..." : "Generate Video"}
+              </button>
+
+              <div className="hint" style={{ marginTop: 8 }}>
+                Typical time: ~30–90 seconds (can vary by demand).
+              </div>
+            </>
+          )}
+
+          {tab === "prompt" && (
+            <>
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Product Name
+                    <InfoTip text="Helps the AI understand what the advertisement is promoting." />
+                  </label>
+                  <input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    Platform / Format
+                    <InfoTip text="Optimizes framing and aspect ratio for the selected video placement." />
+                  </label>
+                  <select
+                    value={formatId}
+                    onChange={(e) => setFormatId(e.target.value)}
+                    disabled={isGenerating}
+                  >
+                    {FORMAT_OPTIONS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="videoHelperCard">
-                <strong>Voiceover</strong>
-                <p>
-                  Optional AI narration helps reinforce your message and end with a strong
-                  call to action.
-                </p>
+              <div className="field">
+                <label>
+                  Video Prompt & Product Description
+                  <InfoTip text="Describe the product, visuals, motion, offer, and commercial you want generated." />
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
               </div>
-            </div>          
 
-            <button
-              className="primary"
-              disabled={isGenerating || !canStartPrompt || scriptTooLong}
-              onClick={async () => { try { await startPromptVideo(); } catch {} }}
-              title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
-            >
-              {isGenerating ? "Generating..." : "Generate Video"}
-            </button>
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Offer
+                    <InfoTip text="Discounts, promotions, free trials, bundles, or incentives to include." />
+                  </label>
+                  <input
+                    value={offer}
+                    onChange={(e) => setOffer(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
 
-            <div className="hint" style={{ marginTop: 8 }}>
-              Typical time: ~30–90 seconds (can vary by demand).
-            </div>
-          </>
-        )}
+                <div className="field">
+                  <label>
+                    Audience
+                    <InfoTip text="Who this video advertisement is intended for." />
+                  </label>
+                  <input
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
+              </div>
 
-        <div className="statusBlock" ref={statusRef}>
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Goal
+                    <InfoTip text="Choose whether the video should focus on sales, leads, traffic, or awareness." />
+                  </label>
+                  <select value={goal} onChange={(e) => setGoal(e.target.value)} disabled={isGenerating}>
+                    <option value="conversions">Conversions</option>
+                    <option value="leads">Leads</option>
+                    <option value="traffic">Traffic</option>
+                    <option value="awareness">Awareness</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Tone
+                    <InfoTip text="Controls the personality of the commercial." />
+                  </label>
+                  <input value={tone} onChange={(e) => setTone(e.target.value)} disabled={isGenerating} />
+                </div>
+              </div>
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Hook Style
+                    <InfoTip text="Determines how the video captures attention during the first few seconds." />
+                  </label>
+                  <select value={hookStyle} onChange={(e) => setHookStyle(e.target.value)} disabled={isGenerating}>
+                    <option value="bold claim">Bold claim</option>
+                    <option value="question">Question</option>
+                    <option value="problem solution">Problem → Solution</option>
+                    <option value="social proof">Social proof</option>
+                    <option value="before after">Before / After</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Pace
+                    <InfoTip text="Controls the speed and rhythm of the edit." />
+                  </label>
+                  <select value={pace} onChange={(e) => setPace(e.target.value)} disabled={isGenerating}>
+                    <option value="fast">Fast (scroll-stopping)</option>
+                    <option value="medium">Medium</option>
+                    <option value="slow cinematic">Slow / cinematic</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Scene Style
+                    <InfoTip text="Defines the overall visual style of the commercial." />
+                  </label>
+                  <select value={sceneStyle} onChange={(e) => setSceneStyle(e.target.value)} disabled={isGenerating}>
+                    <option value="studio product">Studio product</option>
+                    <option value="lifestyle">Lifestyle</option>
+                    <option value="ugc">UGC style</option>
+                    <option value="cinematic">Cinematic</option>
+                    <option value="minimal abstract">Minimal / abstract</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Camera Motion
+                    <InfoTip text="Controls how the virtual camera moves through the scene." />
+                  </label>
+                  <select value={cameraMotion} onChange={(e) => setCameraMotion(e.target.value)} disabled={isGenerating}>
+                    <option value="none">None</option>
+                    <option value="subtle">Subtle</option>
+                    <option value="dynamic">Dynamic</option>
+                    <option value="fast cuts">Fast cuts</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Lighting
+                    <InfoTip text="Sets the lighting mood for the generated video." />
+                  </label>
+                  <select value={lightingStyle} onChange={(e) => setLightingStyle(e.target.value)} disabled={isGenerating}>
+                    <option value="bright clean">Bright / clean</option>
+                    <option value="natural">Natural</option>
+                    <option value="dramatic">Dramatic</option>
+                    <option value="high contrast">High contrast</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Call to Action
+                    <InfoTip text="The action you want viewers to take after watching." />
+                  </label>
+                  <input value={callToAction} onChange={(e) => setCallToAction(e.target.value)} disabled={isGenerating} />
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Extra Direction
+                    <InfoTip text="Optional short instructions to further refine the generated video." />
+                  </label>
+                  <input
+                    value={userPrompt}
+                    onChange={(e) => setUserPrompt(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    Full Creative Direction
+                    <InfoTip text="Detailed guidance for scene composition, motion, branding, and storytelling." />
+                  </label>
+                  <input
+                    value={fullCreativeDirection}
+                    onChange={(e) => setFullCreativeDirection(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
+              </div>
+
+              <button
+                className="primary"
+                disabled={isGenerating || !canStartPrompt || scriptTooLong}
+                onClick={async () => {
+                  try {
+                    await startPromptVideo();
+                  } catch {}
+                }}
+                title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
+              >
+                {isGenerating ? "Generating..." : "Generate Video"}
+              </button>
+
+              <div className="hint" style={{ marginTop: 8 }}>
+                Typical time: ~30–90 seconds (can vary by demand).
+              </div>
+            </>
+          )}
+        </StepSection>
+      </main>
+
+      <aside className="videoAdsSide">
+        <div className="side-card">
+          <h3>Tips for better video ads</h3>
+          <p>Use clear product visuals, short prompts, and strong motion direction.</p>
+          <ul>
+            <li>Use clean images with minimal text</li>
+            <li>Describe camera movement or pacing</li>
+            <li>Keep voiceover scripts short</li>
+            <li>Match format to the placement</li>
+          </ul>
+        </div>
+
+        <div className="side-card" ref={statusRef}>
+          <h3>Latest Generation</h3>
+
           {jobId && (
             <div className="statusLine">
-              <strong>Job:</strong> {jobId} &nbsp; <strong>Status:</strong> {status || "running"}
+              <strong>Status:</strong> {status || "running"}
             </div>
           )}
+
           {error && <div className="error">{error}</div>}
+
+          {!finalVideoUrl && !error && (
+            <div className="videoEmptyState">
+              <p>No video generated yet.</p>
+              <ul>
+                <li>Preview your video</li>
+                <li>Download the finished creative</li>
+                <li>Save it to your Library</li>
+              </ul>
+            </div>
+          )}
+
           {finalVideoUrl && (
-            <div className="result">
+            <>
               <video src={finalVideoUrl} controls className="videoPlayer" />
               <a className="primary linkBtn" href={finalVideoUrl} target="_blank" rel="noreferrer">
                 Open / Download
               </a>
-            </div>
+            </>
           )}
         </div>
-      </div>
+
+        <div className="side-card">
+          <h3>Video Specs</h3>
+          <div className="videoSpecList">
+            <div className="videoSpecRow">
+              <span>Duration</span>
+              <strong>{duration}s</strong>
+            </div>
+
+            <div className="videoSpecRow">
+              <span>Format</span>
+              <strong>{FORMAT_OPTIONS.find((o) => o.id === formatId)?.label || formatId}</strong>
+            </div>
+
+            <div className="videoSpecRow">
+              <span>Voice</span>
+              <strong>{voiceEnabled ? presetVoice : "Off"}</strong>
+            </div>
+
+            <div className="videoSpecRow">
+              <span>Brand Kit</span>
+              <strong className={`videoStatusPill ${useBrandKit ? "on" : "off"}`}>
+                {useBrandKit ? "Enabled" : "Disabled"}
+              </strong>
+            </div>
+
+            <div className="videoSpecRow">
+              <span>Winner Profile</span>
+              <strong className={`videoStatusPill ${useWinners ? "on" : "off"}`}>
+                {useWinners ? "Enabled" : "Disabled"}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
-  );
+  </div>
+);
 }

@@ -6,6 +6,8 @@ import { auth } from "../firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { useWinnersProfile } from "../hooks/useWinnersProfile";
+import InfoTip from "../components/ui/InfoTip";
+import StepSection from "../components/ui/StepSection";
 
 const db = getFirestore();
 
@@ -47,31 +49,39 @@ const STYLE_MAP = {
 };
 
 const MAX_REFERENCE_IMAGES = 3;
+const LOADING_MESSAGES = [
+  "Analyzing your product...",
+  "Understanding your audience...",
+  "Applying your Brand Kit if selected...",
+  "Applying Winner Profile if selected...",
+  "Building high-converting copy...",
+  "Designing your creative...",
+  "Rendering your advertisement...",
+  "Putting on the finishing touches..."
+];
 
 function AdGenerator() {
   const navigate = useNavigate();
   const referenceInputRef = useRef(null);
 
   const [form, setForm] = useState(INITIAL_FORM);
-
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKit, setBrandKit] = useState(null);
   const [brandKitLoading, setBrandKitLoading] = useState(true);
   const [brandKitAppliedFields, setBrandKitAppliedFields] = useState({});
   const [touchedFields, setTouchedFields] = useState({});
-
   const [useWinners, setUseWinners] = useState(false);
-
   const [referenceImages, setReferenceImages] = useState([]);
   const [referenceImageMode, setReferenceImageMode] = useState("product_reference");
   const [referenceUploading, setReferenceUploading] = useState(false);
   const [referenceError, setReferenceError] = useState("");
-
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uiError, setUiError] = useState(null);
+  const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
 
   const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
+  const hasReferenceImages = referenceImages.length > 0;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -84,8 +94,7 @@ function AdGenerator() {
       try {
         setBrandKitLoading(true);
         const snap = await getDoc(doc(db, "users", user.uid));
-        const kit = snap.data()?.brandKit || null;
-        setBrandKit(kit);
+        setBrandKit(snap.data()?.brandKit || null);
       } catch (err) {
         console.error("Failed to load Brand Kit:", err);
         setBrandKit(null);
@@ -97,14 +106,28 @@ function AdGenerator() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+  if (!loading) {
+    setLoadingMessage(LOADING_MESSAGES[0]);
+    return;
+  }
+
+  let index = 0;
+
+  const interval = setInterval(() => {
+    index = (index + 1) % LOADING_MESSAGES.length;
+    setLoadingMessage(LOADING_MESSAGES[index]);
+  }, 2200);
+
+  return () => clearInterval(interval);
+}, [loading]);
+
   const brandKitDefaults = useMemo(() => {
     if (!brandKit) return {};
 
     const platformRaw = brandKit.preferredPlatform || "";
     const platform = PLATFORM_LABELS[platformRaw] || platformRaw || "";
-
-    const imageStyle = brandKit.imageStyle || "";
-    const stylePreset = STYLE_MAP[imageStyle] || "";
+    const stylePreset = STYLE_MAP[brandKit.imageStyle || ""] || "";
 
     const imageSize = ["1024x1024", "1024x1792", "1792x1024"].includes(
       brandKit.aspectRatioPreference
@@ -130,13 +153,8 @@ function AdGenerator() {
       const applied = {};
 
       Object.entries(brandKitDefaults).forEach(([key, value]) => {
-        if (!value) return;
-        if (touchedFields[key]) return;
-
-        const currentValue = prev[key];
-        const initialValue = INITIAL_FORM[key];
-
-        if (!currentValue || currentValue === initialValue) {
+        if (!value || touchedFields[key]) return;
+        if (!prev[key] || prev[key] === INITIAL_FORM[key]) {
           next[key] = value;
           applied[key] = true;
         }
@@ -170,18 +188,14 @@ function AdGenerator() {
     return String(detail);
   };
 
-  const {
-    winnersProfile,
-    winnerGuidance,
-    winnersLoading,
-    refreshWinners,
-  } = useWinnersProfile({
-    kind: "image",
-    enabled: useWinners,
-    apiBase,
-    limit: 200,
-    minSpend: 0,
-  });
+  const { winnersProfile, winnerGuidance, winnersLoading, refreshWinners } =
+    useWinnersProfile({
+      kind: "image",
+      enabled: useWinners,
+      apiBase,
+      limit: 200,
+      minSpend: 0,
+    });
 
   const fieldBadge = (name) => {
     if (!useBrandKit || !brandKitAppliedFields[name]) return null;
@@ -227,9 +241,7 @@ function AdGenerator() {
 
       const res = await fetch(`${apiBase}/upload-reference-images`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
 
@@ -255,18 +267,14 @@ function AdGenerator() {
       setReferenceError("Reference image upload failed. Please try again.");
     } finally {
       setReferenceUploading(false);
-      if (referenceInputRef.current) {
-        referenceInputRef.current.value = "";
-      }
+      if (referenceInputRef.current) referenceInputRef.current.value = "";
     }
   };
 
   const removeReferenceImage = (id) => {
     setReferenceImages((prev) => {
       const item = prev.find((img) => img.id === id);
-      if (item?.previewUrl) {
-        URL.revokeObjectURL(item.previewUrl);
-      }
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
       return prev.filter((img) => img.id !== id);
     });
   };
@@ -359,14 +367,13 @@ function AdGenerator() {
 
         if (response.status === 429) {
           const msg = safeDetailMessage(detail) || "You’ve reached your monthly limit.";
-          const upgradePath = detail?.upgradePath || "/account";
-          const used = detail?.used;
-          const cap = detail?.cap;
-
           setUiError({
             type: "cap",
-            message: used != null && cap != null ? `${msg} (${used}/${cap} used this month)` : msg,
-            upgradePath,
+            message:
+              detail?.used != null && detail?.cap != null
+                ? `${msg} (${detail.used}/${detail.cap} used this month)`
+                : msg,
+            upgradePath: detail?.upgradePath || "/account",
           });
           return;
         }
@@ -410,7 +417,8 @@ function AdGenerator() {
       setLoading(false);
     }
   };
-    const downloadImage = async () => {
+
+  const downloadImage = async () => {
     try {
       const user = auth.currentUser;
       if (!user) {
@@ -424,9 +432,7 @@ function AdGenerator() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!response.ok) {
-        throw new Error("Download request failed.");
-      }
+      if (!response.ok) throw new Error("Download request failed.");
 
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -438,7 +444,6 @@ function AdGenerator() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Download failed:", err);
@@ -448,449 +453,316 @@ function AdGenerator() {
 
   return (
     <div className="adgen-container adgenPage">
-      <h1 className="app-title">AI Ad Generator</h1>
-      <p className="description">
-        Create brand-aware ad copy and polished ad images using your campaign details, Brand Kit,
-        reference images, and optional performance insights.
-      </p>
-
-      <form className="adgen-form" onSubmit={handleSubmit}>
-        <section className="form-section">
-          <div className="section-heading">
-            <h2>AI Enhancements</h2>
-            <p>Choose which intelligence layers AdGen should apply to this generation.</p>
-          </div>
-
-          <div className="enhancement-grid">
-            <div className="option-card enhancement-card">
-              <label className="option-toggle">
-                <input
-                  type="checkbox"
-                  checked={useBrandKit}
-                  onChange={(e) => setUseBrandKit(e.target.checked)}
-                  disabled={loading}
-                />
-                <span>
-                  <strong>Apply Brand Kit</strong>
-                  <small>
-                    {brandKitLoading
-                      ? "Checking saved Brand Kit..."
-                      : useBrandKit
-                      ? "Brand guidance enabled"
-                      : "Brand guidance disabled"}
-                  </small>
-                </span>
-              </label>
-
-              <p>
-                Applies your saved logo, colors, fonts, messaging, audience, design preferences,
-                and creative rules to keep this ad consistent with your brand.
-              </p>
-            </div>
-
-            <div className="option-card enhancement-card">
-              <label className="option-toggle">
-                <input
-                  type="checkbox"
-                  checked={useWinners}
-                  onChange={(e) => setUseWinners(e.target.checked)}
-                  disabled={loading}
-                />
-                <span>
-                  <strong>Apply Winner Profile</strong>
-                  <small>Pro/Business</small>
-                </span>
-              </label>
-
-              <p>
-                Uses patterns from your highest-performing creatives to influence this generation
-                without copying previous campaigns.
+      <div className="adgen-dashboard">
+        <main className="adgen-main">
+          <div className="adgen-hero">
+            <div>
+              <span className="adgen-kicker">AI Creative Studio</span>
+              <h1 className="app-title">Generate Ad</h1>
+              <p className="description">
+                Create scroll-stopping ads using your Brand Kit, reference images, and performance insights.
               </p>
             </div>
           </div>
-        </section>
 
-        <section className="form-section">
-          <div className="section-heading">
-            <h2>Campaign Details</h2>
-            <p>Tell AdGen what you are promoting and who the ad is for.</p>
-          </div>
-
-          <input
-            name="companyName"
-            placeholder="Company Name"
-            value={form.companyName}
-            onChange={handleChange}
-            disabled={loading}
-          />
-          
-          <input
-            name="product_name"
-            placeholder="Product Name"
-            value={form.product_name}
-            onChange={handleChange}
-            disabled={loading}
-          />
-
-          <textarea
-            name="description"
-            placeholder="Product Description or Image Prompt you'd like to generate"
-            value={form.description}
-            onChange={handleChange}
-            disabled={loading}
-          />
-
-          <div className="field">
-            <div className="field-label">Target Audience {fieldBadge("audience")}</div>
-            <input
-              name="audience"
-              placeholder="Target Audience"
-              value={form.audience}
-              onChange={handleChange}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="field">
-            <div className="field-label">Tone {fieldBadge("tone")}</div>
-            <input
-              name="tone"
-              placeholder="Tone (e.g., energetic, friendly)"
-              value={form.tone}
-              onChange={handleChange}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="field">
-            <div className="field-label">Offer {fieldBadge("offer")}</div>
-            <input
-              name="offer"
-              placeholder='Offer (e.g., "20% off", "Free trial")'
-              value={form.offer}
-              onChange={handleChange}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="field-grid">
-            <div className="field">
-              <div className="field-label">Campaign Goal</div>
-              <select name="goal" value={form.goal} onChange={handleChange} disabled={loading}>
-                <option value="Sales">Sales</option>
-                <option value="Leads">Leads</option>
-                <option value="Traffic">Traffic</option>
-                <option value="Awareness">Awareness</option>
-                <option value="App Installs">App Installs</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <div className="field-label">Campaign Objective</div>
-              <select
-                name="campaignObjective"
-                value={form.campaignObjective}
-                onChange={handleChange}
-                disabled={loading}
-              >
-                <option value="Auto">Auto</option>
-                <option value="Product Launch">Product Launch</option>
-                <option value="Seasonal Promotion">Seasonal Promotion</option>
-                <option value="Limited-Time Offer">Limited-Time Offer</option>
-                <option value="Brand Awareness">Brand Awareness</option>
-                <option value="Retargeting">Retargeting</option>
-                <option value="Lead Generation">Lead Generation</option>
-                <option value="App Promotion">App Promotion</option>
-                <option value="Event">Event</option>
-                <option value="Evergreen">Evergreen</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="section-helper-card">
-            <strong>Campaign Objective</strong>
-            <p>
-              Adds extra context about the type of campaign you are running. A product launch,
-              retargeting ad, and limited-time offer should each feel different.
-            </p>
-          </div>
-        </section>
-
-        <section className="form-section">
-          <div className="section-heading">
-            <h2>Creative Settings</h2>
-            <p>Control the format, style, and creative direction of the generated ad.</p>
-          </div>
-
-          <div className="field">
-            <div className="field-label">Ad Platform {fieldBadge("platform")}</div>
-            <input
-              name="platform"
-              placeholder="Ad Platform (e.g., Instagram)"
-              value={form.platform}
-              onChange={handleChange}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="field-grid">
-            <div className="field">
-              <div className="field-label">Product Type</div>
-              <select name="productType" value={form.productType} onChange={handleChange} disabled={loading}>
-                <option value="auto">Auto-detect</option>
-                <option value="App / Software">App / Software</option>
-                <option value="Electronics / Device">Electronics / Device</option>
-                <option value="Home Appliance">Home Appliance</option>
-                <option value="Skincare / Beauty">Skincare / Beauty</option>
-                <option value="Supplement">Supplement</option>
-                <option value="Beverage / Food">Beverage / Food</option>
-                <option value="Apparel">Apparel</option>
-                <option value="Service">Service</option>
-                <option value="Other Physical Product">Other Physical Product</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <div className="field-label">Style {fieldBadge("stylePreset")}</div>
-              <select name="stylePreset" value={form.stylePreset} onChange={handleChange} disabled={loading}>
-                <option value="Minimal">Minimal (Studio)</option>
-                <option value="Lifestyle">Lifestyle</option>
-                <option value="UGC">UGC (Creator)</option>
-                <option value="Premium">Premium (Luxury)</option>
-                <option value="Bold">Bold (High-contrast)</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <div className="field-label">Image Size {fieldBadge("imageSize")}</div>
-              <select name="imageSize" value={form.imageSize} onChange={handleChange} disabled={loading}>
-                <option value="1024x1024">Square (1024x1024)</option>
-                <option value="1024x1792">Portrait (1024x1792)</option>
-                <option value="1792x1024">Landscape (1792x1024)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="helper-card-grid compact">
-            <div className="helper-card">
-              <strong>Product Type</strong>
-              <p>Helps AdGen understand what kind of product, service, app, or offer it should prioritize visually.</p>
-            </div>
-            <div className="helper-card">
-              <strong>Style</strong>
-              <p>Controls the overall creative direction, such as studio, lifestyle, UGC, premium, or bold.</p>
-            </div>
-            <div className="helper-card">
-              <strong>Image Size</strong>
-              <p>Choose the aspect ratio based on where the advertisement will be displayed.</p>
-            </div>
-            <div className="helper-card">
-              <strong>Campaign Goal</strong>
-              <p>Tells the AI whether to optimize the ad for sales, leads, traffic, awareness, or app installs.</p>
-            </div>
-          </div>
-        </section>
-        <section className="form-section">
-          <div className="section-heading">
-            <h2>Reference Images</h2>
-            <p>
-              Upload up to three images to help AdGen better understand your
-              product or desired creative direction.
-            </p>
-          </div>
-
-          <div className="reference-upload-card">
-
-            <input
-              ref={referenceInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              multiple
-              hidden
-              onChange={(e) => uploadReferenceImages(e.target.files)}
-            />
-
-            <button
-              type="button"
-              className="reference-upload-btn"
-              onClick={() => referenceInputRef.current?.click()}
-              disabled={referenceUploading || loading}
+          <form className="adgen-form" onSubmit={handleSubmit}>
+            <StepSection
+              step="1"
+              title="Product & Audience"
+              description="Tell AdGen what you are promoting and who the ad is for."
             >
-              {referenceUploading
-                ? "Uploading..."
-                : `Upload Reference Images (${referenceImages.length}/${MAX_REFERENCE_IMAGES})`}
-            </button>
 
-            <p className="reference-help">
-              Great for product photos, existing advertisements, packaging,
-              app screenshots, or inspiration images.
-            </p>
+              <div className="field-grid">
+                <div className="field">
+                  <div className="field-label">Company Name</div>
+                  <input name="companyName" placeholder="Hydrate Energy" value={form.companyName} onChange={handleChange} disabled={loading} />
+                </div>
 
-            {referenceError && (
-              <div className="reference-error">
-                {referenceError}
+                <div className="field">
+                  <div className="field-label">Product Name</div>
+                  <input name="product_name" placeholder="Hydrate Energy Drink" value={form.product_name} onChange={handleChange} disabled={loading} />
+                </div>
               </div>
-            )}
 
-            {referenceImages.length > 0 && (
-              <div className="reference-preview-grid">
-                {referenceImages.map((img) => (
-                  <div key={img.id} className="reference-preview-card">
-                    <img
-                      src={img.previewUrl}
-                      alt={img.name}
-                    />
+              <div className="field">
+                <div className="field-label">
+                  Product Description <InfoTip text="Describe what the product is, the main benefit, and what you want the ad to communicate." />
+                </div>
+                <textarea name="description" placeholder="Describe the product, offer, and creative direction..." value={form.description} onChange={handleChange} disabled={loading} />
+              </div>
 
-                    <button
-                      type="button"
-                      className="remove-reference-btn"
-                      onClick={() => removeReferenceImage(img.id)}
-                    >
-                      ✕
-                    </button>
+              <div className="field-grid">
+                <div className="field">
+                  <div className="field-label">
+                    Target Audience {fieldBadge("audience")} <InfoTip text="Who the ad is for. Example: fitness enthusiasts, busy parents, small business owners, or skincare buyers." />
                   </div>
-                ))}
+                  <input name="audience" placeholder="Fitness enthusiasts" value={form.audience} onChange={handleChange} disabled={loading} />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Platform {fieldBadge("platform")} <InfoTip text="Where this ad will run. This helps AdGen match format, tone, and creative style to the platform." />
+                  </div>
+                  <input name="platform" placeholder="Facebook / Instagram Feed" value={form.platform} onChange={handleChange} disabled={loading} />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Offer {fieldBadge("offer")} <InfoTip text="Any promotion, discount, free trial, bundle, or incentive you want included in the ad." />
+                  </div>
+                  <input name="offer" placeholder="20% off first order" value={form.offer} onChange={handleChange} disabled={loading} />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Goal <InfoTip text="Tells AdGen whether to prioritize sales, leads, traffic, awareness, or app installs." />
+                  </div>
+                  <select name="goal" value={form.goal} onChange={handleChange} disabled={loading}>
+                    <option value="Sales">Sales</option>
+                    <option value="Leads">Leads</option>
+                    <option value="Traffic">Traffic</option>
+                    <option value="Awareness">Awareness</option>
+                    <option value="App Installs">App Installs</option>
+                  </select>
+                </div>
               </div>
+            </StepSection>
+
+            <StepSection
+              step="2"
+              title="Creative Details"
+              description="Control the tone, visual style, and campaign format."
+            >
+
+              <div className="field-grid three">
+                <div className="field">
+                  <div className="field-label">
+                    Tone {fieldBadge("tone")} <InfoTip text="Controls how the ad sounds. Example: motivational, luxury, friendly, bold, professional, or playful." />
+                  </div>
+                  <input name="tone" placeholder="Motivational" value={form.tone} onChange={handleChange} disabled={loading} />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Style {fieldBadge("stylePreset")} <InfoTip text="Controls the visual direction of the generated image, such as minimal, lifestyle, premium, UGC, or bold." />
+                  </div>
+                  <select name="stylePreset" value={form.stylePreset} onChange={handleChange} disabled={loading}>
+                    <option value="Minimal">Minimal</option>
+                    <option value="Lifestyle">Lifestyle</option>
+                    <option value="UGC">UGC</option>
+                    <option value="Premium">Premium</option>
+                    <option value="Bold">Bold</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Aspect Ratio {fieldBadge("imageSize")} <InfoTip text="Choose the format based on where the ad will appear. Square for feeds, portrait for stories/reels, landscape for wide placements." />
+                  </div>
+                  <select name="imageSize" value={form.imageSize} onChange={handleChange} disabled={loading}>
+                    <option value="1024x1024">1:1 Square</option>
+                    <option value="1024x1792">9:16 Portrait</option>
+                    <option value="1792x1024">16:9 Landscape</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="field-grid">
+                <div className="field">
+                  <div className="field-label">
+                    Product Type <InfoTip text="Helps AdGen understand what kind of product or service you are promoting. Leave Auto-detect if unsure." />
+                  </div>
+                  <select name="productType" value={form.productType} onChange={handleChange} disabled={loading}>
+                    <option value="auto">Auto-detect</option>
+                    <option value="App / Software">App / Software</option>
+                    <option value="Electronics / Device">Electronics / Device</option>
+                    <option value="Home Appliance">Home Appliance</option>
+                    <option value="Skincare / Beauty">Skincare / Beauty</option>
+                    <option value="Supplement">Supplement</option>
+                    <option value="Beverage / Food">Beverage / Food</option>
+                    <option value="Apparel">Apparel</option>
+                    <option value="Service">Service</option>
+                    <option value="Other Physical Product">Other Physical Product</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Campaign Objective <InfoTip text="Adds context about the campaign, such as launch, retargeting, seasonal promotion, or lead generation." />
+                  </div>
+                  <select name="campaignObjective" value={form.campaignObjective} onChange={handleChange} disabled={loading}>
+                    <option value="Auto">Auto</option>
+                    <option value="Product Launch">Product Launch</option>
+                    <option value="Seasonal Promotion">Seasonal Promotion</option>
+                    <option value="Limited-Time Offer">Limited-Time Offer</option>
+                    <option value="Brand Awareness">Brand Awareness</option>
+                    <option value="Retargeting">Retargeting</option>
+                    <option value="Lead Generation">Lead Generation</option>
+                    <option value="App Promotion">App Promotion</option>
+                    <option value="Event">Event</option>
+                    <option value="Evergreen">Evergreen</option>
+                  </select>
+                </div>
+              </div>
+            </StepSection>
+
+            <StepSection
+              step="3"
+              title="Brand & Assets"
+              description="Apply your Brand Kit and upload optional reference images."
+            >
+
+              <div className="enhancement-grid">
+                <div className="option-card enhancement-card">
+                  <label className="option-toggle">
+                    <input type="checkbox" checked={useBrandKit} onChange={(e) => setUseBrandKit(e.target.checked)} disabled={loading} />
+                    <span>
+                      <strong>
+                        Apply Brand Kit <InfoTip text="Uses your saved logo, colors, fonts, brand voice, website, and brand defaults to keep generated ads consistent." />
+                      </strong>
+                      <small>{brandKitLoading ? "Checking saved Brand Kit..." : useBrandKit ? "Brand guidance enabled" : "Brand guidance disabled"}</small>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="option-card enhancement-card">
+                  <label className="option-toggle">
+                    <input type="checkbox" checked={useWinners} onChange={(e) => setUseWinners(e.target.checked)} disabled={loading} />
+                    <span>
+                      <strong>
+                        Apply Winner Profile <InfoTip text="Uses patterns from your best-performing creatives, such as winning styles, hooks, platforms, and performance metrics. Available on Pro and Business." />
+                      </strong>
+                      <small>Pro/Business</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="reference-upload-card">
+                <input ref={referenceInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" multiple hidden onChange={(e) => uploadReferenceImages(e.target.files)} />
+
+                <button type="button" className="reference-upload-btn" onClick={() => referenceInputRef.current?.click()} disabled={referenceUploading || loading}>
+                  {referenceUploading ? "Uploading..." : `Upload Reference Images (${referenceImages.length}/${MAX_REFERENCE_IMAGES})`}
+                </button>
+
+                {referenceError && <div className="reference-error">{referenceError}</div>}
+
+                {referenceImages.length > 0 && (
+                  <div className="reference-preview-grid">
+                    {referenceImages.map((img) => (
+                      <div key={img.id} className="reference-preview-card">
+                        <img src={img.previewUrl} alt={img.name} />
+                        <button type="button" className="remove-reference-btn" onClick={() => removeReferenceImage(img.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="reference-mode">
+                  <label>
+                    <input
+                      type="radio"
+                      name="referenceMode"
+                      value="product_reference"
+                      checked={referenceImageMode === "product_reference"}
+                      onChange={(e) => setReferenceImageMode(e.target.value)}
+                      disabled={!hasReferenceImages}
+                    />
+                    Product Reference
+                    <InfoTip
+                      text={
+                        hasReferenceImages
+                          ? "Use this when the uploaded image shows the actual product, packaging, app, or item you want preserved in the generated ad."
+                          : "Upload at least one reference image to choose how AdGen should use it."
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    <input
+                      type="radio"
+                      name="referenceMode"
+                      value="style_inspiration"
+                      checked={referenceImageMode === "style_inspiration"}
+                      onChange={(e) => setReferenceImageMode(e.target.value)}
+                      disabled={!hasReferenceImages}
+                    />
+                    Style Inspiration
+                    <InfoTip
+                      text={
+                        hasReferenceImages
+                          ? "Use this when the uploaded image is only for visual direction, such as lighting, mood, composition, colors, or layout style."
+                          : "Upload at least one reference image to choose how AdGen should use it."
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+            </StepSection>
+
+            <div className="button-row">
+              <button type="submit" disabled={loading || winnersLoading || referenceUploading}>
+                {loading ? "Generating..." : winnersLoading ? "Loading Winners..." : referenceUploading ? "Uploading..." : "✨ Generate Ad"}
+              </button>
+            </div>
+          </form>
+        </main>
+
+        <aside className="adgen-side">
+          <div className="side-card tips-card">
+            <h3>Tips for better results</h3>
+            <p>Be specific with your product description, benefits, audience, and desired creative direction.</p>
+            <ul>
+              <li>Include key benefits and features</li>
+              <li>Add an offer if available</li>
+              <li>Use reference images for style guidance</li>
+            </ul>
+          </div>
+
+          <div className="side-card">
+            <h3>Generated Preview</h3>
+            {!result && !uiError && <p className="side-muted">Your generated ad will appear here after creation.</p>}
+
+            {uiError && (
+              <>
+                <p>{uiError.message}</p>
+                <button className="download-button" onClick={() => navigate(uiError.upgradePath || "/account")}>
+                  {uiError.type === "auth" ? "Go to Login" : "Go to My Account"}
+                </button>
+              </>
             )}
 
-            <div className="reference-mode">
-              <label>
-                <input
-                  type="radio"
-                  name="referenceMode"
-                  value="product_reference"
-                  checked={referenceImageMode === "product_reference"}
-                  onChange={(e) => setReferenceImageMode(e.target.value)}
-                />
-                Product Reference
-              </label>
+            {result && (
+              <>
+                <div className="ad-copy">
+                  <p><strong>Headline:</strong> {result.copy.headline}</p>
+                  <p><strong>Primary Text:</strong> {result.copy.primary_text}</p>
+                  <p><strong>CTA:</strong> {result.copy.cta}</p>
+                </div>
 
-              <label>
-                <input
-                  type="radio"
-                  name="referenceMode"
-                  value="style_inspiration"
-                  checked={referenceImageMode === "style_inspiration"}
-                  onChange={(e) => setReferenceImageMode(e.target.value)}
-                />
-                Style Inspiration
-              </label>
-            </div>
+                {result.imageUrl && <img src={result.imageUrl} alt="Generated Ad" className="generated-image" />}
 
-            <div className="section-helper-card">
-              <strong>Reference Images</strong>
-
-              <p>
-                <strong>Product Reference</strong> preserves the uploaded
-                product, packaging, or app while creating a new advertisement.
-              </p>
-
-              <p>
-                <strong>Style Inspiration</strong> uses the uploaded images
-                only for composition, lighting, mood, colors, framing, and
-                design inspiration.
-              </p>
-            </div>
-
+                <button className="download-button" onClick={downloadImage}>
+                  Download Image
+                </button>
+              </>
+            )}
           </div>
-        </section>
-
-        <div className="button-row">
-          <button
-            type="submit"
-            disabled={
-              loading ||
-              winnersLoading ||
-              referenceUploading
-            }
-          >
-            {loading
-              ? "Generating..."
-              : winnersLoading
-              ? "Loading Winners..."
-              : referenceUploading
-              ? "Uploading..."
-              : "Generate Ad"}
-          </button>
-        </div>
-
-      </form>
+        </aside>
+      </div>
 
       <div
         className={`loading-overlay ${loading ? "show" : ""}`}
         role="status"
         aria-live="polite"
       >
-        <div className="adgen-spinner" />
-        <div className="loading-text">
-          Generating your advertisement...
+        <div className="loading-overlay-content">
+          <div className="adgen-spinner" />
+          <div className="loading-text">
+            {loadingMessage}
+          </div>
         </div>
       </div>
-
-      {uiError && (
-        <div className="result">
-          <h2 className="notice">NOTICE</h2>
-
-          <p className="ad-text">
-            {uiError.message}
-          </p>
-
-          <div className="result-container">
-            <button
-              className="download-button"
-              onClick={() =>
-                navigate(uiError.upgradePath || "/account")
-              }
-            >
-              {uiError.type === "auth"
-                ? "Go to Login"
-                : "Go to My Account"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {result && (
-        <div className="result">
-
-          <h2>Generated Ad Copy</h2>
-
-          <div className="ad-copy">
-
-            <p className="ad-text">
-              <strong>Headline:</strong> {result.copy.headline}
-            </p>
-
-            <p className="ad-text">
-              <strong>Primary Text:</strong> {result.copy.primary_text}
-            </p>
-
-            <p className="ad-text">
-              <strong>CTA:</strong> {result.copy.cta}
-            </p>
-
-          </div>
-
-          <div className="result-container">
-
-            <img
-              src={result.imageUrl}
-              alt="Generated Ad"
-              className="generated-image"
-            />
-
-            <button
-              className="download-button"
-              onClick={downloadImage}
-            >
-              Download Image
-            </button>
-
-          </div>
-
-        </div>
-      )}
-
     </div>
   );
 }
