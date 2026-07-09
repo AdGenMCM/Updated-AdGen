@@ -1,0 +1,54 @@
+.adgen-section-header {
+  max-width: 760px;
+  margin-bottom: 56px;
+}
+
+.adgen-section-header.center {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.adgen-section-eyebrow {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4f46e5;
+}
+
+.adgen-section-header h2 {
+  margin: 0;
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+  color: #0f172a;
+}
+
+.adgen-section-description {
+  max-width: 660px;
+  margin: 22px 0 0;
+  font-size: 18px;
+  line-height: 1.65;
+  color: #64748b;
+}
+
+.adgen-section-header.center .adgen-section-description {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 640px) {
+  .adgen-section-header {
+    margin-bottom: 40px;
+  }
+
+  .adgen-section-header h2 {
+    font-size: 34px;
+  }
+
+  .adgen-section-description {
+    font-size: 16px;
+  }
+}

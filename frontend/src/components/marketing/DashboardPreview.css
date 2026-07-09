@@ -1,0 +1,294 @@
+.adgen-dashboard-preview {
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(79, 70, 229, 0.08), transparent 28%),
+    #f8fafc;
+}
+
+.adgen-preview-sidebar {
+  padding: 28px 22px;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(241, 245, 249, 0.78)
+  );
+}
+
+.adgen-preview-brand {
+  margin-bottom: 34px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.adgen-preview-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.adgen-preview-nav span {
+  padding: 11px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(71, 85, 105, 0.82);
+}
+
+.adgen-preview-nav .active {
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.adgen-preview-main {
+  padding: 34px;
+}
+
+.adgen-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.adgen-preview-header p {
+  margin: 0 0 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4f46e5;
+}
+
+.adgen-preview-header h3 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -0.055em;
+  color: #0f172a;
+}
+
+.adgen-preview-header button {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow:
+    0 2px 4px rgba(15, 23, 42, 0.08),
+    0 14px 34px rgba(15, 23, 42, 0.16);
+}
+
+.adgen-preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.adgen-preview-metrics div,
+.adgen-preview-panel,
+.adgen-preview-creative {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.055);
+}
+
+.adgen-preview-metrics div {
+  padding: 18px;
+  border-radius: 20px;
+}
+
+.adgen-preview-metrics span {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(71, 85, 105, 0.7);
+}
+
+.adgen-preview-metrics strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.055em;
+  color: #0f172a;
+}
+
+.adgen-preview-metrics small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(71, 85, 105, 0.78);
+}
+
+.adgen-preview-body {
+  display: grid;
+  grid-template-columns: 1.35fr 0.85fr;
+  gap: 22px;
+}
+
+.adgen-preview-creative,
+.adgen-preview-panel {
+  min-height: 330px;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.adgen-preview-creative {
+  padding: 20px;
+}
+
+.adgen-preview-ad {
+  position: relative;
+  min-height: 290px;
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(79, 70, 229, 0.22), transparent 30%),
+    radial-gradient(circle at 74% 68%, rgba(14, 165, 233, 0.14), transparent 28%),
+    linear-gradient(135deg, #111827, #312e81);
+}
+
+.adgen-preview-ad-glow {
+  position: absolute;
+  inset: 18%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  filter: blur(38px);
+}
+
+.adgen-preview-ad-copy {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 22px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+}
+
+.adgen-preview-ad-copy span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4f46e5;
+}
+
+.adgen-preview-ad-copy strong {
+  display: block;
+  font-size: 20px;
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.adgen-preview-ad-copy small {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(71, 85, 105, 0.8);
+}
+
+.adgen-preview-panel {
+  padding: 22px;
+}
+
+.adgen-preview-panel-header {
+  margin-bottom: 22px;
+}
+
+.adgen-preview-panel-header span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(71, 85, 105, 0.68);
+}
+
+.adgen-preview-panel-header strong {
+  font-size: 22px;
+  letter-spacing: -0.05em;
+  color: #0f172a;
+}
+
+.adgen-preview-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.adgen-preview-steps div {
+  position: relative;
+  padding: 14px 14px 14px 38px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(71, 85, 105, 0.82);
+}
+
+.adgen-preview-steps div::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: rgba(100, 116, 139, 0.28);
+}
+
+.adgen-preview-steps .done::before {
+  background: #10b981;
+}
+
+.adgen-preview-steps .active {
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.adgen-preview-steps .active::before {
+  background: #4f46e5;
+  box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.1);
+}
+
+@media (max-width: 900px) {
+  .adgen-dashboard-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .adgen-preview-sidebar {
+    display: none;
+  }
+
+  .adgen-preview-main {
+    padding: 24px;
+  }
+
+  .adgen-preview-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .adgen-preview-metrics,
+  .adgen-preview-body {
+    grid-template-columns: 1fr;
+  }
+}

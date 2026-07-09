@@ -1,0 +1,112 @@
+.adgen-tilt-card {
+
+  position: relative;
+
+  perspective: 1200px;
+
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+
+  --move-x: 0px;
+  --move-y: 0px;
+
+  --glow-x: 50%;
+  --glow-y: 50%;
+
+}
+
+.adgen-tilt-content {
+
+  position: relative;
+
+  z-index: 2;
+
+  transform:
+
+    translate3d(var(--move-x), var(--move-y), 0)
+
+    rotateX(var(--tilt-x))
+
+    rotateY(var(--tilt-y));
+
+  transition:
+
+    transform
+
+    180ms
+
+    cubic-bezier(.16,1,.3,1),
+
+    box-shadow
+
+    180ms;
+
+  transform-style: preserve-3d;
+
+  will-change: transform;
+
+}
+
+.adgen-tilt-card:hover .adgen-tilt-content {
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.07),
+    0 24px 60px rgba(79, 70, 229, 0.08);
+}
+
+.adgen-tilt-glow {
+
+  position:absolute;
+
+  inset:0;
+
+  pointer-events:none;
+
+  border-radius:inherit;
+
+  opacity:0;
+
+  transition:opacity .25s ease;
+
+  background:
+
+  radial-gradient(
+
+      240px circle
+
+      at
+
+      var(--glow-x)
+
+      var(--glow-y),
+
+      rgba(79,70,229,.12),
+
+      transparent 70%
+
+  );
+
+}
+
+.adgen-tilt-card:hover .adgen-tilt-glow{
+
+opacity:1;
+
+}
+
+@media(prefers-reduced-motion:reduce){
+
+.adgen-tilt-content{
+
+transform:none !important;
+
+transition:none;
+
+}
+
+.adgen-tilt-glow{
+
+display:none;
+
+}
+
+}

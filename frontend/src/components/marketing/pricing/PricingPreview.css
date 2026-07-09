@@ -1,0 +1,156 @@
+.adgen-pricing-preview {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(79, 70, 229, 0.09), transparent 34%),
+    radial-gradient(circle at 84% 74%, rgba(14, 165, 233, 0.06), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.adgen-pricing-preview::before {
+  content: "";
+  position: absolute;
+  inset: 2% -18%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(79, 70, 229, 0.085), transparent 34%),
+    radial-gradient(circle at 72% 70%, rgba(14, 165, 233, 0.065), transparent 36%);
+  filter: blur(90px);
+  opacity: 0.8;
+}
+
+.adgen-pricing-preview .adgen-section-container {
+  position: relative;
+  z-index: 1;
+}
+
+.adgen-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 64px;
+}
+
+.adgen-pricing-card {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  padding: 30px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.78));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.045),
+    0 28px 70px rgba(15, 23, 42, 0.08);
+}
+
+.adgen-pricing-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 40%),
+    radial-gradient(circle at 20% 0%, rgba(79, 70, 229, 0.065), transparent 34%);
+}
+
+.adgen-pricing-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.adgen-pricing-card.featured {
+  border-color: rgba(79, 70, 229, 0.24);
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.065),
+    0 38px 96px rgba(79, 70, 229, 0.16),
+    0 0 0 1px rgba(79, 70, 229, 0.04);
+  transform: translateY(-10px);
+}
+
+.adgen-pricing-card.featured::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), transparent 40%),
+    radial-gradient(circle at 22% 0%, rgba(79, 70, 229, 0.12), transparent 36%),
+    radial-gradient(circle at 82% 20%, rgba(14, 165, 233, 0.08), transparent 34%);
+}
+
+.adgen-plan-badge {
+  display: inline-flex;
+  margin-bottom: 18px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.09);
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.adgen-pricing-card h3 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.05em;
+  color: #0f172a;
+}
+
+.adgen-plan-price {
+  margin-top: 20px;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  color: #0f172a;
+}
+
+.adgen-plan-price span {
+  margin-left: 4px;
+  font-size: 15px;
+  color: #64748b;
+}
+
+.adgen-pricing-card p {
+  margin: 18px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #64748b;
+}
+
+.adgen-pricing-card ul {
+  display: grid;
+  gap: 12px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adgen-pricing-card li {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.adgen-pricing-card li::before {
+  content: "✓";
+  margin-right: 10px;
+  color: #4f46e5;
+}
+
+.adgen-pricing-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 48px;
+}
+
+@media (max-width: 900px) {
+  .adgen-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adgen-pricing-card.featured {
+    transform: none;
+  }
+}

@@ -1,0 +1,63 @@
+.adgen-section {
+  position: relative;
+  padding: 96px 24px;
+}
+
+.adgen-section.sm {
+  padding-top: 72px;
+  padding-bottom: 72px;
+}
+
+.adgen-section.md {
+  padding-top: 96px;
+  padding-bottom: 96px;
+}
+
+.adgen-section.lg {
+  padding-top: 128px;
+  padding-bottom: 128px;
+}
+
+.adgen-section.xl {
+  padding-top: 160px;
+  padding-bottom: 160px;
+}
+
+.adgen-section.with-divider {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.adgen-section.center {
+  text-align: center;
+}
+
+.adgen-section-container {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.adgen-section-container.narrow {
+  max-width: 760px;
+}
+
+.adgen-section-container.standard {
+  max-width: 1120px;
+}
+
+.adgen-section-container.wide {
+  max-width: 1280px;
+}
+
+.adgen-section-container.full {
+  max-width: none;
+}
+
+@media (max-width: 768px) {
+  .adgen-section,
+  .adgen-section.sm,
+  .adgen-section.md,
+  .adgen-section.lg,
+  .adgen-section.xl {
+    padding: 72px 20px;
+  }
+}

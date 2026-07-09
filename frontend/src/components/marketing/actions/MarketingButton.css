@@ -1,0 +1,135 @@
+.adgen-marketing-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.adgen-marketing-button.sm {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.adgen-marketing-button.md {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: 14px;
+}
+
+.adgen-marketing-button.lg {
+  min-height: 56px;
+  padding: 0 28px;
+  font-size: 15px;
+}
+
+/* Primary */
+
+.adgen-marketing-button.primary {
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 42%),
+    #1e293b;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 6px 16px rgba(15, 23, 42, 0.1),
+    0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+.adgen-marketing-button.primary::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0) 44%
+  );
+  opacity: 0.8;
+}
+
+.adgen-marketing-button.primary:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 42%),
+    #273449;
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.12),
+    0 24px 54px rgba(15, 23, 42, 0.22);
+}
+
+/* Secondary */
+
+.adgen-marketing-button.secondary {
+  color: #0f172a;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.72));
+  border-color: rgba(15, 23, 42, 0.09);
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.045),
+    0 14px 34px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(16px);
+}
+
+.adgen-marketing-button.secondary:hover {
+  border-color: rgba(79, 70, 229, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.82));
+  box-shadow:
+    0 6px 16px rgba(15, 23, 42, 0.055),
+    0 18px 42px rgba(15, 23, 42, 0.09);
+}
+
+/* Ghost */
+
+.adgen-marketing-button.ghost {
+  color: rgba(71, 85, 105, 0.9);
+  background: transparent;
+}
+
+.adgen-marketing-button.ghost:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.045);
+}
+
+/* Interaction */
+
+.adgen-marketing-button:hover {
+  transform: translateY(-1px);
+}
+
+.adgen-marketing-button:active {
+  transform: translateY(0);
+}
+
+.adgen-marketing-button:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, 0.22);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adgen-marketing-button {
+    transition: none;
+  }
+
+  .adgen-marketing-button:hover,
+  .adgen-marketing-button:active {
+    transform: none;
+  }
+}

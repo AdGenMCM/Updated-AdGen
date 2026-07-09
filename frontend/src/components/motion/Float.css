@@ -1,0 +1,36 @@
+.adgen-float {
+  animation-name: adgenFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-delay: var(--float-delay);
+  will-change: transform;
+}
+
+.adgen-float-sm {
+  animation-duration: 5.5s;
+}
+
+.adgen-float-md {
+  animation-duration: 7s;
+}
+
+.adgen-float-lg {
+  animation-duration: 9s;
+}
+
+@keyframes adgenFloat {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(0, calc(var(--float-distance) * -1), 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adgen-float {
+    animation: none;
+  }
+}

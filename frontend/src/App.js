@@ -15,6 +15,7 @@ import Insights from "./pages/Insights";
 import BrandKit from "./pages/BrandKit";
 import Dashboard from "./pages/Dashboard";
 import CreativeStudio from "./pages/CreativeStudio";
+import DesignLab from "./pages/DesignLab";
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/platform" element={<Platform />} />
+          <Route path="/design-lab" element={<DesignLab />} />
 
           {/* Auth-only */}
           <Route element={<ProtectedRoute />}>
