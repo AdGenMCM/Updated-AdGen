@@ -22,6 +22,7 @@ import Contact from "./pages/Contact";
 import Pricing from "./pages/Pricing";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+import Platform from "./pages/Platform";
 
 import Optimizer from "./pages/Optimizer";
 
@@ -31,6 +32,7 @@ import AdminUsers from "./pages/AdminUsers";
 
 //App Styling 
 import DashboardRoute from "./components/DashboardRoute";
+import "./styles/animations.css";
 
 // Meta Pixel tracking component
 function MetaPixelPageView() {
@@ -85,6 +87,7 @@ export default function App() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/platform" element={<Platform />} />
 
           {/* Auth-only */}
           <Route element={<ProtectedRoute />}>

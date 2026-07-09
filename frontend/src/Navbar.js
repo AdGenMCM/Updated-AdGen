@@ -87,8 +87,9 @@ export default function Navbar() {
   // Dropdown items (routes that exist)
   const dropdownItems = [
     { to: "/", label: "Home" },
+    { to: "/platform", label: "Platform" },
     { to: "/about", label: "About" },
-    { to: "/pricing", label: "Products & Pricing" },
+    { to: "/pricing", label: "Products" },
     { to: "/contact", label: "Contact Us" },
 
     // ✅ Optimizer link for any logged-in user (tier enforced in-page + backend)
@@ -107,7 +108,7 @@ export default function Navbar() {
       ? [
           { divider: true, mobileOnly: true },
           { to: "/adgenerator", label: "Ad Generator", mobileOnly: true },
-          { to: "/texteditor", label: "Text Editor", mobileOnly: true },
+          { to: "/creative-studio", label: "Creative Studio", mobileOnly: true },
 
           // ✅ NEW: Video Ads (page will show upgrade if tier not eligible)
           { to: "/video-ads", label: "Video Ads", mobileOnly: true },
@@ -240,11 +241,11 @@ export default function Navbar() {
               </NavLink>
 
               <NavLink
-                to="/texteditor"
+                to="/creative-studio"
                 className="nav-link"
                 onClick={() => setInfoOpen(false)}
               >
-                Text Editor
+                Creative Studio
               </NavLink>
 
               {/* ✅ NEW: Video Ads */}
