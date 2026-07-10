@@ -100,21 +100,36 @@ async def create_text_to_video(
     ratio: str,
     audio: bool = False,
 ) -> str:
+    clean_model = _strip_wrapping_quotes(model)
+
+    ratio_map = {
+        "1920:1080": "1280:720",
+        "1080:1920": "720:1280",
+    }
+
+    clean_ratio = ratio_map.get(ratio, ratio)
+
+    print(
+        f"[Runway] prompt generation path=/v1/text_to_video "
+        f"model={clean_model} duration={duration} ratio={clean_ratio}"
+    )
+
     data = await _post(
         "/v1/text_to_video",
         {
-            "model": _strip_wrapping_quotes(model),
+            "model": clean_model,
             "promptText": prompt_text,
             "duration": duration,
-            "ratio": ratio,
+            "ratio": clean_ratio,
             "audio": audio,
         },
     )
+
     task_id = data.get("id")
     if not task_id:
         raise RunwayError(f"text_to_video missing task id: {data}")
-    return task_id
 
+    return task_id
 
 # ✅ FIX: include model + sanitize accidental quotes from env
 async def create_text_to_speech(*, prompt_text: str, preset_voice: str) -> str:

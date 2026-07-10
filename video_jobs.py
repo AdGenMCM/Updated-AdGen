@@ -41,8 +41,8 @@ from entitlements import require_pro_or_business
 VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "10"))
 
 # ✅ Separate defaults so you never mix them up
-VIDEO_DEFAULT_IMAGE_MODEL = os.getenv("VIDEO_DEFAULT_IMAGE_MODEL", "gen4_turbo").strip()
-VIDEO_DEFAULT_TEXT_MODEL = os.getenv("VIDEO_DEFAULT_TEXT_MODEL", "veo3.1_fast").strip()
+VIDEO_DEFAULT_IMAGE_MODEL = os.getenv("VIDEO_DEFAULT_IMAGE_MODEL", "gen4.5").strip()
+VIDEO_DEFAULT_TEXT_MODEL = os.getenv("VIDEO_DEFAULT_TEXT_MODEL", "gen4.5").strip()
 
 router = APIRouter()
 
