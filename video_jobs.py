@@ -25,7 +25,10 @@ from runway_client import (
 
 from auth_helpers import get_db, require_user
 from usage_caps import get_tier_and_status, utc_month_key
-from video_usage import check_and_increment_video_usage
+from video_usage import (
+    check_and_increment_video_usage,
+    rollback_video_usage,
+)
 from admin_guard import is_admin
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -41,8 +44,15 @@ from entitlements import require_pro_or_business
 VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "10"))
 
 # ✅ Separate defaults so you never mix them up
-VIDEO_DEFAULT_IMAGE_MODEL = os.getenv("VIDEO_DEFAULT_IMAGE_MODEL", "gen4.5").strip()
-VIDEO_DEFAULT_TEXT_MODEL = os.getenv("VIDEO_DEFAULT_TEXT_MODEL", "gen4.5").strip()
+VIDEO_DEFAULT_IMAGE_MODEL = os.getenv(
+    "VIDEO_IMAGE_DEFAULT_MODEL",
+    "gen4.5",
+).strip()
+
+VIDEO_DEFAULT_TEXT_MODEL = os.getenv(
+    "VIDEO_TEXT_DEFAULT_MODEL",
+    "gen4.5",
+).strip()
 
 router = APIRouter()
 
@@ -308,23 +318,41 @@ class StartPromptVideoRequest(BaseModel):
     offer: Optional[str] = Field(default=None, max_length=200)
     audience: Optional[str] = Field(default=None, max_length=200)
     tone: Optional[str] = Field(default=None, max_length=80)
-    platform: Optional[str] = Field(default="tiktok", max_length=30)
+    platform: Optional[str] = Field(default="tiktok", max_length=60)
+
+    # Creative direction controls already sent by VideoAds.jsx
+    goal: Optional[str] = Field(default=None, max_length=40)
+    hookStyle: Optional[str] = Field(default=None, max_length=60)
+    sceneStyle: Optional[str] = Field(default=None, max_length=60)
+    cameraMotion: Optional[str] = Field(default=None, max_length=60)
+    lightingStyle: Optional[str] = Field(default=None, max_length=60)
+    pace: Optional[str] = Field(default=None, max_length=60)
+    callToAction: Optional[str] = Field(default=None, max_length=160)
+    fullCreativeDirection: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
 
     duration: Literal[6, 10]
     ratio: VideoRatio = "720:1280"
 
     userPrompt: Optional[str] = Field(default=None, max_length=1000)
     useBrandKit: bool = True
-    voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
+    voiceoverScript: Optional[str] = Field(
+        default=None,
+        max_length=1200,
+    )
 
-    # ✅ prompt/video default model (separate from image)
     model: str = VIDEO_DEFAULT_TEXT_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
 
-    # legacy (keep)
-    winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
+    # Legacy guidance
+    winnerGuidance: Optional[str] = Field(
+        default=None,
+        max_length=1200,
+    )
 
-    # ✅ NEW: structured winners (preferred over winnerGuidance)
+    # Structured winner guidance
     winnerProfile: Optional[Dict[str, Any]] = None
     winnersApply: Optional[List[str]] = None
     winnersInfluence: Optional[float] = 0.5
@@ -347,105 +375,291 @@ class TTSPreviewResponse(BaseModel):
     audioUrl: str
     cached: bool = False
 
-def build_brand_kit_video_context(brand_kit: dict | None) -> str:
+
+def trim_video_prompt(text: str, max_length: int = 1000) -> str:
+    cleaned = " ".join((text or "").split())
+
+    if len(cleaned) <= max_length:
+        return cleaned
+
+    shortened = cleaned[: max_length - 1].rsplit(" ", 1)[0]
+    return shortened.rstrip(" ,;:-") + "."
+
+GOAL_PROMPTS = {
+    "conversions": (
+        "Prioritize product clarity, offer visibility, purchase intent, "
+        "and a decisive sales-oriented ending."
+    ),
+    "leads": (
+        "Prioritize trust, credibility, clarity, and a strong reason "
+        "to take the next step."
+    ),
+    "traffic": (
+        "Prioritize curiosity, momentum, visual intrigue, and a clear "
+        "reason to continue exploring."
+    ),
+    "awareness": (
+        "Prioritize memorable brand imagery, distinct visual identity, "
+        "and broad audience appeal."
+    ),
+}
+
+
+HOOK_STYLE_PROMPTS = {
+    "bold claim": (
+        "Open with an immediate, visually bold product statement."
+    ),
+    "question": (
+        "Open with a curiosity-driven visual that creates an unanswered question."
+    ),
+    "problem solution": (
+        "Open by showing the problem, then quickly reveal the product "
+        "as the solution."
+    ),
+    "social proof": (
+        "Open with a confident proof-oriented visual that suggests trust, "
+        "popularity, or credibility."
+    ),
+    "before after": (
+        "Open with a clear visual contrast between the before state "
+        "and the improved result."
+    ),
+}
+
+
+SCENE_STYLE_PROMPTS = {
+    "studio product": "Premium studio product setting.",
+    "lifestyle": "Authentic aspirational lifestyle setting.",
+    "ugc": "Natural creator-style social video.",
+    "cinematic": "Cinematic environment with rich depth.",
+    "minimal abstract": "Minimal abstract environment with clean negative space.",
+}
+
+CAMERA_MOTION_PROMPTS = {
+    "none": "Locked stable camera.",
+    "subtle": "Slow controlled push-in.",
+    "dynamic": "Smooth energetic orbit and reveal.",
+    "fast cuts": "Rapid clean shot progression.",
+}
+
+LIGHTING_PROMPTS = {
+    "bright clean": "Bright clean commercial lighting.",
+    "natural": "Soft natural lighting.",
+    "dramatic": "Dramatic rim lighting and deep contrast.",
+    "high contrast": "Bold highlights and rich shadows.",
+}
+
+PACE_PROMPTS = {
+    "fast": "Immediate hook with fast commercial pacing.",
+    "medium": "Balanced reveal and hero ending.",
+    "slow cinematic": "Elegant deliberate cinematic pacing.",
+}
+
+def _sentence(value: Optional[str]) -> str:
+    cleaned = (value or "").strip().rstrip(" .!?;:")
+    return f"{cleaned}." if cleaned else ""
+
+def compile_video_brand_direction(
+    brand_kit: Optional[Dict[str, Any]]
+) -> str:
+    """
+    Compiles only the most useful visual Brand Kit details into
+    one short Runway-friendly instruction.
+    """
     if not brand_kit:
         return ""
 
     colors = brand_kit.get("colors") or {}
-    fonts = brand_kit.get("fonts") or {}
 
-    lines = []
+    personality = str(
+        brand_kit.get("brandPersonality") or ""
+    ).strip()
 
-    def add(label, value):
-        value = value.strip() if isinstance(value, str) else value
-        if value:
-            lines.append(f"{label}: {value}")
+    visual_style = str(
+        brand_kit.get("preferredImageStyle")
+        or brand_kit.get("imageStyle")
+        or ""
+    ).strip()
 
-    add("Brand name", brand_kit.get("brandName"))
-    add("Industry", brand_kit.get("industry"))
-    add("Brand personality", brand_kit.get("brandPersonality"))
-    add("Target audience", brand_kit.get("targetAudience"))
-    add("Brand DNA", brand_kit.get("brandDna"))
+    color_values = [
+        colors.get("primary"),
+        colors.get("secondary"),
+        colors.get("accent"),
+    ]
 
-    add("Primary color", colors.get("primary"))
-    add("Secondary color", colors.get("secondary"))
-    add("Accent color", colors.get("accent"))
+    color_values = [
+        str(value).strip()
+        for value in color_values
+        if value and str(value).strip()
+    ]
 
-    add("Headline font", fonts.get("headline"))
-    add("Body font", fonts.get("body"))
-    add("CTA font", fonts.get("cta"))
+    parts: List[str] = []
 
-    add("Brand voice", brand_kit.get("voice"))
-    add("Default CTA", brand_kit.get("preferredCta"))
-    add("Default platform", brand_kit.get("preferredPlatform"))
-    add("Default image style", brand_kit.get("imageStyle"))
-    add("Offer style", brand_kit.get("offerStyle"))
+    if personality:
+        parts.append(f"{personality} brand aesthetic")
 
-    add("Do list", brand_kit.get("doList"))
-    add("Don't list", brand_kit.get("dontList"))
-    add("Compliance rules", brand_kit.get("complianceRules"))
-    add("Products/services notes", brand_kit.get("productsServices"))
+    if visual_style:
+        parts.append(f"{visual_style} visual style")
 
-    if not lines:
+    if color_values:
+        parts.append(
+            "naturally use brand colors "
+            + ", ".join(color_values[:3])
+        )
+
+    if not parts:
         return ""
 
-    return (
-        "==================================================\n"
-        "BRAND KIT\n"
-        "==================================================\n\n"
-        "The following Brand Kit represents the company's established visual identity.\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        "Apply these Brand Kit details only when they are present.\n\n"
-        "Creative Guidelines:\n"
-        "• Treat the Brand Kit as the established brand identity.\n"
-        "• Preserve the overall look, feel, and personality of the brand.\n"
-        "• Use supplied brand colors naturally throughout the video when appropriate (lighting, wardrobe, environments, packaging, graphics, end cards, accents, etc.).\n"
-        "• If fonts are provided and on-screen text appears, use those fonts or the closest visual match.\n"
-        "• Maintain consistent brand voice and messaging.\n"
-        "• Follow any compliance rules and creative restrictions.\n"
-        "• Apply 'Do' and 'Don't' lists whenever relevant.\n"
-        "• If a logo appears naturally, preserve it accurately and keep it subtle.\n"
-        "• Never force a logo into every shot.\n"
-        "• Ignore any Brand Kit fields that are blank or not provided.\n"
+    return "Brand direction: " + "; ".join(parts) + "."
+
+def build_director_prompt(
+    req: StartPromptVideoRequest,
+    brand_kit_context: str = "",
+) -> str:
+    """
+    Compiles the user's structured inputs into a concise,
+    cinematography-focused Runway prompt.
+
+    Target length: approximately 450–700 characters.
+    """
+
+    parts: List[str] = []
+
+    # 1. Product and scene foundation
+    parts.append(
+        _sentence(
+            f"Create a premium commercial for {req.productName}. "
+            f"{req.description}"
+        )
     )
 
-def build_video_priority_context() -> str:
-        return """
-            Priority Order:
+    # 2. Highest-priority user direction
+    if req.fullCreativeDirection:
+        compact_direction = " ".join(
+            req.fullCreativeDirection.split()
+        )[:350]
 
-            1. Follow the user's current video request first.
-            Preserve the requested product, scene, offer, duration, ratio, and video intent.
+        parts.append(
+            _sentence(
+                f"Creative direction: {compact_direction}"
+            )
+        )
 
-            2. Use the Brand Kit as established brand identity.
-            Apply brand voice, colors, personality, audience, CTA, and creative rules only when present.
-            Do not let Brand Kit defaults override the user's current request.
-
-            3. Use Winner Profile guidance only as optimization direction.
-            Apply past winning patterns only when they do not conflict with the current request or Brand Kit.
-
-            4. Produce an original, clean, performance-focused ad video.
-            Prioritize clear product focus, strong motion, smooth pacing, and commercial quality.
-            """.strip()
-
-def build_director_prompt(req: StartPromptVideoRequest) -> str:
-    bits = [
-        "Create a short-form performance ad video.",
-        f"Product: {req.productName}.",
-        f"Description: {req.description}.",
-    ]
-    if req.offer:
-        bits.append(f"Offer: {req.offer}.")
-    if req.audience:
-        bits.append(f"Audience: {req.audience}.")
-    if req.tone:
-        bits.append(f"Tone: {req.tone}.")
-    if req.platform:
-        bits.append(f"Platform style: {req.platform} short-form pacing.")
-    bits.append("No on-screen text. No logos. Clean product-focused visuals. Strong hook pacing. Studio lighting.")
     if req.userPrompt:
-        bits.append(f"Extra direction: {req.userPrompt}")
-    return " ".join(bits)[:1000]
+        compact_extra = " ".join(
+            req.userPrompt.split()
+        )[:400]
+
+        parts.append(
+            _sentence(
+                f"Additional direction: {compact_extra}"
+            )
+        )
+
+    # 3. Compact Brand Kit direction
+    if brand_kit_context:
+        parts.append(brand_kit_context)
+
+    # 4. Visible production choices
+    scene_direction = SCENE_STYLE_PROMPTS.get(
+        (req.sceneStyle or "").strip().lower(),
+        "",
+    )
+    if scene_direction:
+        parts.append(scene_direction)
+
+    camera_direction = CAMERA_MOTION_PROMPTS.get(
+        (req.cameraMotion or "").strip().lower(),
+        "",
+    )
+    if camera_direction:
+        parts.append(camera_direction)
+
+    lighting_direction = LIGHTING_PROMPTS.get(
+        (req.lightingStyle or "").strip().lower(),
+        "",
+    )
+    if lighting_direction:
+        parts.append(lighting_direction)
+
+    pace_direction = PACE_PROMPTS.get(
+        (req.pace or "").strip().lower(),
+        "",
+    )
+    if pace_direction:
+        parts.append(pace_direction)
+
+    # 5. Tone can affect visual presentation without adding marketing metadata
+    if req.tone:
+        parts.append(
+            _sentence(
+                f"Visual tone: {req.tone}"
+            )
+        )
+
+    # 6. Short quality instruction
+    parts.append(
+        "Use photorealistic materials, stable product geometry, "
+        "clean commercial framing, smooth physical motion, "
+        "and a polished hero ending."
+    )
+
+    # 7. Short negative safeguards
+    parts.append(
+        "Avoid jitter, flicker, warping, morphing, duplicate objects, "
+        "random lettering, captions, subtitles, and floating graphics."
+    )
+
+    prompt = " ".join(part for part in parts if part)
+
+    return trim_video_prompt(prompt, 1000)
+
+def build_image_director_prompt(
+    req: StartImageVideoRequest,
+    brand_kit_context: str = "",
+) -> str:
+    """
+    Compiles a concise image-to-video motion prompt.
+    The uploaded image remains the source of truth.
+    """
+
+    parts: List[str] = [
+        (
+            "Animate the supplied image as a premium commercial shot. "
+            "Preserve the original subject, product, branding, colors, "
+            "composition, proportions, packaging, labels, and scene."
+        )
+    ]
+
+    user_direction = (req.promptText or "").strip()
+
+    if user_direction:
+        parts.append(
+            _sentence(f"Motion direction: {user_direction}")
+        )
+
+    if brand_kit_context:
+        parts.append(brand_kit_context)
+
+    parts.append(
+        "Use smooth restrained camera motion, realistic parallax, "
+        "natural reflections, subtle atmosphere, and physically believable movement."
+    )
+
+    parts.append(
+        "Preserve all existing text and logos exactly. "
+        "Do not add, rewrite, distort, or invent lettering."
+    )
+
+    parts.append(
+        "Maintain stable geometry and textures. Avoid jitter, flicker, "
+        "warping, morphing, duplicate objects, abrupt movement, captions, "
+        "and floating graphics."
+    )
+
+    prompt = " ".join(part for part in parts if part)
+
+    return trim_video_prompt(prompt, 1000)
 
 def inject_winners_structured(
     base_text: str,
@@ -454,25 +668,17 @@ def inject_winners_structured(
     winners_influence: Optional[float],
 ) -> str:
     """
-    Injects compact, structured winners constraints (NOT a blob).
-    Safe + optional. If no profile or no applicable fields, returns base_text unchanged.
+    Adds compact Winner Profile guidance without overwhelming
+    the Runway prompt.
     """
     if not winner_profile:
         return base_text
 
-    # normalize apply list
-    apply_set = set()
-    for x in (winners_apply or []):
-        if isinstance(x, str) and x.strip():
-            apply_set.add(x.strip().lower())
-
-    # parse influence (optional)
-    w = "default"
-    try:
-        if winners_influence is not None:
-            w = str(round(float(winners_influence), 2))
-    except Exception:
-        w = "default"
+    apply_set = {
+        str(value).strip().lower()
+        for value in (winners_apply or [])
+        if str(value).strip()
+    }
 
     constraints: List[str] = []
 
@@ -480,65 +686,125 @@ def inject_winners_structured(
     top_ratio = winner_profile.get("top_ratio")
     top_tone = winner_profile.get("top_tone")
 
-    if top_platform and ("platform" in apply_set):
-        constraints.append(f"Optimize for platform: {top_platform}.")
-    if top_ratio and ("ratio" in apply_set):
-        constraints.append(f"Use aspect ratio: {top_ratio}.")
-    if top_tone and ("tone" in apply_set):
-        constraints.append(f"Tone: {top_tone}.")
+    if top_platform and "platform" in apply_set:
+        constraints.append(
+            f"Winning platform style: {top_platform}."
+        )
 
-    # optional arrays if you add them later
+    if top_ratio and "ratio" in apply_set:
+        constraints.append(
+            f"Winning framing: {top_ratio}."
+        )
+
+    if top_tone and "tone" in apply_set:
+        constraints.append(
+            f"Winning visual tone: {top_tone}."
+        )
+
     do_list = winner_profile.get("do")
-    avoid_list = winner_profile.get("avoid")
+    if isinstance(do_list, list) and "do" in apply_set:
+        do_items = [
+            str(item).strip()
+            for item in do_list
+            if str(item).strip()
+        ][:3]
 
-    if isinstance(do_list, list) and ("do" in apply_set):
-        do_items = [str(v).strip() for v in do_list if str(v).strip()][:5]
         if do_items:
-            constraints.append("Do: " + "; ".join(do_items) + ".")
+            constraints.append(
+                "Use: " + "; ".join(do_items) + "."
+            )
 
-    if isinstance(avoid_list, list) and ("avoid" in apply_set):
-        avoid_items = [str(v).strip() for v in avoid_list if str(v).strip()][:5]
+    avoid_list = winner_profile.get("avoid")
+    if isinstance(avoid_list, list) and "avoid" in apply_set:
+        avoid_items = [
+            str(item).strip()
+            for item in avoid_list
+            if str(item).strip()
+        ][:3]
+
         if avoid_items:
-            constraints.append("Avoid: " + "; ".join(avoid_items) + ".")
+            constraints.append(
+                "Avoid: " + "; ".join(avoid_items) + "."
+            )
 
     if not constraints:
         return base_text
 
     return (
-        f"{base_text}\n\n"
-        f"Winners-based constraints (weight {w}): "
+        f"{base_text} "
+        "Winning creative direction, use only when compatible: "
         + " ".join(constraints)
     )
 
 # ---------- Routes ----------
-@router.post("/video/start-image", response_model=StartVideoResponse)
-async def start_image_video(req: StartImageVideoRequest, authorization: str | None = Header(default=None)):
+@router.post("/video/start-image", response_model=StartVideoResponse,)
+async def start_image_video(
+    req: StartImageVideoRequest,
+    authorization: str | None = Header(default=None),
+):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     if req.duration > VIDEO_MAX_SECONDS:
-        raise HTTPException(status_code=400, detail=f"Max duration is {VIDEO_MAX_SECONDS}s")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Max duration is {VIDEO_MAX_SECONDS}s",
+        )
 
-    # ✅ backend safeguard: block if script won't fit
-    enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
+    # Prevent voiceover scripts that will not fit the selected duration.
+    enforce_script_fits_duration(
+        req.voiceoverScript,
+        int(req.duration),
+        bool(req.voiceover.enabled),
+    )
 
     db = get_db()
-    user_doc = (db.collection("users").document(uid).get().to_dict() or {})
-    brand_kit = (user_doc.get("brandKit") or {}) if req.useBrandKit else {}
-    brand_kit_context = build_brand_kit_video_context(brand_kit)
+
+    user_doc = (
+        db.collection("users")
+        .document(uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    brand_kit = (
+        user_doc.get("brandKit") or {}
+    ) if req.useBrandKit else {}
+
+    # Compact visual Brand Kit direction for Runway.
+    brand_direction = compile_video_brand_direction(
+        brand_kit
+    )
+
+    usage_reservation = None
 
     if not admin:
         tier, status = get_tier_and_status(user_doc)
 
-        # caps/entitlements
-        _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
-
-        # ✅ winners guidance/profile is Pro/Business only
-        if (req.winnerGuidance or "").strip() or (req.winnerProfile is not None):
+        # Validate premium Winner Profile access before reserving usage.
+        if (
+            (req.winnerGuidance or "").strip()
+            or req.winnerProfile is not None
+        ):
             require_pro_or_business(tier)
 
+        # Reserve usage only after all local entitlement checks pass.
+        usage_reservation = _enforce_video_entitlements_and_increment(
+            db,
+            uid,
+            tier,
+            status,
+            int(req.duration),
+        )
+
     job_id = str(uuid.uuid4())
-    job_ref = db.collection("video_jobs").document(job_id)
+
+    job_ref = (
+        db.collection("video_jobs")
+        .document(job_id)
+    )
+
     job_ref.set({
         "uid": uid,
         "createdAt": int(time.time()),
@@ -547,33 +813,49 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
         "duration": req.duration,
         "ratio": req.ratio,
         "model": req.model,
+
         "voiceover": req.voiceover.model_dump(),
-        "voiceoverScript": (req.voiceoverScript or "").strip() or None,
+        "voiceoverScript": (
+            (req.voiceoverScript or "").strip()
+            or None
+        ),
+
+        # Original user inputs.
         "promptText": req.promptText,
         "promptImageUrl": req.promptImageUrl,
+        "useBrandKit": req.useBrandKit,
+
+        # Runway task fields.
         "runwayVideoTaskId": None,
         "runwayTtsTaskId": None,
+
+        # Final output.
         "finalVideoUrl": None,
         "error": None,
 
-        # Keep old field
-        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
+        # Legacy winner guidance.
+        "winnerGuidance": (
+            (req.winnerGuidance or "").strip()
+            or None
+        ),
 
-        # NEW structured winners fields
+        # Structured winner guidance.
         "winnerProfile": req.winnerProfile or None,
         "winnersApply": req.winnersApply or None,
-        "winnersInfluence": req.winnersInfluence if req.winnersInfluence is not None else None,
+        "winnersInfluence": (
+            req.winnersInfluence
+            if req.winnersInfluence is not None
+            else None
+        ),
     })
 
-    # Build prompt text + inject winners structured constraints (preferred)
-    prompt_text = (req.promptText or "").strip()
+    # Build concise image-to-video motion prompt.
+    prompt_text = build_image_director_prompt(
+        req,
+        brand_kit_context=brand_direction,
+    )
 
-    priority_context = build_video_priority_context()
-    prompt_text = f"{priority_context}\n\nCURRENT VIDEO REQUEST:\n{prompt_text}"
-
-    if brand_kit_context:
-        prompt_text = f"{prompt_text}\n\n{brand_kit_context}"   
-
+    # Apply structured Winner Profile guidance when selected.
     if req.winnerProfile is not None:
         prompt_text = inject_winners_structured(
             prompt_text,
@@ -581,84 +863,224 @@ async def start_image_video(req: StartImageVideoRequest, authorization: str | No
             req.winnersApply,
             req.winnersInfluence,
         )
+
+    # Backward-compatible legacy winner guidance.
     elif (req.winnerGuidance or "").strip():
-        # Backward-compatible old guidance blob
-        g = (req.winnerGuidance or "").strip()
-        prompt_text = (
-            f"{prompt_text}\n\n"
-            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
-            f"{g}"
+        legacy_guidance = " ".join(
+            (req.winnerGuidance or "").split()
         )
 
-    prompt_text = prompt_text[:1000]
+        if legacy_guidance:
+            prompt_text = (
+                f"{prompt_text} "
+                "Past winning direction, use only when compatible: "
+                f"{legacy_guidance[:180]}"
+            )
 
+    # Runway promptText has a hard 1,000-character limit.
+    prompt_text = trim_video_prompt(
+        prompt_text,
+        1000,
+    )
+
+    if len(prompt_text) > 800:
+        print(
+            "[Image Prompt Warning] "
+            f"Long prompt: {len(prompt_text)} characters"
+        )
+
+    print(
+        f"[Image Director Prompt] "
+        f"{len(prompt_text)} chars\n"
+        f"{prompt_text}\n"
+    )
+
+    # Save the exact prompt sent to Runway.
+    job_ref.update({
+        "promptTextFinal": prompt_text,
+        "brandDirection": brand_direction or None,
+    })
+
+    # Only this call is eligible for an automatic usage refund.
     try:
-
         runway_task_id = await create_image_to_video(
-         prompt_image=req.promptImageUrl,
-         prompt_text=prompt_text,
-         model=req.model,
-         ratio=req.ratio,
-         duration=int(req.duration),
+            prompt_image=req.promptImageUrl,
+            prompt_text=prompt_text,
+            model=req.model,
+            ratio=req.ratio,
+            duration=int(req.duration),
         )
-
-        job_ref.update({"runwayVideoTaskId": runway_task_id})
-
-        if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
-            runway_tts_id = await create_text_to_speech(
-             prompt_text=(req.voiceoverScript or "").strip(),
-             preset_voice=safe_voice(req.voiceover.presetVoice),
-)
-            job_ref.update({"runwayTtsTaskId": runway_tts_id})
-
-        # Persist final prompt text used (optional but helpful)
-        job_ref.update({"promptTextFinal": prompt_text})
-
-        return StartVideoResponse(jobId=job_id, status="running")
 
     except RunwayError as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        if not admin and usage_reservation:
+            refunded = rollback_video_usage(
+                db,
+                uid,
+                usage_reservation.get("periodKey"),
+            )
+
+            print(
+                "[Video Usage Refund] "
+                f"mode=image uid={uid} refunded={refunded}"
+            )
+
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
     except Exception as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=500, detail="Failed to start image video job.")
+        if not admin and usage_reservation:
+            refunded = rollback_video_usage(
+                db,
+                uid,
+                usage_reservation.get("periodKey"),
+            )
+
+            print(
+                "[Video Usage Refund] "
+                f"mode=image uid={uid} refunded={refunded}"
+            )
+
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to start image video job.",
+        )
 
 
-@router.post("/video/start-prompt", response_model=StartVideoResponse)
-async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | None = Header(default=None)):
+    # From this point forward, Runway accepted the video job.
+    # Do not refund usage after this line.
+    job_ref.update({
+        "runwayVideoTaskId": runway_task_id,
+    })
+
+
+    try:
+        if (
+            bool(req.voiceover.enabled)
+            and (req.voiceoverScript or "").strip()
+        ):
+            runway_tts_id = await create_text_to_speech(
+                prompt_text=(
+                    req.voiceoverScript or ""
+                ).strip(),
+                preset_voice=safe_voice(
+                    req.voiceover.presetVoice
+                ),
+            )
+
+            job_ref.update({
+                "runwayTtsTaskId": runway_tts_id,
+            })
+
+        return StartVideoResponse(
+            jobId=job_id,
+            status="running",
+        )
+
+    except RunwayError as e:
+        # No usage refund: the Runway video task already exists.
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+    except Exception as e:
+        # No usage refund: the Runway video task already exists.
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed after the image video task was accepted.",
+        )
+
+
+@router.post("/video/start-prompt", response_model=StartVideoResponse,)
+async def start_prompt_video(
+    req: StartPromptVideoRequest,
+    authorization: str | None = Header(default=None),
+):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     if req.duration > VIDEO_MAX_SECONDS:
-        raise HTTPException(status_code=400, detail=f"Max duration is {VIDEO_MAX_SECONDS}s")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Max duration is {VIDEO_MAX_SECONDS}s",
+        )
 
-    # ✅ backend safeguard: block if script won't fit
-    enforce_script_fits_duration(req.voiceoverScript, int(req.duration), bool(req.voiceover.enabled))
+    # Prevent voiceover scripts that will not fit the selected duration.
+    enforce_script_fits_duration(
+        req.voiceoverScript,
+        int(req.duration),
+        bool(req.voiceover.enabled),
+    )
 
     db = get_db()
-    user_doc = (db.collection("users").document(uid).get().to_dict() or {})
-    brand_kit = (user_doc.get("brandKit") or {}) if req.useBrandKit else {}
-    brand_kit_context = build_brand_kit_video_context(brand_kit)
+
+    user_doc = (
+        db.collection("users")
+        .document(uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    brand_kit = (
+        user_doc.get("brandKit") or {}
+    ) if req.useBrandKit else {}
+
+    # Compact visual Brand Kit direction for Runway.
+    brand_direction = compile_video_brand_direction(
+        brand_kit
+    )
+
+    usage_reservation = None
 
     if not admin:
         tier, status = get_tier_and_status(user_doc)
 
-        _enforce_video_entitlements_and_increment(db, uid, tier, status, int(req.duration))
-
-        # ✅ winners guidance/profile is Pro/Business only
-        if (req.winnerGuidance or "").strip() or (req.winnerProfile is not None):
+        # Validate premium Winner Profile access before reserving usage.
+        if (
+            (req.winnerGuidance or "").strip()
+            or req.winnerProfile is not None
+        ):
             require_pro_or_business(tier)
 
-    # ✅ Director prompt used for the actual Runway generation
-    director_prompt = build_director_prompt(req)
+        # Reserve usage only after all local entitlement checks pass.
+        usage_reservation = _enforce_video_entitlements_and_increment(
+            db,
+            uid,
+            tier,
+            status,
+            int(req.duration),
+        )
 
-    priority_context = build_video_priority_context()
-    director_prompt = f"{priority_context}\n\nCURRENT VIDEO REQUEST:\n{director_prompt}"
+    # Build concise prompt-to-video creative direction.
+    director_prompt = build_director_prompt(
+        req,
+        brand_kit_context=brand_direction,
+    )
 
-    if brand_kit_context:
-        director_prompt = f"{director_prompt}\n\n{brand_kit_context}"
-
-    # ✅ NEW: structured winners (preferred)
+    # Apply structured Winner Profile guidance when selected.
     if req.winnerProfile is not None:
         director_prompt = inject_winners_structured(
             director_prompt,
@@ -666,19 +1088,45 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
             req.winnersApply,
             req.winnersInfluence,
         )
-    # ✅ Backward-compatible: old blob text still works
+
+    # Backward-compatible legacy winner guidance.
     elif (req.winnerGuidance or "").strip():
-        g = (req.winnerGuidance or "").strip()
-        director_prompt = (
-            f"{director_prompt}\n\n"
-            "Guidance from the user's past best-performing creatives (use lightly; do not mention metrics; do not copy verbatim):\n"
-            f"{g}"
+        legacy_guidance = " ".join(
+            (req.winnerGuidance or "").split()
         )
 
-    director_prompt = director_prompt[:1000]
+        if legacy_guidance:
+            director_prompt = (
+                f"{director_prompt} "
+                "Past winning direction, use only when compatible: "
+                f"{legacy_guidance[:180]}"
+            )
+
+    # Runway promptText has a hard 1,000-character limit.
+    director_prompt = trim_video_prompt(
+        director_prompt,
+        1000,
+    )
+
+    if len(director_prompt) > 800:
+        print(
+            "[Director Prompt Warning] "
+            f"Long prompt: {len(director_prompt)} characters"
+        )
+
+    print(
+        f"[Director Prompt] "
+        f"{len(director_prompt)} chars\n"
+        f"{director_prompt}\n"
+    )
 
     job_id = str(uuid.uuid4())
-    job_ref = db.collection("video_jobs").document(job_id)
+
+    job_ref = (
+        db.collection("video_jobs")
+        .document(job_id)
+    )
+
     job_ref.set({
         "uid": uid,
         "createdAt": int(time.time()),
@@ -687,50 +1135,176 @@ async def start_prompt_video(req: StartPromptVideoRequest, authorization: str | 
         "duration": req.duration,
         "ratio": req.ratio,
         "model": req.model,
+
         "voiceover": req.voiceover.model_dump(),
-        "voiceoverScript": (req.voiceoverScript or "").strip() or None,
+        "voiceoverScript": (
+            (req.voiceoverScript or "").strip()
+            or None
+        ),
+
+        # Core creative request.
+        "productName": req.productName,
+        "description": req.description,
+        "offer": req.offer,
+        "audience": req.audience,
+        "tone": req.tone,
+        "platform": req.platform,
+
+        # Structured creative controls.
+        "goal": req.goal,
+        "hookStyle": req.hookStyle,
+        "sceneStyle": req.sceneStyle,
+        "cameraMotion": req.cameraMotion,
+        "lightingStyle": req.lightingStyle,
+        "pace": req.pace,
+        "callToAction": req.callToAction,
+        "fullCreativeDirection": (
+            req.fullCreativeDirection
+            or None
+        ),
+        "userPrompt": req.userPrompt or None,
+
+        # Brand configuration.
+        "useBrandKit": req.useBrandKit,
+        "brandDirection": brand_direction or None,
+
+        # Exact prompt sent to Runway.
         "directorPrompt": director_prompt,
+
+        # Runway task fields.
         "runwayVideoTaskId": None,
         "runwayTtsTaskId": None,
+
+        # Final output.
         "finalVideoUrl": None,
         "error": None,
 
-        # Keep old field for compatibility / debugging
-        "winnerGuidance": (req.winnerGuidance or "").strip() or None,
+        # Legacy winner guidance.
+        "winnerGuidance": (
+            (req.winnerGuidance or "").strip()
+            or None
+        ),
 
-        # NEW structured winners fields (safe/no styling impact)
+        # Structured winner guidance.
         "winnerProfile": req.winnerProfile or None,
         "winnersApply": req.winnersApply or None,
-        "winnersInfluence": req.winnersInfluence if req.winnersInfluence is not None else None,
+        "winnersInfluence": (
+            req.winnersInfluence
+            if req.winnersInfluence is not None
+            else None
+        ),
     })
 
+    # Only this call is eligible for an automatic usage refund.
     try:
-        # start Runway task (UNCHANGED)
         runway_task_id = await create_text_to_video(
-    prompt_text=director_prompt,
-    model=req.model,
-    ratio=req.ratio,
-    duration=int(req.duration),
-)
-
-        job_ref.update({"runwayVideoTaskId": runway_task_id})
-
-        # Kick off TTS (UNCHANGED)
-        if bool(req.voiceover.enabled) and (req.voiceoverScript or "").strip():
-            runway_tts_id = await create_text_to_speech(
-            prompt_text=(req.voiceoverScript or "").strip(),
-            preset_voice=safe_voice(req.voiceover.presetVoice),
+            prompt_text=director_prompt,
+            model=req.model,
+            ratio=req.ratio,
+            duration=int(req.duration),
         )
-            job_ref.update({"runwayTtsTaskId": runway_tts_id})
-
-        return StartVideoResponse(jobId=job_id, status="running")
 
     except RunwayError as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        if not admin and usage_reservation:
+            refunded = rollback_video_usage(
+                db,
+                uid,
+                usage_reservation.get("periodKey"),
+            )
+
+            print(
+                "[Video Usage Refund] "
+                f"mode=prompt uid={uid} refunded={refunded}"
+            )
+
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
     except Exception as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        raise HTTPException(status_code=500, detail="Failed to start video job.")
+        if not admin and usage_reservation:
+            refunded = rollback_video_usage(
+                db,
+                uid,
+                usage_reservation.get("periodKey"),
+            )
+
+            print(
+                "[Video Usage Refund] "
+                f"mode=prompt uid={uid} refunded={refunded}"
+            )
+
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to start video job.",
+        )
+
+
+    # From this point forward, Runway accepted the video job.
+    # Do not refund usage after this line.
+    job_ref.update({
+        "runwayVideoTaskId": runway_task_id,
+    })
+
+
+    try:
+        if (
+            bool(req.voiceover.enabled)
+            and (req.voiceoverScript or "").strip()
+        ):
+            runway_tts_id = await create_text_to_speech(
+                prompt_text=(
+                    req.voiceoverScript or ""
+                ).strip(),
+                preset_voice=safe_voice(
+                    req.voiceover.presetVoice
+                ),
+            )
+
+            job_ref.update({
+                "runwayTtsTaskId": runway_tts_id,
+            })
+
+        return StartVideoResponse(
+            jobId=job_id,
+            status="running",
+        )
+
+    except RunwayError as e:
+        # No usage refund: the video task was already accepted.
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+    except Exception as e:
+        # No usage refund: the video task was already accepted.
+        job_ref.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed after the video task was accepted.",
+        )
+
 
 
 @router.get("/video/status/{job_id}", response_model=VideoStatusResponse)

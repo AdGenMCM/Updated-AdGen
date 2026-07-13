@@ -183,6 +183,14 @@ def admin_health():
 
 # ---------------- OpenAI ----------------
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+OPENAI_TEXT_MODEL = (
+    os.getenv("OPENAI_TEXT_MODEL")
+    or "gpt-5.5"
+).strip()
+OPENAI_IMAGE_MODEL = (
+    os.getenv("OPENAI_IMAGE_MODEL")
+    or "gpt-image-2"
+).strip()
 
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing.")
@@ -197,7 +205,7 @@ def generate_gpt_image_bytes(
 ) -> bytes:
     allowed_sizes = {"1024x1024", "1024x1792", "1792x1024"}
     safe_size = size if size in allowed_sizes else "1024x1024"
-    model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+    model = OPENAI_IMAGE_MODEL
 
     image_urls = []
 
@@ -1583,12 +1591,21 @@ It should be visually impressive enough to appear in a professional design portf
         try:
             resp = await asyncio.to_thread(
                 lambda: client.chat.completions.create(
-                    model="gpt-4-turbo",
+                    model=OPENAI_TEXT_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are an expert direct-response ad copywriter. Output ONLY valid JSON."},
-                        {"role": "user", "content": copy_prompt},
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert direct-response ad copywriter. "
+                                "Output ONLY valid JSON."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": copy_prompt,
+                        },
                     ],
-                    max_tokens=450,
+                    max_completion_tokens=450,
                 )
             )
             raw = (resp.choices[0].message.content or "").strip()
@@ -1666,7 +1683,7 @@ It should be visually impressive enough to appear in a professional design portf
             "winnersApply": winners_apply or None,
             "winnersInfluence": winners_influence if winners_influence is not None else None,
             "winnerGuidance": winner_guidance or None,
-            "model": "gpt-image-1",
+            "model": OPENAI_IMAGE_MODEL,
         })
     except Exception:
         pass
@@ -1857,7 +1874,7 @@ confidence
     try:
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
-                model="gpt-4-turbo",
+                model=OPENAI_TEXT_MODEL,
                 response_format={"type": "json_object"},
                 messages=[
                     {
@@ -1868,9 +1885,12 @@ confidence
                             "Return confidence as lowercase: low, medium, or high."
                         ),
                     },
-                    {"role": "user", "content": optimizer_prompt},
+                    {
+                        "role": "user",
+                        "content": optimizer_prompt,
+                    },
                 ],
-                max_tokens=750,
+                max_completion_tokens=750,
             )
         )
 
@@ -2249,7 +2269,7 @@ Improve it.
                     "month": cap_result.get("month"),
                     "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
                 },
-                "model": "gpt-image-1",
+                "model": OPENAI_IMAGE_MODEL,
             })
         except Exception:
             pass
