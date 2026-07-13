@@ -2,40 +2,123 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 20%, rgba(79, 70, 229, 0.12), transparent 34%),
+    radial-gradient(
+      circle at 50% 18%,
+      rgba(79, 70, 229, 0.13),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 18% 74%,
+      rgba(14, 165, 233, 0.055),
+      transparent 34%
+    ),
     linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.adgen-final-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      115deg,
+      rgba(238, 242, 255, 0.16),
+      transparent 42%
+    ),
+    linear-gradient(
+      245deg,
+      rgba(224, 242, 254, 0.12),
+      transparent 44%
+    );
+}
+
+.adgen-final-cta .adgen-section-container {
+  position: relative;
+  z-index: 1;
 }
 
 .adgen-final-eyebrow {
   margin: 0 0 18px;
+  color: #4f46e5;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #4f46e5;
 }
 
 .adgen-final-cta h2 {
-  max-width: 860px;
+  max-width: 900px;
   margin: 0 auto;
+  color: #0f172a;
   font-size: clamp(42px, 6vw, 72px);
   line-height: 1.02;
   letter-spacing: -0.065em;
-  color: #0f172a;
 }
 
 .adgen-final-copy {
-  max-width: 700px;
+  max-width: 720px;
   margin: 28px auto 0;
-  font-size: 18px;
-  line-height: 1.7;
   color: #64748b;
+  font-size: 18px;
+  line-height: 1.72;
+}
+
+.adgen-final-proof {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.adgen-final-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(15, 23, 42, 0.075);
+  border-radius: 999px;
+  color: #475569;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adgen-final-proof i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f46e5, #8b5cf6);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.09);
 }
 
 .adgen-final-actions {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   margin-top: 40px;
+}
+
+@media (max-width: 640px) {
+  .adgen-final-proof {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adgen-final-proof span {
+    justify-content: center;
+  }
+
+  .adgen-final-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adgen-final-actions .adgen-marketing-button {
+    width: 100%;
+  }
 }

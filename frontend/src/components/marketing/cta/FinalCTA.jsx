@@ -6,15 +6,39 @@ import MarketingButton from "../actions/MarketingButton";
 
 export default function FinalCTA() {
   return (
-    <Section size="xl" container="standard" align="center" className="adgen-final-cta">
-      <p className="adgen-final-eyebrow">Ready when you are</p>
+    <Section
+      size="xl"
+      container="standard"
+      align="center"
+      className="adgen-final-cta"
+    >
+      <p className="adgen-final-eyebrow">
+        Your next campaign can start here
+      </p>
 
-      <h2>Start creating campaign-ready creative today.</h2>
+      <h2>Build better creative without rebuilding the workflow.</h2>
 
       <p className="adgen-final-copy">
-        Build your brand foundation, generate better creative, organize every
-        asset, and improve performance from one connected workspace.
+        Bring your brand, campaign assets, creative history, and performance
+        insights into one connected workspace built for continuous improvement.
       </p>
+
+      <div className="adgen-final-proof">
+        <span>
+          <i aria-hidden="true" />
+          Brand-aware generation
+        </span>
+
+        <span>
+          <i aria-hidden="true" />
+          One organized creative workspace
+        </span>
+
+        <span>
+          <i aria-hidden="true" />
+          Performance-guided improvement
+        </span>
+      </div>
 
       <div className="adgen-final-actions">
         <MarketingButton href="/subscribe" size="lg">
@@ -22,7 +46,7 @@ export default function FinalCTA() {
         </MarketingButton>
 
         <MarketingButton href="/platform" size="lg" variant="secondary">
-          See the platform
+          Explore the platform
         </MarketingButton>
       </div>
     </Section>

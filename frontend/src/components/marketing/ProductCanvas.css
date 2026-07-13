@@ -56,7 +56,7 @@
 }
 
 .adgen-product-canvas-wrap.hero .adgen-product-canvas {
-  animation: adgenCanvasFloat 18s ease-in-out infinite;
+  animation: none;
 }
 
 /* Showcase */

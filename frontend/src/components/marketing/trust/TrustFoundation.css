@@ -2,21 +2,35 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, rgba(79, 70, 229, 0.075), transparent 34%),
-    radial-gradient(circle at 82% 72%, rgba(14, 165, 233, 0.06), transparent 34%),
+    radial-gradient(
+      circle at 18% 20%,
+      rgba(79, 70, 229, 0.07),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 72%,
+      rgba(14, 165, 233, 0.055),
+      transparent 34%
+    ),
     linear-gradient(180deg, #f8fafc 0%, #ffffff 58%, #f8fafc 100%);
 }
 
 .adgen-trust-section::before {
   content: "";
   position: absolute;
-  inset: 4% -18%;
+  inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 30% 24%, rgba(79, 70, 229, 0.085), transparent 34%),
-    radial-gradient(circle at 74% 64%, rgba(14, 165, 233, 0.065), transparent 36%);
-  filter: blur(90px);
-  opacity: 0.78;
+    linear-gradient(
+      115deg,
+      rgba(238, 242, 255, 0.18),
+      transparent 40%
+    ),
+    linear-gradient(
+      245deg,
+      rgba(224, 242, 254, 0.14),
+      transparent 42%
+    );
 }
 
 .adgen-trust-section .adgen-section-container {
@@ -26,19 +40,24 @@
 
 .adgen-trust-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
   margin-top: 64px;
 }
 
 .adgen-trust-card {
   position: relative;
+  min-height: 250px;
   overflow: hidden;
-  padding: 24px;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.78));
+  padding: 28px;
   border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 26px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.96),
+      rgba(248, 250, 252, 0.78)
+    );
   box-shadow:
     0 8px 24px rgba(15, 23, 42, 0.045),
     0 24px 60px rgba(15, 23, 42, 0.075);
@@ -50,8 +69,16 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent 42%),
-    radial-gradient(circle at 18% 0%, rgba(79, 70, 229, 0.07), transparent 34%);
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.68),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 18% 0%,
+      rgba(79, 70, 229, 0.07),
+      transparent 34%
+    );
 }
 
 .adgen-trust-card > * {
@@ -60,30 +87,32 @@
 }
 
 .adgen-trust-icon {
-  width: 34px;
-  height: 34px;
   display: grid;
   place-items: center;
-  margin-bottom: 18px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 24px;
+  border-radius: 14px;
   color: #4f46e5;
   background: rgba(79, 70, 229, 0.08);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 900;
+  letter-spacing: 0.06em;
 }
 
 .adgen-trust-card h3 {
   margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.04em;
   color: #0f172a;
+  font-size: 22px;
+  line-height: 1.12;
+  letter-spacing: -0.045em;
 }
 
 .adgen-trust-card p {
-  margin: 10px 0 0;
-  font-size: 14px;
-  line-height: 1.6;
+  margin: 14px 0 0;
   color: #64748b;
+  font-size: 15px;
+  line-height: 1.68;
 }
 
 @media (max-width: 1000px) {
@@ -95,5 +124,9 @@
 @media (max-width: 640px) {
   .adgen-trust-grid {
     grid-template-columns: 1fr;
+  }
+
+  .adgen-trust-card {
+    min-height: auto;
   }
 }

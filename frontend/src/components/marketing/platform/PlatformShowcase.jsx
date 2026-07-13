@@ -3,27 +3,33 @@ import "./PlatformShowcase.css";
 
 import Section from "../layout/Section";
 import SectionHeader from "../typography/SectionHeader";
+import MarketingButton from "../actions/MarketingButton";
 
-const highlights = [
+const scatteredTools = [
+  "Brand documents",
+  "Image generators",
+  "Video tools",
+  "Copy documents",
+  "Asset folders",
+  "Performance sheets",
+];
+
+const connectedBenefits = [
   {
-    label: "Brand Foundation",
-    title: "Every creative starts on brand.",
-    text: "Apply your logo, colors, fonts, and creative direction before anything is generated.",
+    label: "One Brand Kit",
+    title: "Every asset starts from the same direction.",
   },
   {
-    label: "Create Faster",
-    title: "Images, videos, and copy together.",
-    text: "Move from first draft to polished campaign assets without switching tools.",
+    label: "One Workspace",
+    title: "Images, video, copy, and editing stay connected.",
   },
   {
-    label: "Creative Library",
-    title: "Everything stays organized.",
-    text: "Save, review, and reuse every version from one connected workspace.",
+    label: "One Creative History",
+    title: "Past work remains organized and ready to reuse.",
   },
   {
-    label: "Performance Loop",
-    title: "Improve every next creative.",
-    text: "Use insights and optimization to understand what works and generate stronger ads.",
+    label: "One Learning Loop",
+    title: "Performance improves what you create next.",
   },
 ];
 
@@ -32,88 +38,72 @@ export default function PlatformShowcase() {
     <Section size="lg" container="wide" className="adgen-platform-section">
       <SectionHeader
         align="center"
-        eyebrow="Platform"
-        title="Every creative tool. One workspace."
-        description="Brand, generation, editing, organization, and optimization work together so your team can move faster without losing consistency."
+        eyebrow="Less fragmentation"
+        title="Stop switching between disconnected creative tools."
+        description="Your brand direction, creative production, editing, organization, and performance data should strengthen each other—not live in separate tabs."
       />
 
-      <div className="adgen-platform-showcase">
-        <div className="adgen-platform-window">
-          <aside className="adgen-platform-sidebar">
-            <div className="adgen-platform-logo">AdGen</div>
+      <div className="adgen-platform-transformation">
+        <div className="adgen-platform-scattered">
+          <div className="adgen-platform-panel-label">
+            The scattered workflow
+          </div>
 
-            <div className="adgen-platform-nav">
-              <span className="active">Overview</span>
-              <span>Brand Kit</span>
-              <span>Generator</span>
-              <span>Video Ads</span>
-              <span>Studio</span>
-              <span>Library</span>
-              <span>Insights</span>
-            </div>
-          </aside>
+          <h3>Too many tools. Too little continuity.</h3>
 
-          <main className="adgen-platform-main">
-            <header className="adgen-platform-top">
-              <div>
-                <p>Creative Workspace</p>
-                <h3>Campaign-ready assets</h3>
-              </div>
+          <p>
+            Creative direction gets copied between documents, generators,
+            editors, folders, and spreadsheets—forcing every campaign to start
+            over.
+          </p>
 
-              <button type="button">Generate</button>
-            </header>
-
-            <div className="adgen-platform-grid">
-              <div className="adgen-platform-card brand">
-                <span>Brand Kit</span>
-                <strong>Brand applied</strong>
-                <small>Logo, colors, and fonts synced</small>
-              </div>
-
-              <div className="adgen-platform-card metric">
-                <span>Best CTR</span>
-                <strong>4.8%</strong>
-                <small>Meta campaign</small>
-              </div>
-
-              <div className="adgen-platform-card video">
-                <span>Video</span>
-                <strong>Ready</strong>
-                <small>6-second ad exported</small>
-              </div>
-
-              <div className="adgen-platform-card creative">
-                <div className="adgen-platform-creative-art" />
-                <div>
-                  <span>Generated Creative</span>
-                  <strong>Premium product ad</strong>
-                  <small>Built with Brand Kit</small>
-                </div>
-              </div>
-
-              <div className="adgen-platform-card library">
-                <span>Library</span>
-                <strong>128 assets</strong>
-                <small>Images, videos, and copy organized</small>
-              </div>
-
-              <div className="adgen-platform-card optimizer">
-                <span>Optimizer</span>
-                <strong>Winner found</strong>
-                <small>Top-performing creative identified</small>
-              </div>
-            </div>
-          </main>
+          <div className="adgen-platform-tool-cloud">
+            {scatteredTools.map((tool, index) => (
+              <span
+                key={tool}
+                style={{ "--tool-delay": `${index * 60}ms` }}
+              >
+                {tool}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="adgen-platform-highlights">
-          {highlights.map((item) => (
-            <article key={item.label}>
-              <p>{item.label}</p>
-              <h3>{item.title}</h3>
-              <span>{item.text}</span>
-            </article>
-          ))}
+
+        <div className="adgen-platform-connector" aria-hidden="true">
+          <span>→</span>
         </div>
+
+        <div className="adgen-platform-connected">
+          <div className="adgen-platform-panel-label">
+            The connected workflow
+          </div>
+
+          <h3>One system that remembers the work.</h3>
+
+          <p>
+            AdGen keeps your brand, creative assets, campaign context, and
+            performance insights connected from one campaign to the next.
+          </p>
+
+          <div className="adgen-platform-benefit-grid">
+            {connectedBenefits.map((item) => (
+              <article key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.title}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="adgen-platform-action">
+        <MarketingButton href="/platform" size="lg">
+          Explore the complete platform
+        </MarketingButton>
+
+        <p>
+          See how every major AdGen workflow works together.
+        </p>
       </div>
     </Section>
   );

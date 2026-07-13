@@ -6,7 +6,6 @@ import MarketingButton from "../actions/MarketingButton";
 import ProductCanvas from "../ProductCanvas";
 import ProductMomentCard from "../ProductMomentCard";
 import DashboardPreview from "../DashboardPreview";
-import ParallaxCard from "../../motion/ParallaxCard";
 
 export default function Hero() {
   return (
@@ -19,22 +18,24 @@ export default function Hero() {
       <div className="adgen-marketing-hero-bg" />
 
       <div className="adgen-marketing-hero-content">
-        <p className="adgen-marketing-hero-eyebrow">Creative Platform</p>
+        <p className="adgen-marketing-hero-eyebrow">
+          Creative intelligence for modern brands
+        </p>
 
         <h1>
           <span className="marketing-hero-line marketing-hero-line-primary">
-            Everything your brand needs.
+            Better creative starts here.
           </span>
 
           <span className="marketing-hero-line marketing-hero-line-secondary">
-            From first draft to campaign-ready creative.
+            Build, refine, and improve every campaign in one place.
           </span>
         </h1>
 
         <p className="adgen-marketing-hero-description">
-          Generate images, videos, and ad copy, apply your Brand Kit across
-          every asset, organize your creative library, and improve
-          performance—all from one intelligent creative workspace.
+          Turn your brand direction into campaign-ready images, videos, and
+          copy—then use real performance signals to create stronger work every
+          time.
         </p>
 
         <div className="adgen-marketing-hero-actions">
@@ -43,16 +44,35 @@ export default function Hero() {
           </MarketingButton>
 
           <MarketingButton href="/platform" size="lg" variant="secondary">
-            See the platform
+            Explore the platform
           </MarketingButton>
+        </div>
+
+        <div
+          className="adgen-marketing-hero-proof"
+          aria-label="AdGen platform benefits"
+        >
+          <span>
+            <i aria-hidden="true" />
+            Brand-aware creative
+          </span>
+
+          <span>
+            <i aria-hidden="true" />
+            Image, video, and copy
+          </span>
+
+          <span>
+            <i aria-hidden="true" />
+            Performance-guided improvement
+          </span>
         </div>
       </div>
 
       <div className="adgen-marketing-hero-visual">
-      <ParallaxCard>
         <ProductCanvas
           variant="hero"
-          alt="AdGen creative platform dashboard"
+          alt="AdGen creative platform dashboard showing brand, generation, and performance workflows"
           floatingCards={
             <>
               <ProductMomentCard
@@ -61,15 +81,15 @@ export default function Hero() {
                 icon="brand"
                 eyebrow="Brand Kit"
                 title="Brand applied"
-                detail="Logo, colors, and fonts synced"
+                detail="Logo, colors, fonts, and voice connected"
               />
 
               <ProductMomentCard
                 position="top-right"
                 status="active"
                 icon="spark"
-                eyebrow="Generation"
-                title="Creative building"
+                eyebrow="Creative"
+                title="Campaign building"
                 detail="Images, video, and copy in progress"
               />
 
@@ -77,25 +97,24 @@ export default function Hero() {
                 position="bottom-left"
                 status="insight"
                 icon="chart"
-                eyebrow="Insights"
-                title="CTR +18%"
-                detail="Top creative identified"
+                eyebrow="Performance"
+                title="Winner identified"
+                detail="Creative signals ready for reuse"
               />
 
               <ProductMomentCard
                 position="bottom-right"
                 status="video"
                 icon="video"
-                eyebrow="Video"
-                title="Video ready"
-                detail="6-second ad exported"
+                eyebrow="Delivery"
+                title="Creative ready"
+                detail="Campaign assets prepared for launch"
               />
             </>
           }
         >
           <DashboardPreview />
         </ProductCanvas>
-      </ParallaxCard>
       </div>
     </Section>
   );

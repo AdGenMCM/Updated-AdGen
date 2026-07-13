@@ -1,3 +1,5 @@
+/* src/pages/Home.css */
+
 .home-page {
   padding: 0;
   line-height: 1.6;
@@ -5,32 +7,23 @@
 
 .home-v2 {
   min-height: 100vh;
-  background: #f8fafc;
+  overflow: hidden;
   color: #0f172a;
+  background: #ffffff;
 }
 
-.home-v2-placeholder {
-  padding: 120px 24px;
-  text-align: center;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(79, 70, 229, 0.08), transparent 34%),
-    #f8fafc;
+/*
+  Keep the Home page visually calm.
+  The individual marketing components control their own backgrounds,
+  spacing, lighting, and responsive behavior.
+*/
+
+.home-v2 > section {
+  position: relative;
 }
 
-.home-v2-placeholder p {
-  margin: 0 0 14px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #4f46e5;
-}
-
-.home-v2-placeholder h2 {
-  max-width: 760px;
-  margin: 0 auto;
-  font-size: clamp(34px, 5vw, 56px);
-  line-height: 1.04;
-  letter-spacing: -0.055em;
-  color: #0f172a;
+@media (prefers-reduced-motion: reduce) {
+  .home-v2 {
+    scroll-behavior: auto;
+  }
 }

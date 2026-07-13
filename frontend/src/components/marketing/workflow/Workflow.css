@@ -2,21 +2,35 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, rgba(79, 70, 229, 0.075), transparent 32%),
-    radial-gradient(circle at 82% 72%, rgba(14, 165, 233, 0.065), transparent 34%),
+    radial-gradient(
+      circle at 18% 20%,
+      rgba(79, 70, 229, 0.075),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 82% 72%,
+      rgba(14, 165, 233, 0.06),
+      transparent 34%
+    ),
     linear-gradient(180deg, #f8fafc 0%, #ffffff 52%, #f8fafc 100%);
 }
 
 .adgen-workflow-section::before {
   content: "";
   position: absolute;
-  inset: 8% -18%;
+  inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 24% 30%, rgba(79, 70, 229, 0.09), transparent 34%),
-    radial-gradient(circle at 76% 62%, rgba(14, 165, 233, 0.07), transparent 36%);
-  filter: blur(90px);
-  opacity: 0.8;
+    linear-gradient(
+      115deg,
+      rgba(238, 242, 255, 0.25),
+      transparent 40%
+    ),
+    linear-gradient(
+      245deg,
+      rgba(224, 242, 254, 0.2),
+      transparent 42%
+    );
 }
 
 .adgen-workflow-section .adgen-section-container {
@@ -35,8 +49,8 @@
 .adgen-workflow-line {
   position: absolute;
   top: 32px;
-  left: 8%;
   right: 8%;
+  left: 8%;
   height: 2px;
   background: linear-gradient(
     90deg,
@@ -46,7 +60,11 @@
     rgba(14, 165, 233, 0.24),
     transparent
   );
-  box-shadow: 0 0 28px rgba(79, 70, 229, 0.16);
+  box-shadow: 0 0 28px rgba(79, 70, 229, 0.14);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: adgenWorkflowLineDraw 900ms
+    cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
 }
 
 .adgen-workflow-step {
@@ -55,29 +73,34 @@
   display: grid;
   justify-items: center;
   gap: 22px;
-  animation: adgenWorkflowReveal 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: adgenWorkflowReveal 520ms
+    cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--step-delay);
 }
 
 .adgen-workflow-node {
-  width: 64px;
-  height: 64px;
   display: grid;
   place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.86));
-  border: 1px solid rgba(15, 23, 42, 0.08);
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(248, 250, 252, 0.86)
+    );
   box-shadow:
     0 6px 18px rgba(15, 23, 42, 0.06),
     0 18px 42px rgba(15, 23, 42, 0.08);
 }
 
 .adgen-workflow-node span {
+  color: #4f46e5;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #4f46e5;
 }
 
 .adgen-workflow-step:first-of-type .adgen-workflow-node {
@@ -90,13 +113,17 @@
 
 .adgen-workflow-card {
   position: relative;
-  min-height: 238px;
-  padding: 24px;
-  border-radius: 24px;
+  min-height: 250px;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.78));
+  padding: 24px;
   border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.96),
+      rgba(248, 250, 252, 0.78)
+    );
   box-shadow:
     0 6px 18px rgba(15, 23, 42, 0.045),
     0 22px 56px rgba(15, 23, 42, 0.08);
@@ -112,8 +139,16 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 38%),
-    radial-gradient(circle at 24% 0%, rgba(79, 70, 229, 0.08), transparent 34%);
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 24% 0%,
+      rgba(79, 70, 229, 0.08),
+      transparent 34%
+    );
 }
 
 .adgen-workflow-card > * {
@@ -121,58 +156,54 @@
   z-index: 1;
 }
 
-.adgen-workflow-step:first-of-type .adgen-workflow-card {
-  border-color: rgba(79, 70, 229, 0.18);
-  box-shadow:
-    0 8px 22px rgba(15, 23, 42, 0.05),
-    0 28px 70px rgba(15, 23, 42, 0.09),
-    0 0 0 1px rgba(79, 70, 229, 0.03);
-}
-
 .adgen-workflow-card:hover {
-  transform: translateY(-3px);
   border-color: rgba(79, 70, 229, 0.2);
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.055),
     0 30px 76px rgba(15, 23, 42, 0.11);
+  transform: translateY(-3px);
 }
 
 .adgen-workflow-card p {
   margin: 0 0 18px;
+  color: #4f46e5;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #4f46e5;
 }
 
 .adgen-workflow-card h3 {
   margin: 0;
+  color: #0f172a;
   font-size: 23px;
   line-height: 1.06;
   letter-spacing: -0.045em;
-  color: #0f172a;
 }
 
 .adgen-workflow-card span {
   display: block;
   margin-top: 18px;
+  color: #64748b;
   font-size: 15px;
   line-height: 1.65;
-  color: #64748b;
 }
 
 @keyframes adgenWorkflowReveal {
   from {
     opacity: 0;
-    transform: translateY(24px);
-    filter: blur(8px);
+    transform: translateY(18px);
   }
 
   to {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
+  }
+}
+
+@keyframes adgenWorkflowLineDraw {
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -180,15 +211,15 @@
   .adgen-workflow {
     grid-template-columns: 1fr;
     max-width: 720px;
-    margin-left: auto;
     margin-right: auto;
+    margin-left: auto;
   }
 
   .adgen-workflow-line {
     top: 0;
+    right: auto;
     bottom: 0;
     left: 32px;
-    right: auto;
     width: 2px;
     height: auto;
     background: linear-gradient(
@@ -199,16 +230,25 @@
       rgba(14, 165, 233, 0.22),
       transparent
     );
+    transform: scaleY(0);
+    transform-origin: top center;
+    animation-name: adgenWorkflowLineDrawMobile;
   }
 
   .adgen-workflow-step {
     grid-template-columns: 64px 1fr;
-    justify-items: stretch;
     align-items: start;
+    justify-items: stretch;
   }
 
   .adgen-workflow-card {
     min-height: auto;
+  }
+}
+
+@keyframes adgenWorkflowLineDrawMobile {
+  to {
+    transform: scaleY(1);
   }
 }
 
@@ -244,42 +284,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .adgen-workflow-step,
+  .adgen-workflow-line,
   .adgen-workflow-card {
     animation: none;
     transition: none;
   }
 
-  .adgen-workflow-card:hover {
+  .adgen-workflow-line {
     transform: none;
   }
 
-  .adgen-workflow-section::before {
-    animation: none;
-  }
-}
-
-.adgen-workflow-line {
-  transform: scaleX(0);
-  transform-origin: left center;
-  animation: adgenWorkflowLineDraw 1200ms cubic-bezier(0.16, 1, 0.3, 1) 250ms forwards;
-}
-
-@keyframes adgenWorkflowLineDraw {
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@media (max-width: 1100px) {
-  .adgen-workflow-line {
-    transform: scaleY(0);
-    transform-origin: top center;
-    animation-name: adgenWorkflowLineDrawMobile;
-  }
-
-  @keyframes adgenWorkflowLineDrawMobile {
-    to {
-      transform: scaleY(1);
-    }
+  .adgen-workflow-card:hover {
+    transform: none;
   }
 }

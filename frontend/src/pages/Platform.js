@@ -8,136 +8,162 @@ import ProductMomentCard from "../components/marketing/ProductMomentCard";
 import ParallaxCard from "../components/motion/ParallaxCard";
 import Reveal from "../components/motion/Reveal";
 
-
-const workflow = [
-  [
-    "01",
-    "Build Your Brand",
-    "Set your logo, colors, fonts, tone, and creative rules once.",
-  ],
-  [
-    "02",
-    "Generate Creatives",
-    "Create image ads, video ads, hooks, copy, and variations.",
-  ],
-  [
-    "03",
-    "Refine Designs",
-    "Use Creative Studio to polish text, layout, guides, and export.",
-  ],
-  [
-    "04",
-    "Optimize",
-    "Improve weak creatives and generate stronger versions.",
-  ],
-  [
-    "05",
-    "Organize",
-    "Keep images, videos, and campaign assets in one Library.",
-  ],
-  [
-    "06",
-    "Learn & Improve",
-    "Track CTR, CPA, ROAS, and use winners to guide future creative.",
-  ],
-];
-
 const sections = [
   {
+    number: "01",
     eyebrow: "BRAND KIT",
     title: "Start with your brand.",
-    text: "Upload your logo, define your colors, choose fonts, and give AdGen the creative rules it should follow across every generation.",
+    outcome: "Create once. Stay consistent everywhere.",
+    text:
+      "Define the identity, voice, audience, and creative rules that guide every image, video, and campaign asset generated inside AdGen.",
     points: [
-      "Logo, colors, and fonts",
-      "Brand voice and audience",
-      "Creative do/don’t rules",
-      "Used across generators",
+      "Upload your logo and brand assets",
+      "Define colors, fonts, voice, and audience",
+      "Set default creative preferences",
+      "Apply your Brand Kit across generators",
     ],
-    mockTitle: "Brand Kit",
+    image: "/screenshots/brand-kit.png",
+    imageAlt:
+      "AdGen MCM Brand Kit showing brand strategy, colors, typography, logo, and a live brand preview",
+    callouts: ["Brand identity", "Creative rules", "Live preview"],
+    featured: true,
+    visualTone: "violet",
   },
   {
-    eyebrow: "AI GENERATION",
-    title: "Generate better ads faster.",
-    text: "Create image ads, video ads, copy, hooks, CTAs, and campaign-ready concepts from one connected creative workflow.",
+    number: "02",
+    eyebrow: "IMAGE GENERATION",
+    title: "Turn ideas into campaign-ready creative.",
+    outcome: "Go from campaign brief to polished ad creative.",
+    text:
+      "Create branded image ads, strategic copy, hooks, calls to action, and multiple creative directions from one connected workflow.",
     points: [
-      "AI image ads",
-      "AI video ads",
-      "Ad copy and hooks",
-      "Multiple formats",
+      "Generate brand-aware image ads",
+      "Create campaign copy and hooks",
+      "Use references for stronger visual guidance",
+      "Produce multiple formats and variations",
     ],
-    mockTitle: "Image + Video Generator",
+    image: "/screenshots/image-generator.png",
+    imageAlt:
+      "AdGen MCM Image Generator showing campaign inputs, Brand Kit defaults, audience controls, and generated creative",
+    callouts: ["Brand-aware", "Reference guided", "Multi-format"],
     reverse: true,
+    visualTone: "blue",
   },
   {
+    number: "03",
+    eyebrow: "VIDEO GENERATION",
+    title: "Create motion without the production bottleneck.",
+    outcome: "Build campaign-ready video without a full production team.",
+    text:
+      "Turn written prompts or existing images into short-form video ads with brand context, flexible formats, voiceover, and creative direction.",
+    points: [
+      "Prompt-to-video generation",
+      "Image-to-video generation",
+      "Flexible durations and vertical formats",
+      "Voiceover and audio workflows",
+    ],
+    image: "/screenshots/video-generator.png",
+    imageAlt:
+      "AdGen MCM Video Generator showing prompt-to-video settings, Brand Kit controls, voiceover, duration, and format options",
+    callouts: ["Prompt to video", "Voiceover", "Vertical formats"],
+    visualTone: "violet",
+  },
+  {
+    number: "04",
+    eyebrow: "CREATIVE OPTIMIZER",
+    title: "Improve what is not working.",
+    outcome: "Turn performance problems into stronger creative direction.",
+    text:
+      "Analyze an existing ad alongside its campaign context and performance metrics to identify weaknesses and generate stronger recommendations.",
+    points: [
+      "Diagnose likely creative weaknesses",
+      "Receive actionable recommendations",
+      "Generate improved campaign copy",
+      "Create stronger visual directions",
+    ],
+    image: "/screenshots/optimizer.png",
+    imageAlt:
+      "AdGen MCM Creative Optimizer showing campaign context, performance inputs, audience temperature, and analysis guidance",
+    callouts: ["Performance diagnosis", "Action plan", "Stronger variants"],
+    reverse: true,
+    visualTone: "blue",
+  },
+  {
+    number: "05",
+    eyebrow: "CREATIVE LIBRARY",
+    title: "Keep every creative organized.",
+    outcome: "Your complete creative history in one searchable workspace.",
+    text:
+      "Store generated images and videos alongside campaign context, performance data, winner labels, and creative history.",
+    points: [
+      "Organize image and video assets",
+      "Search and filter creative history",
+      "Track performance on individual assets",
+      "Mark successful creative as winners",
+    ],
+    image: "/screenshots/creative-library.png",
+    imageAlt:
+      "AdGen MCM Creative Library showing generated image assets, video counts, performance tracking, filters, and winner labels",
+    callouts: ["Searchable assets", "Performance data", "Winner tracking"],
+    visualTone: "violet",
+  },
+  {
+    number: "06",
+    eyebrow: "INSIGHTS",
+    title: "Turn campaign results into smarter creative decisions.",
+    outcome: "Use past performance to guide what you create next.",
+    text:
+      "Identify winning patterns across tracked creative and use those signals to make future campaign assets more focused and effective.",
+    points: [
+      "Track CTR, CPA, ROAS, and CPM",
+      "Identify winning creative patterns",
+      "Surface recommended next actions",
+      "Guide future generation with performance data",
+    ],
+    image: "/screenshots/insights.png",
+    imageAlt:
+      "AdGen MCM Insights showing performance sources, creative intelligence score, weighted ROAS, CTR, and tracked creative",
+    callouts: ["Creative intelligence", "Winner patterns", "Next actions"],
+    reverse: true,
+    visualTone: "blue",
+  },
+  {
+    number: "07",
     eyebrow: "CREATIVE STUDIO",
     title: "Perfect every creative before launch.",
-    text: "Refine AI-generated assets without jumping into another design tool. Add text, adjust layout, use platform guides, and export polished PNGs.",
+    outcome: "Make final edits without leaving the platform.",
+    text:
+      "Refine generated assets with editable text, positioning controls, safe-area guides, font styling, and export-ready files.",
     points: [
-      "Text presets",
-      "Safe-area guides",
-      "Layout editing",
-      "Export-ready creatives",
+      "Add and edit text layers",
+      "Use platform-safe layout guides",
+      "Adjust typography and alignment",
+      "Export polished PNG creative",
     ],
-    mockTitle: "Creative Studio",
-  },
-  {
-    eyebrow: "OPTIMIZER + INSIGHTS",
-    title: "Learn what works and improve what doesn’t.",
-    text: "Track performance, identify winning patterns, and use your best creatives to guide stronger future generations.",
-    points: [
-      "CTR, CPA, ROAS tracking",
-      "AI recommendations",
-      "Winner patterns",
-      "Better future creative",
-    ],
-    mockTitle: "Insights + Optimizer",
-    reverse: true,
-  },
-  {
-    eyebrow: "LIBRARY",
-    title: "Keep every creative organized.",
-    text: "Your generated images, videos, edits, and performance data stay organized in one place so your best ideas are easy to find and reuse.",
-    points: [
-      "Image library",
-      "Video library",
-      "Performance fields",
-      "Creative history",
-    ],
-    mockTitle: "Creative Library",
+    image: "/screenshots/creative-studio.png",
+    imageAlt:
+      "AdGen MCM Creative Studio showing a skincare ad canvas, editable text, typography controls, safe-area guides, and PNG export",
+    callouts: ["Editable layers", "Safe-area guides", "Export ready"],
+    featured: true,
+    visualTone: "violet",
   },
 ];
 
-function ProductMock({ title }) {
+function ScreenshotCallouts({ items }) {
   return (
-    <div className="platform-mock hover-lift">
-      <div className="platform-mock-top">
-        <span />
-        <span />
-        <span />
-        <strong>{title}</strong>
-      </div>
-
-      <div className="platform-mock-body">
-        <div className="platform-mock-sidebar">
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-
-        <div className="platform-mock-main">
-          <div className="platform-mock-hero" />
-
-          <div className="platform-mock-grid">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-
-          <div className="platform-mock-wide" />
-        </div>
-      </div>
+    <div
+      className="platform-screenshot-callouts"
+      aria-label="Highlighted capabilities"
+    >
+      {items.map((item, index) => (
+        <span
+          key={item}
+          className={`platform-screenshot-callout callout-${index + 1}`}
+        >
+          <i aria-hidden="true" />
+          {item}
+        </span>
+      ))}
     </div>
   );
 }
@@ -167,9 +193,9 @@ export default function Platform() {
           </h1>
 
           <p className="platform-v2-description">
-            From Brand Kit to image and video generation, creative editing,
-            optimization, performance tracking, and insights—every part of your
-            workflow lives in one connected platform.
+            Build your brand foundation, generate image and video creative,
+            refine campaigns, track performance, and turn results into stronger
+            future work—all inside one connected platform.
           </p>
 
           <div className="platform-v2-actions">
@@ -190,8 +216,8 @@ export default function Platform() {
         <div className="platform-v2-hero-visual">
           <ParallaxCard>
             <ProductCanvas
-              src="/dashboard.png"
-              alt="AdGen MCM creative platform dashboard"
+              src="/screenshots/dashboard.png"
+              alt="AdGen MCM dashboard showing image usage, video usage, Brand Kit status, current plan, and quick creative actions"
               variant="hero"
               className="platform-v2-dashboard-canvas"
               floatingCards={
@@ -228,8 +254,8 @@ export default function Platform() {
                     status="video"
                     icon="video"
                     eyebrow="Video"
-                    title="Runway powered"
-                    detail="Campaign-ready video generation"
+                    title="Video ready"
+                    detail="Campaign-ready motion creative"
                   />
                 </>
               }
@@ -243,103 +269,201 @@ export default function Platform() {
         >
           <span>Brand-aware generation</span>
           <i />
-          <span>Images + video + copy</span>
+          <span>Image, video, and copy</span>
           <i />
-          <span>Optimization + insights</span>
+          <span>Optimization and insights</span>
         </div>
       </Section>
 
-      <Reveal>
-        <section className="platform-section">
-          <div className="platform-container">
-            <div className="platform-section-head">
-              <span className="platform-pill">The Workflow</span>
+      <section className="platform-story-intro">
+        <div className="platform-container">
+          <Reveal>
+            <div className="platform-story-intro-inner">
+              <span className="platform-story-intro-label">
+                One connected workflow
+              </span>
 
-              <h2>From brand to better-performing ads.</h2>
+              <h2>
+                Every campaign begins with your brand and becomes smarter with
+                every result.
+              </h2>
 
               <p>
-                AdGen connects the entire creative lifecycle, so every campaign
-                becomes a smarter starting point for the next one.
+                AdGen connects creation, refinement, organization, and
+                performance so each stage of your workflow strengthens the
+                next.
               </p>
-            </div>
 
-            <div className="platform-workflow">
-              {workflow.map(([num, title, text]) => (
-                <div
-                  className="platform-step hover-lift"
-                  key={title}
-                >
-                  <div className="platform-step-num">{num}</div>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </Reveal>
-
-      {sections.map((section) => (
-        <Reveal key={section.title} delay={100}>
-          <section
-            className={`platform-showcase ${
-              section.reverse ? "reverse" : ""
-            }`}
-          >
-            <div className="platform-container platform-showcase-grid">
-              <div className="platform-showcase-copy">
-                <span className="platform-pill">
-                  {section.eyebrow}
-                </span>
-
-                <h2>{section.title}</h2>
-
-                <p>{section.text}</p>
-
-                <ul>
-                  {section.points.map((point) => (
-                    <li key={point}>✓ {point}</li>
-                  ))}
-                </ul>
+              <div
+                className="platform-story-steps"
+                aria-label="AdGen platform workflow"
+              >
+                <span>Define</span>
+                <i aria-hidden="true" />
+                <span>Generate</span>
+                <i aria-hidden="true" />
+                <span>Refine</span>
+                <i aria-hidden="true" />
+                <span>Measure</span>
+                <i aria-hidden="true" />
+                <span>Improve</span>
               </div>
-
-              <ProductMock title={section.mockTitle} />
             </div>
-          </section>
-        </Reveal>
-      ))}
+          </Reveal>
+        </div>
+      </section>
+
+      <div className="platform-product-story">
+        {sections.map((section, index) => (
+          <Reveal key={section.title}>
+            <section
+              className={[
+                "platform-showcase",
+                section.reverse ? "reverse" : "",
+                section.featured ? "featured" : "",
+                `tone-${section.visualTone}`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-section-number={section.number}
+            >
+              <div className="platform-showcase-light" aria-hidden="true" />
+
+              <div className="platform-container platform-showcase-grid">
+                <div className="platform-showcase-copy">
+                  <div className="platform-showcase-meta">
+                    <span className="platform-section-number">
+                      {section.number}
+                    </span>
+
+                    <span className="platform-pill">
+                      {section.eyebrow}
+                    </span>
+                  </div>
+
+                  <h2>{section.title}</h2>
+
+                  <p className="platform-showcase-outcome">
+                    {section.outcome}
+                  </p>
+
+                  <p className="platform-showcase-description">
+                    {section.text}
+                  </p>
+
+                  <ul>
+                    {section.points.map((point) => (
+                      <li key={point}>
+                        <span aria-hidden="true">✓</span>
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="platform-showcase-progress">
+                    <span>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+
+                    <div>
+                      <i
+                        style={{
+                          width: `${
+                            ((index + 1) / sections.length) * 100
+                          }%`,
+                        }}
+                      />
+                    </div>
+
+                    <span>
+                      {String(sections.length).padStart(2, "0")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="platform-showcase-visual">
+                  <div className="platform-screenshot-shell">
+                    <div className="platform-screenshot-glow" />
+
+                    <div className="platform-screenshot-frame">
+                      <img
+                        src={section.image}
+                        alt={section.imageAlt}
+                        className="platform-screenshot"
+                        loading="lazy"
+                        decoding="async"
+                      />
+
+                      <div
+                        className="platform-screenshot-shine"
+                        aria-hidden="true"
+                      />
+                    </div>
+
+                    <ScreenshotCallouts items={section.callouts} />
+                  </div>
+                </div>
+              </div>
+            </section>
+          </Reveal>
+        ))}
+      </div>
 
       <section className="platform-final">
         <div className="platform-container platform-final-inner">
-          <span className="platform-pill">
-            Ready to build better ads?
-          </span>
+          <Reveal>
+            <div className="platform-final-content">
+              <span className="platform-pill">
+                Ready to build better ads?
+              </span>
 
-          <h2>
-            Everything you’ve seen is available inside AdGen.
-          </h2>
+              <h2>
+                Bring your entire creative workflow into one platform.
+              </h2>
 
-          <p>
-            Start creating image ads, video ads, edited creatives,
-            performance insights, and optimized variations from one
-            platform.
-          </p>
+              <p>
+                Generate branded image ads, video creative, campaign copy,
+                optimized variations, organized assets, and performance-guided
+                insights without stitching together separate tools.
+              </p>
 
-          <div className="platform-ctas">
-            <a
-              className="platform-btn primary"
-              href="/subscribe"
-            >
-              Start Creating
-            </a>
+              <div className="platform-final-proof">
+                <span>
+                  <i aria-hidden="true" />
+                  Brand-aware creative
+                </span>
 
-            <a
-              className="platform-btn"
-              href="/pricing"
-            >
-              View Pricing
-            </a>
-          </div>
+                <span>
+                  <i aria-hidden="true" />
+                  Image and video generation
+                </span>
+
+                <span>
+                  <i aria-hidden="true" />
+                  Performance-guided improvement
+                </span>
+              </div>
+
+              <div className="platform-final-actions">
+                <MarketingButton
+                  href="/subscribe"
+                  size="lg"
+                  className="platform-final-primary"
+                >
+                  Start creating
+                </MarketingButton>
+
+                <MarketingButton
+                  href="/pricing"
+                  size="lg"
+                  variant="secondary"
+                  className="platform-final-secondary"
+                >
+                  View pricing
+                </MarketingButton>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
     </main>

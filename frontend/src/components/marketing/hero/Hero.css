@@ -4,21 +4,36 @@
   padding-top: 150px;
   padding-bottom: 122px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(79, 70, 229, 0.1), transparent 34%),
+    radial-gradient(
+      circle at 16% 28%,
+      rgba(99, 102, 241, 0.11),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 84% 34%,
+      rgba(14, 165, 233, 0.085),
+      transparent 32%
+    ),
     linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .adgen-marketing-hero::before {
   content: "";
   position: absolute;
-  inset: -22%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 20% 30%, rgba(79, 70, 229, 0.08), transparent 34%),
-    radial-gradient(circle at 80% 70%, rgba(14, 165, 233, 0.065), transparent 38%);
-  filter: blur(90px);
-  animation: adgenMarketingHeroGlow 18s ease-in-out infinite alternate;
+    linear-gradient(
+      115deg,
+      rgba(238, 242, 255, 0.34),
+      transparent 40%
+    ),
+    linear-gradient(
+      245deg,
+      rgba(224, 242, 254, 0.28),
+      transparent 42%
+    );
 }
 
 .adgen-marketing-hero-bg {
@@ -27,34 +42,42 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 18% 28%, rgba(14, 165, 233, 0.08), transparent 30%),
-    radial-gradient(circle at 82% 34%, rgba(79, 70, 229, 0.08), transparent 30%);
-  opacity: 0.9;
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(79, 70, 229, 0.075),
+      transparent 36%
+    ),
+    radial-gradient(
+      circle at 50% 82%,
+      rgba(14, 165, 233, 0.045),
+      transparent 38%
+    );
 }
 
 .adgen-marketing-hero-content {
   position: relative;
   z-index: 2;
-  max-width: 1040px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
 .adgen-marketing-hero-eyebrow {
   margin: 0 0 22px;
+  color: #4f46e5;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #4f46e5;
 }
 
 .adgen-marketing-hero h1 {
-  max-width: 1040px;
+  max-width: 1080px;
   margin: 0 auto;
-  font-size: clamp(48px, 6vw, 76px);
-  line-height: 1.03;
-  letter-spacing: -0.062em;
   color: #0f172a;
+  font-size: clamp(48px, 6vw, 78px);
+  font-weight: 800;
+  line-height: 1.03;
+  letter-spacing: -0.064em;
 }
 
 .marketing-hero-line {
@@ -66,31 +89,63 @@
 }
 
 .marketing-hero-line-secondary {
-  margin-top: 14px;
-  color: rgba(15, 23, 42, 0.72);
+  max-width: 1020px;
+  margin: 14px auto 0;
+  color: rgba(15, 23, 42, 0.7);
 }
 
 .adgen-marketing-hero-description {
-  max-width: 780px;
+  max-width: 760px;
   margin: 34px auto 0;
+  color: #64748b;
   font-size: 19px;
   line-height: 1.75;
-  color: #64748b;
 }
 
 .adgen-marketing-hero-actions {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   margin-top: 42px;
+}
+
+.adgen-marketing-hero-proof {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.adgen-marketing-hero-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(15, 23, 42, 0.075);
+  border-radius: 999px;
+  color: #475569;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adgen-marketing-hero-proof i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f46e5, #8b5cf6);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.09);
 }
 
 .adgen-marketing-hero-visual {
   position: relative;
   z-index: 2;
   max-width: 1180px;
-  margin: 94px auto -34px;
+  margin: 92px auto -34px;
 }
 
 .adgen-marketing-hero-visual .adgen-product-canvas {
@@ -104,51 +159,45 @@
 .adgen-marketing-hero h1,
 .adgen-marketing-hero-description,
 .adgen-marketing-hero-actions,
+.adgen-marketing-hero-proof,
 .adgen-marketing-hero-visual {
-  animation: adgenMarketingHeroReveal 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: adgenMarketingHeroReveal 600ms
+    cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .adgen-marketing-hero-eyebrow {
-  animation-delay: 80ms;
+  animation-delay: 60ms;
 }
 
 .adgen-marketing-hero h1 {
-  animation-delay: 170ms;
+  animation-delay: 130ms;
 }
 
 .adgen-marketing-hero-description {
-  animation-delay: 300ms;
+  animation-delay: 210ms;
 }
 
 .adgen-marketing-hero-actions {
-  animation-delay: 440ms;
+  animation-delay: 290ms;
+}
+
+.adgen-marketing-hero-proof {
+  animation-delay: 360ms;
 }
 
 .adgen-marketing-hero-visual {
-  animation-delay: 620ms;
+  animation-delay: 430ms;
 }
 
 @keyframes adgenMarketingHeroReveal {
   from {
     opacity: 0;
-    transform: translateY(24px) scale(0.985);
-    filter: blur(8px);
+    transform: translateY(18px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
-  }
-}
-
-@keyframes adgenMarketingHeroGlow {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-
-  to {
-    transform: translate3d(2%, -1%, 0) scale(1.08);
+    transform: translateY(0);
   }
 }
 
@@ -194,14 +243,23 @@
   .adgen-marketing-hero-actions {
     margin-top: 32px;
   }
+
+  .adgen-marketing-hero-proof {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adgen-marketing-hero-proof span {
+    justify-content: center;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .adgen-marketing-hero::before,
   .adgen-marketing-hero-eyebrow,
   .adgen-marketing-hero h1,
   .adgen-marketing-hero-description,
   .adgen-marketing-hero-actions,
+  .adgen-marketing-hero-proof,
   .adgen-marketing-hero-visual {
     animation: none;
   }

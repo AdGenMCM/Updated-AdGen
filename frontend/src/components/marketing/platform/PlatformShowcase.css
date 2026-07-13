@@ -2,21 +2,35 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 20% 18%, rgba(79, 70, 229, 0.075), transparent 32%),
-    radial-gradient(circle at 82% 74%, rgba(14, 165, 233, 0.065), transparent 34%),
+    radial-gradient(
+      circle at 18% 24%,
+      rgba(79, 70, 229, 0.075),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 70%,
+      rgba(14, 165, 233, 0.055),
+      transparent 34%
+    ),
     linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .adgen-platform-section::before {
   content: "";
   position: absolute;
-  inset: 4% -18%;
+  inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 30% 24%, rgba(79, 70, 229, 0.08), transparent 34%),
-    radial-gradient(circle at 74% 64%, rgba(14, 165, 233, 0.07), transparent 36%);
-  filter: blur(90px);
-  opacity: 0.78;
+    linear-gradient(
+      115deg,
+      rgba(238, 242, 255, 0.2),
+      transparent 40%
+    ),
+    linear-gradient(
+      245deg,
+      rgba(224, 242, 254, 0.17),
+      transparent 42%
+    );
 }
 
 .adgen-platform-section .adgen-section-container {
@@ -24,329 +38,241 @@
   z-index: 1;
 }
 
-.adgen-platform-showcase {
+.adgen-platform-transformation {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
-  gap: 34px;
-  align-items: center;
-  margin-top: 74px;
+  grid-template-columns: minmax(0, 0.9fr) 64px minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: stretch;
+  margin-top: 72px;
 }
 
-.adgen-platform-window {
-  min-height: 650px;
-  display: grid;
-  grid-template-columns: 220px 1fr;
+.adgen-platform-scattered,
+.adgen-platform-connected {
+  position: relative;
   overflow: hidden;
+  padding: 38px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 30px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.84));
-  border: 1px solid rgba(15, 23, 42, 0.08);
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.97),
+      rgba(248, 250, 252, 0.8)
+    );
   box-shadow:
-    0 8px 24px rgba(15, 23, 42, 0.055),
-    0 36px 96px rgba(15, 23, 42, 0.12),
-    0 80px 150px rgba(79, 70, 229, 0.075);
+    0 10px 28px rgba(15, 23, 42, 0.05),
+    0 34px 82px rgba(15, 23, 42, 0.09);
 }
 
-.adgen-platform-sidebar {
-  padding: 28px 22px;
-  border-right: 1px solid rgba(15, 23, 42, 0.075);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.78));
-}
-
-.adgen-platform-logo {
-  margin-bottom: 34px;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  color: #0f172a;
-}
-
-.adgen-platform-nav {
-  display: grid;
-  gap: 10px;
-}
-
-.adgen-platform-nav span {
-  padding: 11px 12px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(71, 85, 105, 0.82);
-}
-
-.adgen-platform-nav .active {
-  color: #4f46e5;
-  background: rgba(79, 70, 229, 0.08);
-}
-
-.adgen-platform-main {
-  padding: 34px;
-}
-
-.adgen-platform-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 22px;
-  margin-bottom: 26px;
-}
-
-.adgen-platform-top p {
-  margin: 0 0 7px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #4f46e5;
-}
-
-.adgen-platform-top h3 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1;
-  letter-spacing: -0.055em;
-  color: #0f172a;
-}
-
-.adgen-platform-top button {
-  border: 0;
-  border-radius: 14px;
-  padding: 12px 16px;
-  color: #ffffff;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 42%),
-    #1e293b;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow:
-    0 2px 4px rgba(15, 23, 42, 0.08),
-    0 14px 34px rgba(15, 23, 42, 0.16);
-}
-
-.adgen-platform-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-auto-rows: minmax(145px, auto);
-  gap: 18px;
-}
-
-.adgen-platform-card {
-  position: relative;
-  overflow: hidden;
-  min-width: 0;
-  padding: 20px;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.78));
-  border: 1px solid rgba(15, 23, 42, 0.075);
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
-}
-
-.adgen-platform-card::before {
+.adgen-platform-scattered::before,
+.adgen-platform-connected::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 42%),
-    radial-gradient(circle at 20% 0%, rgba(79, 70, 229, 0.07), transparent 34%);
 }
 
-.adgen-platform-card > * {
+.adgen-platform-scattered::before {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.66),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(100, 116, 139, 0.08),
+      transparent 34%
+    );
+}
+
+.adgen-platform-connected {
+  border-color: rgba(79, 70, 229, 0.16);
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.055),
+    0 40px 96px rgba(79, 70, 229, 0.12);
+}
+
+.adgen-platform-connected::before {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.7),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 22% 0%,
+      rgba(79, 70, 229, 0.11),
+      transparent 36%
+    ),
+    radial-gradient(
+      circle at 86% 78%,
+      rgba(14, 165, 233, 0.07),
+      transparent 34%
+    );
+}
+
+.adgen-platform-scattered > *,
+.adgen-platform-connected > * {
   position: relative;
   z-index: 1;
 }
 
-.adgen-platform-card span {
-  display: block;
-  margin-bottom: 10px;
+.adgen-platform-panel-label {
+  color: #4f46e5;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(71, 85, 105, 0.72);
-  overflow-wrap: anywhere;
 }
 
-.adgen-platform-card strong {
-  display: block;
-  font-size: 22px;
+.adgen-platform-scattered h3,
+.adgen-platform-connected h3 {
+  margin: 18px 0 0;
+  color: #0f172a;
+  font-size: clamp(30px, 4vw, 44px);
   line-height: 1.05;
-  letter-spacing: -0.05em;
-  color: #0f172a;
-  overflow-wrap: anywhere;
+  letter-spacing: -0.052em;
 }
 
-.adgen-platform-card small {
-  display: block;
-  max-width: 100%;
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.45;
-  font-weight: 700;
-  color: rgba(71, 85, 105, 0.82);
-  white-space: normal;
-  overflow-wrap: anywhere;
+.adgen-platform-scattered > p,
+.adgen-platform-connected > p {
+  margin: 20px 0 0;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1.72;
 }
 
-.adgen-platform-card.brand,
-.adgen-platform-card.metric,
-.adgen-platform-card.video {
-  grid-column: span 2;
+.adgen-platform-tool-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 34px;
 }
 
-.adgen-platform-card.creative {
-  grid-column: span 4;
-  grid-row: span 2;
+.adgen-platform-tool-cloud span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(15, 23, 42, 0.085);
+  border-radius: 14px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.045);
+  font-size: 13px;
+  font-weight: 750;
+  animation: adgenToolReveal 480ms
+    cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--tool-delay);
+}
+
+.adgen-platform-connector {
   display: grid;
-  align-content: end;
-  min-height: 310px;
-  background:
-    radial-gradient(circle at 35% 25%, rgba(79, 70, 229, 0.24), transparent 32%),
-    radial-gradient(circle at 78% 72%, rgba(14, 165, 233, 0.16), transparent 32%),
-    linear-gradient(135deg, #111827, #312e81);
+  place-items: center;
 }
 
-.adgen-platform-card.library,
-.adgen-platform-card.optimizer {
-  grid-column: span 2;
-}
-
-.adgen-platform-card.creative span,
-.adgen-platform-card.creative small {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.adgen-platform-card.creative strong {
-  color: #ffffff;
-}
-
-.adgen-platform-creative-art {
-  position: absolute;
-  inset: 18%;
+.adgen-platform-connector span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(79, 70, 229, 0.14);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  filter: blur(42px);
-}
-
-.adgen-platform-card.brand {
-  border-color: rgba(16, 185, 129, 0.16);
-}
-
-.adgen-platform-card.metric {
-  border-color: rgba(14, 165, 233, 0.16);
-}
-
-.adgen-platform-card.video {
-  border-color: rgba(168, 85, 247, 0.16);
-}
-
-.adgen-platform-card.optimizer {
-  border-color: rgba(79, 70, 229, 0.18);
-}
-
-.adgen-platform-highlights {
-  display: grid;
-  gap: 16px;
-}
-
-.adgen-platform-highlights article {
-  position: relative;
-  overflow: hidden;
-  padding: 22px;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.76));
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.88);
   box-shadow:
-    0 8px 22px rgba(15, 23, 42, 0.045),
-    0 24px 60px rgba(15, 23, 42, 0.07);
+    0 8px 22px rgba(15, 23, 42, 0.06),
+    0 20px 44px rgba(79, 70, 229, 0.09);
+  font-size: 22px;
+  font-weight: 800;
 }
 
-.adgen-platform-highlights article::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.64), transparent 42%),
-    radial-gradient(circle at 18% 0%, rgba(79, 70, 229, 0.07), transparent 34%);
+.adgen-platform-benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 34px;
 }
 
-.adgen-platform-highlights article > * {
-  position: relative;
-  z-index: 1;
+.adgen-platform-benefit-grid article {
+  padding: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
-.adgen-platform-highlights p {
-  margin: 0 0 10px;
-  font-size: 11px;
+.adgen-platform-benefit-grid span {
+  display: block;
+  color: #4f46e5;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #4f46e5;
 }
 
-.adgen-platform-highlights h3 {
-  margin: 0;
-  font-size: 21px;
-  line-height: 1.08;
-  letter-spacing: -0.045em;
-  color: #0f172a;
-}
-
-.adgen-platform-highlights span {
+.adgen-platform-benefit-grid strong {
   display: block;
-  margin-top: 10px;
-  font-size: 14px;
-  line-height: 1.6;
+  margin-top: 9px;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.adgen-platform-action {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-top: 44px;
+  text-align: center;
+}
+
+.adgen-platform-action p {
+  margin: 0;
   color: #64748b;
+  font-size: 14px;
 }
 
-@media (max-width: 1100px) {
-  .adgen-platform-showcase {
-    grid-template-columns: 1fr;
+@keyframes adgenToolReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 
-  .adgen-platform-window {
-    grid-template-columns: 1fr;
-  }
-
-  .adgen-platform-sidebar {
-    display: none;
-  }
-
-  .adgen-platform-highlights {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (max-width: 700px) {
-  .adgen-platform-main {
-    padding: 24px;
-  }
-
-  .adgen-platform-top {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .adgen-platform-grid,
-  .adgen-platform-highlights {
+@media (max-width: 1000px) {
+  .adgen-platform-transformation {
     grid-template-columns: 1fr;
   }
 
-  .adgen-platform-card.brand,
-  .adgen-platform-card.metric,
-  .adgen-platform-card.video,
-  .adgen-platform-card.creative,
-  .adgen-platform-card.library,
-  .adgen-platform-card.optimizer {
-    grid-column: auto;
+  .adgen-platform-connector {
+    min-height: 48px;
   }
 
-  .adgen-platform-card.creative {
-    min-height: 260px;
+  .adgen-platform-connector span {
+    transform: rotate(90deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .adgen-platform-scattered,
+  .adgen-platform-connected {
+    padding: 26px;
+    border-radius: 24px;
+  }
+
+  .adgen-platform-benefit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adgen-platform-tool-cloud span {
+    animation: none;
   }
 }

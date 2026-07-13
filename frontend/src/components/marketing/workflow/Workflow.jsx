@@ -7,38 +7,38 @@ import SectionHeader from "../typography/SectionHeader";
 const steps = [
   {
     number: "01",
-    title: "Brand",
-    label: "Start with your identity",
+    title: "Define",
+    label: "Give every campaign a clear foundation",
     description:
-      "Upload your logo, colors, fonts, and brand details so every creative starts from the same foundation.",
+      "Set the brand, audience, offer, objective, and creative direction before production begins.",
   },
   {
     number: "02",
     title: "Create",
-    label: "Generate campaign assets",
+    label: "Turn direction into campaign assets",
     description:
-      "Produce images, videos, and ad copy from one connected creative workspace.",
+      "Generate images, videos, copy, hooks, and variations from one focused workflow.",
   },
   {
     number: "03",
     title: "Refine",
-    label: "Perfect every detail",
+    label: "Polish the strongest ideas",
     description:
-      "Edit, adjust, and improve your creative without jumping between separate tools.",
+      "Adjust creative, improve messaging, and prepare each asset for the channel where it will run.",
   },
   {
     number: "04",
-    title: "Organize",
-    label: "Keep everything together",
+    title: "Learn",
+    label: "Understand what earns attention",
     description:
-      "Save every creative asset into a library built for reuse, review, and iteration.",
+      "Track performance, identify winning patterns, and save the creative signals that matter.",
   },
   {
     number: "05",
     title: "Improve",
-    label: "Create better work over time",
+    label: "Make every next campaign stronger",
     description:
-      "Use insights and optimization to understand what performs and generate stronger creative next time.",
+      "Use what worked before as the creative direction for the assets you produce next.",
   },
 ];
 
@@ -47,9 +47,9 @@ export default function Workflow() {
     <Section size="lg" container="wide" className="adgen-workflow-section">
       <SectionHeader
         align="center"
-        eyebrow="Creative Workflow"
-        title="A better way to move creative forward."
-        description="Every step from first draft to campaign-ready creative lives in one connected workspace."
+        eyebrow="A better creative process"
+        title="Move from direction to better-performing creative."
+        description="AdGen connects the full creative cycle so your team spends less time coordinating tools and more time improving the work."
       />
 
       <div className="adgen-workflow">
@@ -58,7 +58,7 @@ export default function Workflow() {
         {steps.map((step, index) => (
           <article
             className="adgen-workflow-step"
-            style={{ "--step-delay": `${index * 120}ms` }}
+            style={{ "--step-delay": `${index * 70}ms` }}
             key={step.title}
           >
             <div className="adgen-workflow-node">
