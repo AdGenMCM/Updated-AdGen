@@ -93,20 +93,25 @@ export default function App() {
 
           {/* Auth-only */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardRoute><Dashboard /></DashboardRoute>} />
             <Route path="/subscribe" element={<Subscribe />} />
-            <Route path="/account" element={<MyAccount />} />
-            <Route path="/brand-kit" element={<DashboardRoute><BrandKit /></DashboardRoute>} />
-            <Route path="/optimizer" element={<DashboardRoute><Optimizer /></DashboardRoute>} />
-            <Route path="/library" element={<DashboardRoute><Library /></DashboardRoute>} />
-            <Route path="/insights" element={<DashboardRoute><Insights /></DashboardRoute>} />
+
+            <Route element={<DashboardRoute />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/account" element={<MyAccount />} />
+              <Route path="/brand-kit" element={<BrandKit />} />
+              <Route path="/optimizer" element={<Optimizer />} />
+              <Route path="/library" element={<Library />} />
+              <Route path="/insights" element={<Insights />} />
+            </Route>
           </Route>
 
           {/* Paid features (require active sub) */}
           <Route element={<PaidRoute />}>
-            <Route path="/adgenerator" element={<DashboardRoute><AdGenerator /></DashboardRoute>} />
-            <Route path="/creative-studio" element={<DashboardRoute><CreativeStudio /></DashboardRoute>} />
-            <Route path="/video-ads" element={<DashboardRoute><VideoAds /></DashboardRoute>} />
+            <Route element={<DashboardRoute />}>
+              <Route path="/adgenerator" element={<AdGenerator />} />
+              <Route path="/creative-studio" element={<CreativeStudio />} />
+              <Route path="/video-ads" element={<VideoAds />} />
+            </Route>
           </Route>
 
           {/* Admin */}
