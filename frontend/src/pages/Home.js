@@ -13,9 +13,10 @@ import Reveal from "../components/motion/Reveal";
 export default function Home() {
   return (
     <main className="home-page home-v2">
+      
       <Hero />
 
-      <Reveal>
+      <Reveal delay={100}>
         <Workflow />
       </Reveal>
 
