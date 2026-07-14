@@ -386,8 +386,26 @@ export default function BrandKit() {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: kit.name || kit.brandName || "Untitled Brand",
-          data: { ...kit, id: undefined, createdAt: undefined, updatedAt: undefined },
+          name:
+            (kit.brandName || "").trim() ||
+            (kit.name || "").trim() ||
+            `Brand ${Math.max(
+              1,
+              kits.findIndex((item) => item.id === selectedKitId) + 1
+            )}`,
+          data: {
+            ...kit,
+            name:
+              (kit.brandName || "").trim() ||
+              (kit.name || "").trim() ||
+              `Brand ${Math.max(
+                1,
+                kits.findIndex((item) => item.id === selectedKitId) + 1
+              )}`,
+            id: undefined,
+            createdAt: undefined,
+            updatedAt: undefined,
+          },
         }),
       });
       const data = await res.json().catch(() => null);
@@ -551,12 +569,30 @@ export default function BrandKit() {
                 value={selectedKitId || ""}
                 onChange={(e) => selectBrandKit(e.target.value)}
               >
-                {kits.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name || item.brandName || "Untitled Brand"}
-                    {item.isDefault ? " — Default" : ""}
-                  </option>
-                ))}
+                {kits.map((item, index) => {
+                  const liveSelectedName =
+                    item.id === selectedKitId
+                      ? (kit.brandName || "").trim()
+                      : "";
+
+                  const savedName = (
+                    item.brandName ||
+                    item.name ||
+                    ""
+                  ).trim();
+
+                  const displayName =
+                    liveSelectedName ||
+                    savedName ||
+                    `Brand ${index + 1}`;
+
+                  return (
+                    <option key={item.id} value={item.id}>
+                      {displayName}
+                      {item.isDefault ? " — Default" : ""}
+                    </option>
+                  );
+                })}
               </select>
               <p>Edits below apply only to the selected brand.</p>
             </div>

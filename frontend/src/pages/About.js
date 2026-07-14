@@ -1,182 +1,343 @@
 import React from "react";
 import "./About.css";
 
+import Reveal from "../components/motion/Reveal";
+import MarketingButton from "../components/marketing/actions/MarketingButton";
+
+const principles = [
+  {
+    number: "01",
+    title: "Stay close to the customer.",
+    text:
+      "The best product decisions come from understanding how real businesses create, test, and improve their advertising.",
+  },
+  {
+    number: "02",
+    title: "Make powerful tools feel simple.",
+    text:
+      "AdGen should remove friction from the creative process—not add another complicated system to manage.",
+  },
+  {
+    number: "03",
+    title: "Build for continuity.",
+    text:
+      "Creative work should carry context forward, so each campaign starts smarter than the one before it.",
+  },
+  {
+    number: "04",
+    title: "Earn trust through usefulness.",
+    text:
+      "Every feature should solve a real problem, improve the workflow, and help customers move with more confidence.",
+  },
+];
+
+const milestones = [
+  {
+    label: "Now",
+    title: "A connected creative workspace",
+    text:
+      "Brand identity, image generation, video, editing, optimization, asset management, and performance tracking in one place.",
+  },
+  {
+    label: "Next",
+    title: "Smarter campaign organization",
+    text:
+      "More structure around projects, campaigns, collaboration, and the way creative work moves from idea to launch.",
+  },
+  {
+    label: "Future",
+    title: "Creative intelligence that compounds",
+    text:
+      "A system that understands brand context, remembers what performs, and helps every future campaign become more focused.",
+  },
+];
+
 export default function About() {
   return (
-    <main className="about-page">
-      <section className="about-hero">
-        <div className="about-container">
-          <span className="about-pill">About AdGen MCM</span>
+    <main className="about-page about-v2">
+      <section className="about-v2-hero">
+        <div className="about-v2-hero-bg" aria-hidden="true" />
 
-          <h1 className="about-title">
-            AI-powered creative built for modern advertisers.
+        <div className="about-v2-container about-v2-hero-inner">
+          <p className="about-v2-eyebrow">About AdGen MCM</p>
+
+          <h1>
+            <span>Building a better way</span>
+            <span>to create advertising.</span>
           </h1>
 
-          <p className="about-subtitle">
-            Creating high-performing advertising campaigns should not require
-            switching between multiple AI tools, design software, and
-            spreadsheets. AdGen MCM brings image generation, video generation,
-            copywriting, creative management, and performance optimization into
-            one workflow.
+          <p className="about-v2-hero-copy">
+            AdGen MCM is an independent software company focused on making the
+            creative process more connected, more useful, and easier for
+            businesses to manage.
           </p>
 
-          <div className="about-ctas">
-            <a className="btn primary" href="/subscribe">
-              Get Started
-            </a>
-            <a className="btn" href="/pricing">
-              View Pricing
-            </a>
+          <div className="about-v2-hero-actions">
+            <MarketingButton href="/platform" size="lg">
+              Explore the platform
+            </MarketingButton>
+
+            <MarketingButton href="/contact" size="lg" variant="secondary">
+              Contact us
+            </MarketingButton>
           </div>
         </div>
       </section>
 
-      <section className="about-section">
-        <div className="about-container">
-          <h2 className="about-h2">Why AdGen exists</h2>
-          <p className="about-lead">
-            Advertising moves fast. Winning campaigns require constant creative
-            testing, but producing enough quality creative has always been
-            expensive and time-consuming.
-          </p>
+      <section className="about-v2-founder">
+        <div className="about-v2-container about-v2-founder-grid">
+          <Reveal>
+            <div className="about-v2-founder-visual">
+              <div className="about-v2-founder-glow" aria-hidden="true" />
 
-          <p className="about-lead">
-            AdGen was built to solve that problem. Instead of spending hours
-            creating every variation manually, advertisers can generate,
-            organize, track, and improve creatives in minutes.
-          </p>
+              <div className="about-v2-founder-frame">
+                <img
+                  src="/images/professional-headshot.JPG"
+                  alt="Matthew Melio, founder of AdGen MCM"
+                  className="about-v2-founder-image"
+                  loading="eager"
+                  decoding="async"
+                />
+              </div>
+
+              <div className="about-v2-founder-card">
+                <span>Founder</span>
+                <strong>Matthew Melio</strong>
+                <p>Building AdGen MCM in New York City.</p>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={100}>
+            <div className="about-v2-founder-copy">
+              <span className="about-v2-pill">About the founder</span>
+
+              <h2>Hi, I’m Matthew.</h2>
+
+              <p>
+                I built AdGen because I was frustrated with how many disconnected
+                tools it took to create a single advertising campaign.
+              </p>
+
+              <p>
+                Images were made in one place. Copy was written somewhere else.
+                Video lived in another tool. Performance lived in spreadsheets.
+                Every campaign felt like starting over.
+              </p>
+
+              <p>
+                I wanted to build one workspace where everything stayed connected
+                and became more useful over time—something practical enough for
+                real businesses, but ambitious enough to grow with them.
+              </p>
+
+              <p className="about-v2-founder-emphasis">
+                I’m building the kind of creative software I always wished existed.
+              </p>
+            </div>
+          </Reveal>
         </div>
       </section>
 
-      <section className="about-section alt">
-        <div className="about-container">
-          <h2 className="about-h2">What you can do with AdGen</h2>
+      <section className="about-v2-problem">
+        <div className="about-v2-container">
+          <Reveal>
+            <div className="about-v2-problem-inner">
+              <span className="about-v2-pill">What I kept seeing</span>
 
-          <div className="about-grid">
-            <div className="about-card">
-              <div className="about-icon">🎨</div>
-              <h3>AI Image Ads</h3>
-              <p>
-                Generate professional advertising creatives designed for
-                testing products, offers, and campaign angles.
+              <h2>
+                The real cost was not the number of tools. It was the context they lost.
+              </h2>
+
+              <p className="about-v2-problem-intro">
+                The creative process became harder every time important knowledge
+                failed to carry forward.
               </p>
             </div>
+          </Reveal>
 
-            <div className="about-card">
-              <div className="about-icon">🎬</div>
-              <h3>AI Video Ads</h3>
+          <div className="about-v2-context-grid">
+            {[
+              {
+                number: "01",
+                title: "Brand context reset",
+                text:
+                  "Teams had to explain the same identity, audience, and creative direction again and again.",
+              },
+              {
+                number: "02",
+                title: "Strong ideas disappeared",
+                text:
+                  "Useful concepts became buried in downloads and folders instead of becoming reusable creative knowledge.",
+              },
+              {
+                number: "03",
+                title: "Results stayed isolated",
+                text:
+                  "Performance data described what happened, but rarely influenced what the team created next.",
+              },
+              {
+                number: "04",
+                title: "Momentum kept breaking",
+                text:
+                  "Each campaign required rebuilding the workflow instead of continuing from a stronger starting point.",
+              },
+            ].map((item, index) => (
+              <Reveal key={item.title} delay={index * 80}>
+                <article className="about-v2-context-card">
+                  <span>{item.number}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal delay={120}>
+            <div className="about-v2-context-conclusion">
+              <span>That became the product opportunity:</span>
+              <strong>preserve the knowledge around the creative—not just the files.</strong>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="about-v2-principles">
+        <div className="about-v2-container">
+          <Reveal>
+            <div className="about-v2-section-head">
+              <span className="about-v2-pill">How we think</span>
+
+              <h2>The principles guiding what AdGen becomes.</h2>
+
               <p>
-                Create short-form video ads from prompts or uploaded images,
-                with optional AI voiceovers.
+                These ideas shape the product, the customer experience, and the
+                way the company continues to grow.
               </p>
             </div>
+          </Reveal>
 
-            <div className="about-card">
-              <div className="about-icon">✍️</div>
-              <h3>AI Ad Copy</h3>
-              <p>
-                Generate headlines, hooks, primary text, CTAs, and copy
-                variations for paid advertising.
-              </p>
-            </div>
+          <div className="about-v2-principles-grid">
+            {principles.map((principle, index) => (
+              <Reveal key={principle.title} delay={index * 90}>
+                <article className="about-v2-principle-card">
+                  <span className="about-v2-principle-number">
+                    {principle.number}
+                  </span>
 
-            <div className="about-card">
-              <div className="about-icon">📚</div>
-              <h3>Creative Library</h3>
-              <p>
-                Keep generated images and videos organized so your best ideas
-                are easy to revisit and reuse.
-              </p>
-            </div>
-
-            <div className="about-card">
-              <div className="about-icon">📈</div>
-              <h3>Performance Insights</h3>
-              <p>
-                Add metrics like CTR, CPC, CPA, CPM, ROAS, spend, and revenue
-                to understand what is actually working.
-              </p>
-            </div>
-
-            <div className="about-card">
-              <div className="about-icon">🏆</div>
-              <h3>Winners Engine</h3>
-              <p>
-                Your highest-performing creatives can influence future
-                generations, helping AdGen create around proven winning
-                patterns.
-              </p>
-            </div>
+                  <h3>{principle.title}</h3>
+                  <p>{principle.text}</p>
+                </article>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="about-section">
-        <div className="about-container">
-          <h2 className="about-h2">Built around your creative workflow</h2>
+      <section className="about-v2-roadmap">
+        <div className="about-v2-container about-v2-roadmap-grid">
+          <Reveal>
+            <div className="about-v2-roadmap-copy">
+              <span className="about-v2-pill">What we are building</span>
 
-          <div className="about-list">
-            <div className="about-row">
-              <strong>Create</strong>
-              <span>
-                Generate image ads, video ads, hooks, copy, and creative
-                variations for your product or offer.
-              </span>
-            </div>
+              <h2>
+                A platform that grows from creative production into creative intelligence.
+              </h2>
 
-            <div className="about-row">
-              <strong>Launch</strong>
-              <span>
-                Use your creatives across Meta, TikTok, Instagram, Google,
-                email, landing pages, or any paid advertising workflow.
-              </span>
-            </div>
+              <p>
+                AdGen already brings the core creative workflow together. The
+                long-term opportunity is to make that workflow increasingly
+                informed by brand context, campaign history, and real
+                performance.
+              </p>
 
-            <div className="about-row">
-              <strong>Learn</strong>
-              <span>
-                Add performance metrics so you can see which creatives, angles,
-                formats, and messages are working.
-              </span>
+              <p>
+                The goal is not to replace creative judgment. It is to give
+                businesses a stronger system around it.
+              </p>
             </div>
+          </Reveal>
 
-            <div className="about-row">
-              <strong>Improve</strong>
-              <span>
-                Use what performs best to guide stronger future creative
-                generations.
-              </span>
-            </div>
+          <div className="about-v2-roadmap-list">
+            <div className="about-v2-roadmap-line" aria-hidden="true" />
+
+            {milestones.map((milestone, index) => (
+              <Reveal key={milestone.label} delay={index * 100}>
+                <article className="about-v2-roadmap-item">
+                  <span>{milestone.label}</span>
+
+                  <div>
+                    <h3>{milestone.title}</h3>
+                    <p>{milestone.text}</p>
+                  </div>
+                </article>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="about-section alt">
-        <div className="about-container">
-          <h2 className="about-h2">Our vision</h2>
+      <section className="about-v2-location">
+        <div className="about-v2-container">
+          <Reveal>
+            <div className="about-v2-location-inner">
+              <span className="about-v2-location-mark">NY</span>
 
-          <p className="about-lead">
-            Our vision is simple: help businesses spend less time creating ads
-            and more time discovering what works.
-          </p>
+              <div>
+                <span className="about-v2-pill">Independent and founder-led</span>
 
-          <p className="about-lead">
-            By combining AI generation with performance insights, AdGen MCM
-            helps turn every campaign into a smarter starting point for the next
-            one.
-          </p>
+                <h2>Built in New York City.</h2>
 
-          <div className="about-bottom-cta">
-            <a className="btn primary" href="/subscribe">
-              Start Creating
-            </a>
-            <a className="btn" href="/pricing">
-              View Pricing
-            </a>
-          </div>
+                <p>
+                  AdGen MCM is an independent software company being built with
+                  a close connection to its customers, a long-term product
+                  vision, and a focus on solving practical creative problems.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="about-v2-final">
+        <div className="about-v2-final-light" aria-hidden="true" />
+
+        <div className="about-v2-container about-v2-final-inner">
+          <Reveal>
+            <span className="about-v2-final-pill">The company behind the platform</span>
+
+            <h2>We’re just getting started.</h2>
+
+            <p>
+              AdGen is still early, and that is part of what makes this moment
+              exciting. Every conversation, campaign, and customer experience
+              helps shape what the platform becomes next.
+            </p>
+
+            <div className="about-v2-final-actions">
+              <MarketingButton
+                href="/subscribe"
+                size="lg"
+                className="about-v2-final-primary"
+              >
+                Start creating
+              </MarketingButton>
+
+              <MarketingButton
+                href="/contact"
+                size="lg"
+                variant="secondary"
+                className="about-v2-final-secondary"
+              >
+                Contact us
+              </MarketingButton>
+            </div>
+          </Reveal>
         </div>
       </section>
     </main>
   );
 }
+
+
 

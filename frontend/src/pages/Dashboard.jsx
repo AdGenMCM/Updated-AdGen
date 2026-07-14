@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import "./Dashboard.css";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -15,14 +16,63 @@ import {
 } from "lucide-react";
 import { auth } from "../firebaseConfig";
 
+function formatStorageUsage(usedBytes = 0, limitBytes = 0) {
+  const safeUsed = Math.max(0, Number(usedBytes) || 0);
+  const safeLimit = Math.max(0, Number(limitBytes) || 0);
+
+  const KB = 1024;
+  const MB = 1024 ** 2;
+  const GB = 1024 ** 3;
+
+  let usedLabel = "0 B";
+
+  if (safeUsed >= GB) {
+    usedLabel = `${(safeUsed / GB).toFixed(2)} GB`;
+  } else if (safeUsed >= MB) {
+    usedLabel = `${(safeUsed / MB).toFixed(2)} MB`;
+  } else if (safeUsed >= KB) {
+    usedLabel = `${(safeUsed / KB).toFixed(1)} KB`;
+  } else if (safeUsed > 0) {
+    usedLabel = `${Math.round(safeUsed)} B`;
+  }
+
+  let limitLabel = "0 GB";
+
+  if (safeLimit >= GB) {
+    const limitInGb = safeLimit / GB;
+    limitLabel = `${Number.isInteger(limitInGb) ? limitInGb.toFixed(0) : limitInGb.toFixed(1)} GB`;
+  } else if (safeLimit >= MB) {
+    limitLabel = `${(safeLimit / MB).toFixed(0)} MB`;
+  } else if (safeLimit >= KB) {
+    limitLabel = `${(safeLimit / KB).toFixed(0)} KB`;
+  } else if (safeLimit > 0) {
+    limitLabel = `${Math.round(safeLimit)} B`;
+  }
+
+  return `${usedLabel} / ${limitLabel}`;
+}
+
 export default function Dashboard() {
-  const { usage, videoUsage, storageUsage, recentCreatives, brandKitStatus } =
-    useWorkspace() || {};
+  const {
+    usage,
+    videoUsage,
+    storageUsage,
+    recentCreatives,
+    brandKitStatus,
+    refreshWorkspace,
+  } = useWorkspace() || {};
 
   const imageUsed = usage?.used ?? 0;
   const imageCap = usage?.cap ?? 0;
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
+
+  useEffect(() => {
+    refreshWorkspace?.();
+    // Refresh once whenever the Dashboard mounts so usage, storage,
+    // recent creatives, and Brand Kit data are current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const missingBrandItems = brandKitStatus?.missing || [];
 
@@ -107,7 +157,10 @@ export default function Dashboard() {
         <StatCard
           to="/account"
           label="Storage"
-          value={`${((storageUsage?.usedBytes || 0) / (1024 ** 3)).toFixed(2)} / ${((storageUsage?.limitBytes || 0) / (1024 ** 3)).toFixed(0)} GB`}
+          value={formatStorageUsage(
+            storageUsage?.usedBytes,
+            storageUsage?.limitBytes
+          )}
           description="Creative storage used"
           icon={<HardDrive size={20} />}
         />

@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -86,9 +87,11 @@ export function WorkspaceProvider({ children }) {
   const [recentCreatives, setRecentCreatives] = useState([]);
   const [brandKitStatus, setBrandKitStatus] = useState(getBrandKitStatus(null));
   const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const didFetchRef = useRef(false);
   const lastUserIdRef = useRef(null);
+  const fetchInFlightRef = useRef(false);
 
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
@@ -105,8 +108,10 @@ export function WorkspaceProvider({ children }) {
 
   const planLabel = tierLabels[stripe?.tier] || stripe?.tier || "No active plan";
 
-  async function fetchWorkspaceData({ force = false } = {}) {
+  const fetchWorkspaceData = useCallback(async ({ force = false } = {}) => {
     if (!currentUser || !apiBase) return;
+
+    if (fetchInFlightRef.current) return;
 
     if (!force && didFetchRef.current && lastUserIdRef.current === currentUser.uid) {
       return;
@@ -114,6 +119,7 @@ export function WorkspaceProvider({ children }) {
 
     didFetchRef.current = true;
     lastUserIdRef.current = currentUser.uid;
+    fetchInFlightRef.current = true;
 
     setLoading(true);
 
@@ -188,10 +194,12 @@ export function WorkspaceProvider({ children }) {
         .slice(0, 4);
 
       setRecentCreatives(succeeded);
+      setLastUpdated(Date.now());
     } finally {
+      fetchInFlightRef.current = false;
       setLoading(false);
     }
-  }
+  }, [apiBase, currentUser]);
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -201,8 +209,7 @@ export function WorkspaceProvider({ children }) {
     }
 
     fetchWorkspaceData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, fetchWorkspaceData]);
 
   return (
     <WorkspaceContext.Provider
@@ -216,6 +223,7 @@ export function WorkspaceProvider({ children }) {
         recentCreatives,
         brandKitStatus,
         loading,
+        lastUpdated,
         refreshWorkspace: () => fetchWorkspaceData({ force: true }),
       }}
     >
