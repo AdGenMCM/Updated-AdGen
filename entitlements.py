@@ -1,19 +1,37 @@
-# entitlements.py
-from fastapi import HTTPException
 from typing import Optional
 
-# Exact tier IDs from your usage_caps.py
-PRO_TIERS = {"early_access", "pro_monthly", "business_monthly"}
+from fastapi import HTTPException
 
-def require_pro_or_business(tier: Optional[str]) -> None:
-    t = (tier or "").lower()
-    if t not in PRO_TIERS:
+from plan_config import get_plan_config, has_feature
+
+
+def require_feature(tier: Optional[str], feature: str, message: str) -> None:
+    if not has_feature(tier, feature):
         raise HTTPException(
             status_code=403,
             detail={
-                "message": "Ad Performance Optimization is available on Early Access, Pro, and Business plans.",
+                "message": message,
                 "upgradePath": "/account",
-                "requiredTiers": sorted(list(PRO_TIERS)),
+                "requiredFeature": feature,
             },
         )
+
+
+def require_pro_or_business(tier: Optional[str]) -> None:
+    require_feature(
+        tier,
+        "optimizer",
+        "Ad Performance Optimization is available on Pro and Business plans.",
+    )
+
+
+def build_entitlements_payload(tier: Optional[str]) -> dict:
+    plan = get_plan_config(tier)
+    return {
+        "tier": tier or "trial_monthly",
+        "label": plan.get("label"),
+        "monthlyPrice": plan.get("monthly_price"),
+        "features": plan.get("features") or {},
+        "limits": plan.get("limits") or {},
+    }
 

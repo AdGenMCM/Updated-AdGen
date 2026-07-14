@@ -11,12 +11,12 @@ import {
   Image,
   Palette,
   Video,
-  CreditCard,
+  HardDrive,
 } from "lucide-react";
 import { auth } from "../firebaseConfig";
 
 export default function Dashboard() {
-  const { usage, videoUsage, planLabel, recentCreatives, brandKitStatus } =
+  const { usage, videoUsage, storageUsage, recentCreatives, brandKitStatus } =
     useWorkspace() || {};
 
   const imageUsed = usage?.used ?? 0;
@@ -106,10 +106,10 @@ export default function Dashboard() {
 
         <StatCard
           to="/account"
-          label="Current Plan"
-          value={planLabel}
-          description="Subscription tier"
-          icon={<CreditCard size={20} />}
+          label="Storage"
+          value={`${((storageUsage?.usedBytes || 0) / (1024 ** 3)).toFixed(2)} / ${((storageUsage?.limitBytes || 0) / (1024 ** 3)).toFixed(0)} GB`}
+          description="Creative storage used"
+          icon={<HardDrive size={20} />}
         />
       </div>
 

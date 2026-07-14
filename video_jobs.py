@@ -12,7 +12,8 @@ import httpx
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from storage_utils import upload_bytes_to_firebase_storage
+from storage_utils import upload_bytes_to_firebase_storage, upload_bytes_to_firebase_storage_with_metadata, delete_firebase_storage_object
+from storage_tracking import ensure_storage_available, register_storage_asset, release_storage_asset
 
 from runway_client import (
     RunwayError,
@@ -35,6 +36,8 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from google.cloud import firestore as gc_firestore
 
 from entitlements import require_pro_or_business
+from brand_kits import resolve_brand_kit
+from plan_config import get_limit, video_credits_for_duration
 
 
 
@@ -56,18 +59,39 @@ VIDEO_DEFAULT_TEXT_MODEL = os.getenv(
 
 router = APIRouter()
 
+VIDEO_PROGRESS = {
+    "queued": (5, "Preparing your video request."),
+    "loading_brand_kit": (12, "Applying your Active Brand."),
+    "building_prompt": (22, "Building your creative direction."),
+    "submitting_to_runway": (30, "Sending your video request to Runway."),
+    "waiting_for_runway": (45, "Generating your video with Runway."),
+    "processing_video": (70, "Processing the final video."),
+    "generating_voiceover": (78, "Generating your voiceover."),
+    "mixing_audio": (86, "Adding voiceover to your video."),
+    "uploading_video": (94, "Uploading your finished video."),
+    "saving_library": (98, "Saving your video to the Library."),
+    "succeeded": (100, "Your video is ready."),
+    "failed": (100, "Video generation failed."),
+}
+
+def progress_payload(stage: str) -> Dict[str, Any]:
+    percent, message = VIDEO_PROGRESS.get(stage, VIDEO_PROGRESS["queued"])
+    return {"progressStage": stage, "progressPercent": percent, "progressMessage": message}
+
+def set_video_progress(job_ref, stage: str, **extra) -> None:
+    payload = progress_payload(stage)
+    payload.update(extra)
+    payload["progressUpdatedAt"] = int(time.time())
+    job_ref.update(payload)
+
 # -----------------------------
 # Video plan gating + caps
 # -----------------------------
-VIDEO_ALLOWED_TIERS = {"early_access", "pro_monthly", "business_monthly"}
-VIDEO_CAPS = {
-    "early_access": 3,
-    "pro_monthly": 15,
-    "business_monthly": 50,
-}
-
+# Generation limits come from plan_config.py. Voice-preview caps remain
+# separate because previews are a lightweight support feature.
 TTS_PREVIEW_CAPS = {
-    "early_access": 100,
+    "trial_monthly": 25,
+    "starter_monthly": 75,
     "pro_monthly": 250,
     "business_monthly": 600,
 }
@@ -220,8 +244,8 @@ def _enforce_tts_preview_caps_and_increment(db, uid: str, tier: str, status: str
     allowed_statuses = {"active", "trialing"}
     if status not in allowed_statuses:
         raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
-    if tier not in VIDEO_ALLOWED_TIERS:
-        raise HTTPException(status_code=403, detail="Voice preview is only available on Early Access, Pro, and Business.")
+    if get_limit(tier, "video_credits") <= 0:
+        raise HTTPException(status_code=403, detail="Voice preview is not available on your plan.")
 
     cap = TTS_PREVIEW_CAPS.get(tier, 0)
     if not cap:
@@ -251,10 +275,13 @@ def _enforce_video_entitlements_and_increment(db, uid: str, tier: str, status: s
     if status not in allowed_statuses:
         raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
 
-    if tier == "early_access" and int(duration) > 6:
-        raise HTTPException(status_code=403, detail="Early Access supports 6-second videos only.")
+    try:
+        required_credits = video_credits_for_duration(int(duration))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    result = check_and_increment_video_usage(db, uid, tier)
+    result = check_and_increment_video_usage(db, uid, tier, required_credits)
+    result["creditsCharged"] = required_credits
 
     if not result.get("allowed"):
         reason = result.get("reason")
@@ -262,7 +289,7 @@ def _enforce_video_entitlements_and_increment(db, uid: str, tier: str, status: s
         if reason == "tier_not_allowed":
             raise HTTPException(
                 status_code=403,
-                detail="Video ads are only available on Early Access, Pro, and Business plans.",
+                detail="Video generation is not available on your plan.",
             )
 
         if reason == "no_cap_configured":
@@ -299,6 +326,7 @@ class StartImageVideoRequest(BaseModel):
     ratio: VideoRatio = "720:1280"
     promptText: str = Field(min_length=1, max_length=1000)
     useBrandKit: bool = True
+    brandKitId: Optional[str] = None
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
@@ -338,6 +366,7 @@ class StartPromptVideoRequest(BaseModel):
 
     userPrompt: Optional[str] = Field(default=None, max_length=1000)
     useBrandKit: bool = True
+    brandKitId: Optional[str] = None
     voiceoverScript: Optional[str] = Field(
         default=None,
         max_length=1200,
@@ -360,12 +389,18 @@ class StartPromptVideoRequest(BaseModel):
 class StartVideoResponse(BaseModel):
     jobId: str
     status: str
+    progressStage: Optional[str] = None
+    progressMessage: Optional[str] = None
+    progressPercent: Optional[int] = None
 
 class VideoStatusResponse(BaseModel):
     jobId: str
     status: str
     finalVideoUrl: Optional[str] = None
     error: Optional[str] = None
+    progressStage: Optional[str] = None
+    progressMessage: Optional[str] = None
+    progressPercent: Optional[int] = None
 
 class TTSPreviewRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
@@ -768,9 +803,7 @@ async def start_image_video(
         or {}
     )
 
-    brand_kit = (
-        user_doc.get("brandKit") or {}
-    ) if req.useBrandKit else {}
+    brand_kit = resolve_brand_kit(db, uid, req.brandKitId, user_doc) if req.useBrandKit else {}
 
     # Compact visual Brand Kit direction for Runway.
     brand_direction = compile_video_brand_direction(
@@ -811,6 +844,8 @@ async def start_image_video(
         "status": "running",
         "mode": "image",
         "duration": req.duration,
+        "creditsReserved": int((usage_reservation or {}).get("creditsCharged") or 0),
+        "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
         "ratio": req.ratio,
         "model": req.model,
 
@@ -824,6 +859,7 @@ async def start_image_video(
         "promptText": req.promptText,
         "promptImageUrl": req.promptImageUrl,
         "useBrandKit": req.useBrandKit,
+        "brandKitId": req.brandKitId,
 
         # Runway task fields.
         "runwayVideoTaskId": None,
@@ -832,6 +868,8 @@ async def start_image_video(
         # Final output.
         "finalVideoUrl": None,
         "error": None,
+        **progress_payload("building_prompt"),
+        "progressUpdatedAt": int(time.time()),
 
         # Legacy winner guidance.
         "winnerGuidance": (
@@ -900,6 +938,7 @@ async def start_image_video(
         "promptTextFinal": prompt_text,
         "brandDirection": brand_direction or None,
     })
+    set_video_progress(job_ref, "submitting_to_runway")
 
     # Only this call is eligible for an automatic usage refund.
     try:
@@ -917,6 +956,7 @@ async def start_image_video(
                 db,
                 uid,
                 usage_reservation.get("periodKey"),
+                int(usage_reservation.get("creditsCharged") or 1),
             )
 
             print(
@@ -927,6 +967,7 @@ async def start_image_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -940,6 +981,7 @@ async def start_image_video(
                 db,
                 uid,
                 usage_reservation.get("periodKey"),
+                int(usage_reservation.get("creditsCharged") or 1),
             )
 
             print(
@@ -950,6 +992,7 @@ async def start_image_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -963,6 +1006,7 @@ async def start_image_video(
     job_ref.update({
         "runwayVideoTaskId": runway_task_id,
     })
+    set_video_progress(job_ref, "waiting_for_runway")
 
 
     try:
@@ -986,6 +1030,7 @@ async def start_image_video(
         return StartVideoResponse(
             jobId=job_id,
             status="running",
+            **progress_payload("waiting_for_runway"),
         )
 
     except RunwayError as e:
@@ -993,6 +1038,7 @@ async def start_image_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1005,6 +1051,7 @@ async def start_image_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1044,9 +1091,7 @@ async def start_prompt_video(
         or {}
     )
 
-    brand_kit = (
-        user_doc.get("brandKit") or {}
-    ) if req.useBrandKit else {}
+    brand_kit = resolve_brand_kit(db, uid, req.brandKitId, user_doc) if req.useBrandKit else {}
 
     # Compact visual Brand Kit direction for Runway.
     brand_direction = compile_video_brand_direction(
@@ -1133,6 +1178,8 @@ async def start_prompt_video(
         "status": "running",
         "mode": "prompt",
         "duration": req.duration,
+        "creditsReserved": int((usage_reservation or {}).get("creditsCharged") or 0),
+        "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
         "ratio": req.ratio,
         "model": req.model,
 
@@ -1166,6 +1213,7 @@ async def start_prompt_video(
 
         # Brand configuration.
         "useBrandKit": req.useBrandKit,
+        "brandKitId": req.brandKitId,
         "brandDirection": brand_direction or None,
 
         # Exact prompt sent to Runway.
@@ -1178,6 +1226,8 @@ async def start_prompt_video(
         # Final output.
         "finalVideoUrl": None,
         "error": None,
+        **progress_payload("building_prompt"),
+        "progressUpdatedAt": int(time.time()),
 
         # Legacy winner guidance.
         "winnerGuidance": (
@@ -1196,6 +1246,7 @@ async def start_prompt_video(
     })
 
     # Only this call is eligible for an automatic usage refund.
+    set_video_progress(job_ref, "submitting_to_runway")
     try:
         runway_task_id = await create_text_to_video(
             prompt_text=director_prompt,
@@ -1210,6 +1261,7 @@ async def start_prompt_video(
                 db,
                 uid,
                 usage_reservation.get("periodKey"),
+                int(usage_reservation.get("creditsCharged") or 1),
             )
 
             print(
@@ -1220,6 +1272,7 @@ async def start_prompt_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1233,6 +1286,7 @@ async def start_prompt_video(
                 db,
                 uid,
                 usage_reservation.get("periodKey"),
+                int(usage_reservation.get("creditsCharged") or 1),
             )
 
             print(
@@ -1243,6 +1297,7 @@ async def start_prompt_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1256,6 +1311,7 @@ async def start_prompt_video(
     job_ref.update({
         "runwayVideoTaskId": runway_task_id,
     })
+    set_video_progress(job_ref, "waiting_for_runway")
 
 
     try:
@@ -1279,6 +1335,7 @@ async def start_prompt_video(
         return StartVideoResponse(
             jobId=job_id,
             status="running",
+            **progress_payload("waiting_for_runway"),
         )
 
     except RunwayError as e:
@@ -1286,6 +1343,7 @@ async def start_prompt_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1298,6 +1356,7 @@ async def start_prompt_video(
         job_ref.update({
             "status": "failed",
             "error": str(e),
+            **progress_payload("failed"),
         })
 
         raise HTTPException(
@@ -1305,6 +1364,124 @@ async def start_prompt_video(
             detail="Failed after the video task was accepted.",
         )
 
+
+
+async def finalize_video_job(job_id: str, uid: str) -> None:
+    """Finalize a completed Runway task while status polling remains responsive."""
+    db = get_db()
+    job_ref = db.collection("video_jobs").document(job_id)
+    job = job_ref.get().to_dict() or {}
+
+    try:
+        runway_video_task_id = job.get("runwayVideoTaskId")
+        task = await get_task(runway_video_task_id)
+        runway_video_url = extract_first_output_url(task)
+        if not runway_video_url:
+            raise RuntimeError("Runway succeeded but output URL is missing.")
+
+        set_video_progress(job_ref, "processing_video", finalizationState="running")
+
+        with tempfile.TemporaryDirectory() as td:
+            raw_video = os.path.join(td, "runway_raw.mp4")
+            await download_to_file(runway_video_url, raw_video)
+
+            normalized_video = os.path.join(td, "runway_norm.mp4")
+            normalize_video_with_ffmpeg(raw_video, normalized_video)
+
+            target_seconds = int(job.get("duration") or 6)
+            enforced_video = os.path.join(td, "runway_enforced.mp4")
+            enforce_exact_duration(normalized_video, enforced_video, target_seconds)
+            final_path = enforced_video
+
+            vo_cfg = job.get("voiceover") or {}
+            if vo_cfg.get("enabled"):
+                set_video_progress(job_ref, "generating_voiceover")
+                script = (job.get("voiceoverScript") or "").strip()
+                if not script:
+                    raise RuntimeError("Voiceover enabled but voiceoverScript is empty.")
+
+                enforce_script_fits_duration(script, target_seconds, True)
+                tts_task_id = job.get("runwayTtsTaskId")
+                if not tts_task_id:
+                    tts_task_id = await create_text_to_speech(
+                        prompt_text=script,
+                        preset_voice=safe_voice(vo_cfg.get("presetVoice")),
+                    )
+                    job_ref.update({"runwayTtsTaskId": tts_task_id})
+
+                tts_task = None
+                for _ in range(120):
+                    tts_task = await get_task(tts_task_id)
+                    tts_status = tts_task.get("status")
+                    if tts_status == "SUCCEEDED":
+                        break
+                    if tts_status in ("FAILED", "CANCELED"):
+                        raise RuntimeError(
+                            tts_task.get("error")
+                            or tts_task.get("failureReason")
+                            or "Voiceover generation failed."
+                        )
+                    await asyncio.sleep(1)
+                else:
+                    raise RuntimeError("Voiceover generation timed out.")
+
+                tts_url = extract_first_output_url(tts_task or {})
+                if not tts_url:
+                    raise RuntimeError("TTS succeeded but output URL is missing.")
+
+                audio_path = os.path.join(td, "voice.mp3")
+                await download_to_file(tts_url, audio_path)
+
+                set_video_progress(job_ref, "mixing_audio")
+                muxed = os.path.join(td, "final_muxed.mp4")
+                mux_voiceover(enforced_video, audio_path, muxed)
+                final_path = muxed
+
+            with open(final_path, "rb") as f:
+                data = f.read()
+
+            set_video_progress(job_ref, "uploading_video")
+            latest_job = job_ref.get().to_dict() or job
+            tier, _status = get_tier_and_status(
+                db.collection("users").document(uid).get().to_dict() or {}
+            )
+            ensure_storage_available(db, uid, tier, len(data), asset_type="video")
+            stored = upload_bytes_to_firebase_storage_with_metadata(
+                data, uid, content_type="video/mp4", folder="video_ads", filename_hint="video.mp4"
+            )
+            final_url = stored["url"]
+
+            set_video_progress(job_ref, "saving_library")
+            register_storage_asset(
+                db, uid,
+                storage_path=stored["storagePath"],
+                file_size_bytes=stored["fileSizeBytes"],
+                asset_type="video",
+                source_collection="video_jobs",
+                source_id=job_id,
+                content_type=stored.get("contentType") or "video/mp4",
+            )
+
+            job_ref.update({
+                "status": "succeeded",
+                "finalVideoUrl": final_url,
+                "error": None,
+                "finalizationState": "complete",
+                **progress_payload("succeeded"),
+                "progressUpdatedAt": int(time.time()),
+                "storagePath": stored["storagePath"],
+                "fileSizeBytes": stored["fileSizeBytes"],
+                "contentType": stored.get("contentType") or "video/mp4",
+            })
+
+    except Exception as exc:
+        job_ref.update({
+            "status": "failed",
+            "error": str(exc),
+            "finalizationState": "failed",
+            **progress_payload("failed"),
+            "progressUpdatedAt": int(time.time()),
+        })
 
 
 @router.get("/video/status/{job_id}", response_model=VideoStatusResponse)
@@ -1321,13 +1498,28 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     if job.get("status") == "succeeded" and job.get("finalVideoUrl"):
-        return VideoStatusResponse(jobId=job_id, status="succeeded", finalVideoUrl=job["finalVideoUrl"])
+        return VideoStatusResponse(
+            jobId=job_id, status="succeeded", finalVideoUrl=job["finalVideoUrl"],
+            progressStage=job.get("progressStage") or "succeeded",
+            progressMessage=job.get("progressMessage") or VIDEO_PROGRESS["succeeded"][1],
+            progressPercent=job.get("progressPercent") or 100,
+        )
     if job.get("status") in ("failed", "canceled"):
-        return VideoStatusResponse(jobId=job_id, status=job.get("status", "failed"), error=job.get("error"))
+        return VideoStatusResponse(
+            jobId=job_id, status=job.get("status", "failed"), error=job.get("error"),
+            progressStage=job.get("progressStage") or "failed",
+            progressMessage=job.get("progressMessage") or VIDEO_PROGRESS["failed"][1],
+            progressPercent=job.get("progressPercent") or 100,
+        )
 
     runway_video_task_id = job.get("runwayVideoTaskId")
     if not runway_video_task_id:
-        return VideoStatusResponse(jobId=job_id, status=job.get("status", "running"))
+        return VideoStatusResponse(
+            jobId=job_id, status=job.get("status", "running"),
+            progressStage=job.get("progressStage") or "queued",
+            progressMessage=job.get("progressMessage") or VIDEO_PROGRESS["queued"][1],
+            progressPercent=job.get("progressPercent") or VIDEO_PROGRESS["queued"][0],
+        )
 
     try:
         task = await get_task(runway_video_task_id)
@@ -1341,80 +1533,34 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
     st = task.get("status")
 
     if st == "SUCCEEDED":
-        runway_video_url = extract_first_output_url(task)
-        if not runway_video_url:
-            job_ref.update({"status": "failed", "error": "Runway succeeded but output URL missing."})
-            return VideoStatusResponse(jobId=job_id, status="failed", error="Missing output URL")
+        latest = job_ref.get().to_dict() or job
+        finalization_state = latest.get("finalizationState")
 
-        try:
-            with tempfile.TemporaryDirectory() as td:
-                raw_video = os.path.join(td, "runway_raw.mp4")
-                await download_to_file(runway_video_url, raw_video)
+        if finalization_state not in {"running", "complete"}:
+            set_video_progress(job_ref, "processing_video", finalizationState="running")
+            asyncio.create_task(finalize_video_job(job_id, uid))
+            latest = job_ref.get().to_dict() or latest
 
-                normalized_video = os.path.join(td, "runway_norm.mp4")
-                normalize_video_with_ffmpeg(raw_video, normalized_video)
-
-                target_seconds = int(job.get("duration") or 6)
-                enforced_video = os.path.join(td, "runway_enforced.mp4")
-                enforce_exact_duration(normalized_video, enforced_video, target_seconds)
-
-                final_path = enforced_video
-
-                vo_cfg = job.get("voiceover") or {}
-                if vo_cfg.get("enabled"):
-                    script = (job.get("voiceoverScript") or "").strip()
-                    if not script:
-                        raise RuntimeError("Voiceover enabled but voiceoverScript is empty.")
-
-                    enforce_script_fits_duration(script, target_seconds, True)
-
-                    tts_task_id = job.get("runwayTtsTaskId")
-                    if not tts_task_id:
-                        tts_task_id = await create_text_to_speech(
-                            prompt_text=script,
-                            preset_voice=safe_voice(vo_cfg.get("presetVoice")),
-                        )
-                        job_ref.update({"runwayTtsTaskId": tts_task_id})
-
-                    tts_task = await get_task(tts_task_id)
-                    if tts_task.get("status") != "SUCCEEDED":
-                        return VideoStatusResponse(jobId=job_id, status="running")
-
-                    tts_url = extract_first_output_url(tts_task)
-                    if not tts_url:
-                        raise RuntimeError("TTS succeeded but output URL missing.")
-
-                    audio_path = os.path.join(td, "voice.mp3")
-                    await download_to_file(tts_url, audio_path)
-
-                    muxed = os.path.join(td, "final_muxed.mp4")
-                    mux_voiceover(enforced_video, audio_path, muxed)
-                    final_path = muxed
-
-                with open(final_path, "rb") as f:
-                    data = f.read()
-
-                final_url = upload_bytes_to_firebase_storage(
-                    data,
-                    uid,
-                    content_type="video/mp4",
-                    folder="video_ads",
-                    filename_hint="video.mp4",
-                )
-
-                job_ref.update({"status": "succeeded", "finalVideoUrl": final_url, "error": None})
-                return VideoStatusResponse(jobId=job_id, status="succeeded", finalVideoUrl=final_url)
-
-        except Exception as e:
-            job_ref.update({"status": "failed", "error": str(e)})
-            return VideoStatusResponse(jobId=job_id, status="failed", error=str(e))
+        return VideoStatusResponse(
+            jobId=job_id,
+            status="running",
+            progressStage=latest.get("progressStage") or "processing_video",
+            progressMessage=latest.get("progressMessage") or VIDEO_PROGRESS["processing_video"][1],
+            progressPercent=latest.get("progressPercent") or VIDEO_PROGRESS["processing_video"][0],
+        )
 
     if st in ("FAILED", "CANCELED"):
         err = task.get("error") or task.get("failureReason") or "Runway task failed."
-        job_ref.update({"status": "failed", "error": err})
-        return VideoStatusResponse(jobId=job_id, status="failed", error=err)
+        job_ref.update({"status": "failed", "error": err, **progress_payload("failed")})
+        return VideoStatusResponse(jobId=job_id, status="failed", error=err, **progress_payload("failed"))
 
-    return VideoStatusResponse(jobId=job_id, status="running")
+    refreshed = job_ref.get().to_dict() or job
+    return VideoStatusResponse(
+        jobId=job_id, status="running",
+        progressStage=refreshed.get("progressStage") or "waiting_for_runway",
+        progressMessage=refreshed.get("progressMessage") or VIDEO_PROGRESS["waiting_for_runway"][1],
+        progressPercent=refreshed.get("progressPercent") or VIDEO_PROGRESS["waiting_for_runway"][0],
+    )
 
 
 @router.post("/video/tts/preview", response_model=TTSPreviewResponse)
@@ -1526,6 +1672,26 @@ async def list_video_jobs(
 
     return {"items": items, "nextCursor": last_created_at}
 
+
+@router.delete("/video/jobs/{job_id}")
+def delete_video_job(job_id: str, authorization: str | None = Header(default=None)):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+    ref = db.collection("video_jobs").document(job_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Video job not found.")
+    data = snap.to_dict() or {}
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    if data.get("storageState") != "deleted":
+        path = data.get("storagePath")
+        if path:
+            delete_firebase_storage_object(path)
+        release_storage_asset(db, data.get("uid") or uid, size_bytes=int(data.get("fileSizeBytes") or 0), asset_type="video")
+    ref.delete()
+    return {"ok": True, "jobId": job_id}
 
 @router.get("/video/jobs/{job_id}")
 async def get_video_job(

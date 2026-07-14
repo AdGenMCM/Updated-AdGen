@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
 import { auth } from "../firebaseConfig";
 import googleFonts from "../data/googleFonts";
 import "./BrandKit.css";
@@ -15,8 +8,6 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import FieldLabel from "../components/ui/FieldLabel";
-
-const db = getFirestore();
 
 const COMMON_CTAS = [
   "Shop Now",
@@ -99,6 +90,13 @@ export default function BrandKit() {
   const logoInputRef = useRef(null);
 
   const [kit, setKit] = useState(defaultKit);
+  const [kits, setKits] = useState([]);
+  const [selectedKitId, setSelectedKitId] = useState(null);
+  const [kitLimit, setKitLimit] = useState(1);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newBrandName, setNewBrandName] = useState("");
+  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
@@ -198,44 +196,137 @@ export default function BrandKit() {
     return () => document.head.removeChild(link);
   }, [loadedFontUrl]);
 
+  const loadBrandKits = React.useCallback(async (preferredKitId = null) => {
+    const user = auth.currentUser;
+    if (!user || !apiBase) return;
+
+    const token = await user.getIdToken();
+    const res = await fetch(`${apiBase}/brand-kits`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.detail?.message || data?.detail || "Could not load Brand Kits.");
+
+    const items = Array.isArray(data?.items) ? data.items : [];
+    setKits(items);
+    setKitLimit(data?.limit || 1);
+    setIsAdmin(Boolean(data?.isAdmin));
+
+    const nextId =
+      preferredKitId ||
+      data?.defaultBrandKitId ||
+      items[0]?.id ||
+      null;
+
+    setSelectedKitId(nextId);
+
+    const selected = items.find((item) => item.id === nextId) || items[0] || null;
+    if (selected) {
+      setKit({
+        ...defaultKit,
+        ...selected,
+        colors: { ...defaultKit.colors, ...(selected.colors || {}) },
+        colorEnabled: { ...defaultKit.colorEnabled, ...(selected.colorEnabled || {}) },
+        fonts: { ...defaultKit.fonts, ...(selected.fonts || {}) },
+        fontEnabled: { ...defaultKit.fontEnabled, ...(selected.fontEnabled || {}) },
+      });
+    } else {
+      setKit(defaultKit);
+    }
+  }, [apiBase]);
+
   useEffect(() => {
-    async function loadBrandKit() {
-      const user = auth.currentUser;
-      if (!user) return;
+    loadBrandKits().catch((err) => setSaveMsg(err.message || "Could not load Brand Kits."));
+  }, [loadBrandKits]);
 
-      const snap = await getDoc(doc(db, "users", user.uid));
-      const existing = snap.data()?.brandKit;
+  const selectBrandKit = (id) => {
+    setSelectedKitId(id);
+    const selected = kits.find((item) => item.id === id);
+    if (!selected) return;
+    setKit({
+      ...defaultKit,
+      ...selected,
+      colors: { ...defaultKit.colors, ...(selected.colors || {}) },
+      colorEnabled: { ...defaultKit.colorEnabled, ...(selected.colorEnabled || {}) },
+      fonts: { ...defaultKit.fonts, ...(selected.fonts || {}) },
+      fontEnabled: { ...defaultKit.fontEnabled, ...(selected.fontEnabled || {}) },
+    });
+    setSaveMsg("");
+  };
 
-      if (existing) {
-        setKit({
-            ...defaultKit,
-            ...existing,
-
-            colors: {
-                ...defaultKit.colors,
-                ...(existing.colors || {}),
-            },
-
-            colorEnabled: {
-                ...defaultKit.colorEnabled,
-                ...(existing.colorEnabled || {}),
-            },
-
-            fonts: {
-                ...defaultKit.fonts,
-                ...(existing.fonts || {}),
-            },
-
-            fontEnabled: {
-                ...defaultKit.fontEnabled,
-                ...(existing.fontEnabled || {}),
-            },
-        });
-      }
+  const openCreateBrandKit = () => {
+    if (!isAdmin && kits.length >= kitLimit) {
+      setSaveMsg(`You have reached your ${kitLimit} Brand Kit limit. Upgrade to create another brand.`);
+      return;
     }
 
-    loadBrandKit();
-  }, []);
+    setNewBrandName(`Brand ${kits.length + 1}`);
+    setCreateOpen(true);
+    setSaveMsg("");
+  };
+
+  const createBrandKit = async () => {
+    const name = newBrandName.trim();
+    if (!name) {
+      setSaveMsg("Enter a name for the new brand.");
+      return;
+    }
+
+    if (!isAdmin && kits.length >= kitLimit) {
+      setCreateOpen(false);
+      setSaveMsg(`You have reached your ${kitLimit} Brand Kit limit.`);
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) throw new Error("Please log in to create a Brand Kit.");
+
+    try {
+      setCreating(true);
+      const token = await user.getIdToken(true);
+      const res = await fetch(`${apiBase}/brand-kits`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name, data: { ...defaultKit, brandName: name } }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail?.message || data?.detail || "Could not create Brand Kit.");
+
+      setCreateOpen(false);
+      setNewBrandName("");
+      await loadBrandKits(data.id);
+      setSaveMsg(`${name} was created and selected.`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const setDefaultBrandKit = async () => {
+    if (!selectedKitId) return;
+    const user = auth.currentUser;
+    const token = await user.getIdToken(true);
+    const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}/set-default`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Could not set default Brand Kit.");
+    await loadBrandKits(selectedKitId);
+    setSaveMsg("Default Brand Kit updated.");
+  };
+
+  const deleteBrandKit = async () => {
+    if (!selectedKitId || kits.length <= 1) return;
+    if (!window.confirm("Delete this Brand Kit? This cannot be undone.")) return;
+    const user = auth.currentUser;
+    const token = await user.getIdToken(true);
+    const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.detail || "Could not delete Brand Kit.");
+    await loadBrandKits(data?.defaultBrandKitId || null);
+  };
 
   const updateKit = (path, value) => {
     setSaveMsg("");
@@ -289,17 +380,19 @@ export default function BrandKit() {
       setSaving(true);
       setSaveMsg("");
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          brandKit: {
-            ...kit,
-            updatedAt: serverTimestamp(),
-          },
-        },
-        { merge: true }
-      );
-
+      if (!selectedKitId) throw new Error("No Brand Kit selected.");
+      const token = await user.getIdToken(true);
+      const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: kit.name || kit.brandName || "Untitled Brand",
+          data: { ...kit, id: undefined, createdAt: undefined, updatedAt: undefined },
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || "Could not save Brand Kit.");
+      setKits((prev) => prev.map((item) => item.id === selectedKitId ? data : item));
       setSaveMsg("Brand Kit saved and ready for future creatives.");
     } catch (err) {
       console.error("Failed to save Brand Kit:", err);
@@ -350,7 +443,7 @@ export default function BrandKit() {
       const fd = new FormData();
       fd.append("file", file);
 
-      const res = await fetch(`${apiBase}/upload-brand-logo`, {
+      const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}/logo`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
@@ -372,6 +465,14 @@ export default function BrandKit() {
       setLogoUploading(false);
     }
   };
+
+  const selectedKit = useMemo(
+    () => kits.find((item) => item.id === selectedKitId) || null,
+    [kits, selectedKitId]
+  );
+
+  const atBrandLimit = !isAdmin && kits.length >= kitLimit;
+  const selectedIsDefault = Boolean(selectedKit?.isDefault);
 
   const FontSelect = ({ label, fontKey, fallback, value, onChange }) => {
   const enabled = !!kit.fontEnabled?.[fontKey];
@@ -424,6 +525,141 @@ export default function BrandKit() {
           title="Build your AI Brand Identity"
           description="Upload your logo, colors, fonts, messaging, audience, and creative preferences once. AdGen uses your Brand Kit across Image Generation, Video Ads, the Optimizer, and future platform features."
         />
+
+        <Card className="brandkit-managerCard">
+          <div className="brandkit-managerTop">
+            <div className="brandkit-managerHeading">
+              <span className="brandkit-managerEyebrow">Brand workspace</span>
+              <h2>Your Brands</h2>
+              <p>Choose the brand identity you want to edit and use across AdGen.</p>
+            </div>
+
+            <div className="brandkit-managerMeta">
+              <span className="brandkit-usagePill">
+                {isAdmin
+                  ? `${kits.length} brand${kits.length === 1 ? "" : "s"} · Admin access`
+                  : `${kits.length} of ${kitLimit} brands`}
+              </span>
+            </div>
+          </div>
+
+          <div className="brandkit-managerBody">
+            <div className="brandkit-managerSelectWrap">
+              <label htmlFor="brandKitManagerSelect">Active brand</label>
+              <select
+                id="brandKitManagerSelect"
+                value={selectedKitId || ""}
+                onChange={(e) => selectBrandKit(e.target.value)}
+              >
+                {kits.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name || item.brandName || "Untitled Brand"}
+                    {item.isDefault ? " — Default" : ""}
+                  </option>
+                ))}
+              </select>
+              <p>Edits below apply only to the selected brand.</p>
+            </div>
+
+            <div className="brandkit-managerActions">
+              <button
+                type="button"
+                className="brandkit-small-btn brandkit-primary-action"
+                onClick={openCreateBrandKit}
+                disabled={atBrandLimit}
+                title={atBrandLimit ? `Your plan includes ${kitLimit} Brand Kit${kitLimit === 1 ? "" : "s"}.` : "Create a new Brand Kit"}
+              >
+                + New Brand
+              </button>
+
+              {!selectedIsDefault && (
+                <button
+                  type="button"
+                  className="brandkit-small-btn"
+                  onClick={() => setDefaultBrandKit().catch((e) => setSaveMsg(e.message))}
+                >
+                  Make Default
+                </button>
+              )}
+
+              {selectedIsDefault && (
+                <span className="brandkit-defaultBadge">Default brand</span>
+              )}
+
+              {kits.length > 1 && (
+                <button
+                  type="button"
+                  className="brandkit-small-btn brandkit-remove-btn"
+                  onClick={() => deleteBrandKit().catch((e) => setSaveMsg(e.message))}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+
+          {atBrandLimit && (
+            <div className="brandkit-limitNotice">
+              Your plan includes {kitLimit} Brand Kit{kitLimit === 1 ? "" : "s"}. Upgrade to create another brand.
+            </div>
+          )}
+        </Card>
+
+        {createOpen && (
+          <div className="brandkit-modalOverlay" role="dialog" aria-modal="true" aria-labelledby="new-brand-title">
+            <div className="brandkit-modalCard">
+              <div className="brandkit-modalHeader">
+                <div>
+                  <span>Create brand</span>
+                  <h2 id="new-brand-title">New Brand Kit</h2>
+                </div>
+                <button
+                  type="button"
+                  className="brandkit-modalClose"
+                  onClick={() => setCreateOpen(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              <label className="brandkit-modalField">
+                <span>Brand name</span>
+                <input
+                  autoFocus
+                  value={newBrandName}
+                  onChange={(e) => setNewBrandName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      createBrandKit().catch((err) => setSaveMsg(err.message));
+                    }
+                  }}
+                  placeholder="Example: Acme Coffee"
+                  maxLength={80}
+                />
+              </label>
+
+              <p className="brandkit-modalHelp">
+                You can add the logo, colors, fonts, voice, and brand rules after creating it.
+              </p>
+
+              <div className="brandkit-modalActions">
+                <button type="button" className="brandkit-small-btn" onClick={() => setCreateOpen(false)} disabled={creating}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="brandkit-small-btn brandkit-primary-action"
+                  onClick={() => createBrandKit().catch((err) => setSaveMsg(err.message))}
+                  disabled={creating || !newBrandName.trim()}
+                >
+                  {creating ? "Creating..." : "Create Brand"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="brandkit-topGrid">
           <Card className="brandkit-healthCard">

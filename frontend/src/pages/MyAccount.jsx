@@ -21,6 +21,7 @@ export default function MyAccount() {
   const [videoUsage, setVideoUsage] = useState(null);
   const [videoUsageLoading, setVideoUsageLoading] = useState(false);
   const [videoUsageError, setVideoUsageError] = useState("");
+  const [storageUsage, setStorageUsage] = useState(null);
 
   // Dismiss state
   const [dismissing, setDismissing] = useState(false);
@@ -140,6 +141,14 @@ export default function MyAccount() {
     if (!currentUser) return;
     fetchUsage();
     fetchVideoUsage();
+    (async () => {
+      try {
+        const user = auth.currentUser;
+        const token = await user.getIdToken();
+        const res = await fetch(`${apiBase}/storage/usage`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) setStorageUsage(await res.json());
+      } catch {}
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
@@ -459,6 +468,19 @@ export default function MyAccount() {
               {videoUsageLoading ? "Loading video usage…" : "Video usage data not available yet."}
             </p>
           )}
+        </div>
+
+        <div className="acctSection">
+          <h2 className="acctH2">Creative Storage</h2>
+          {storageUsage ? (
+            <>
+              <div className="acctRow"><span className="acctLabel">Used</span><span className="acctValue">{(storageUsage.usedBytes / (1024 ** 3)).toFixed(2)} GB / {(storageUsage.limitBytes / (1024 ** 3)).toFixed(0)} GB</span></div>
+              <div className="acctRow"><span className="acctLabel">Images</span><span className="acctValue">{(storageUsage.imageBytes / (1024 ** 2)).toFixed(1)} MB</span></div>
+              <div className="acctRow"><span className="acctLabel">Videos</span><span className="acctValue">{(storageUsage.videoBytes / (1024 ** 2)).toFixed(1)} MB</span></div>
+              <div className="acctRow"><span className="acctLabel">Stored assets</span><span className="acctValue">{storageUsage.assetCount}</span></div>
+              {storageUsage.warning && <p className="acctTiny">Your storage is over 80% full. Delete unused assets or upgrade your plan.</p>}
+            </>
+          ) : <p className="acctTiny">Storage data is not available yet.</p>}
         </div>
       </div>
     </div>

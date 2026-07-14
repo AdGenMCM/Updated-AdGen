@@ -10,7 +10,7 @@ import time
 from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -22,7 +22,15 @@ import stripe
 
 # Firebase auth + Firestore
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
-from usage_caps import check_and_increment_usage, peek_usage, get_tier_and_status, get_usage_period
+from usage_caps import (
+    check_and_increment_usage,
+    check_and_increment_resource,
+    rollback_resource,
+    peek_usage,
+    peek_resource,
+    get_tier_and_status,
+    get_usage_period,
+)
 
 # admin dependency
 from admin_guard import admin_required
@@ -47,12 +55,24 @@ from usage_caps import peek_usage, get_tier_and_status
 
 
 # feature gating + optimizer schemas
-from entitlements import require_pro_or_business
+from entitlements import require_pro_or_business, build_entitlements_payload
+from plan_config import get_plan_config
 from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 
 #Runway
 from video_jobs import router as video_router
-from storage_utils import upload_bytes_to_firebase_storage
+from storage_utils import (
+    upload_bytes_to_firebase_storage,
+    upload_bytes_to_firebase_storage_with_metadata,
+    delete_firebase_storage_object,
+)
+from storage_tracking import (
+    ensure_storage_available,
+    get_storage_summary,
+    register_storage_asset,
+    release_storage_asset,
+)
+from brand_kits import router as brand_kits_router, resolve_brand_kit
 
 #Library Performace Schemas
 from typing import Optional
@@ -71,6 +91,7 @@ load_dotenv(override=True)
 app = FastAPI()
 
 app.include_router(video_router)
+app.include_router(brand_kits_router)
 
 class AdminRequestTierBody(BaseModel):
     requestedTier: str  # e.g. "starter_monthly", "pro_monthly", etc.
@@ -277,6 +298,7 @@ class AdRequest(BaseModel):
     platform: str
     imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
     useBrandKit: bool = True
+    brandKitId: Optional[str] = None
 
     offer: Optional[str] = None
     goal: Optional[str] = None
@@ -310,6 +332,7 @@ class GenerateFromOptimizerRequest(BaseModel):
     improved_image_prompt: str
     imageSize: str = "1024x1024"
     useBrandKit: bool = True
+    brandKitId: Optional[str] = None
     creative_image_urls: Optional[List[str]] = None
     companyName: Optional[str] = None
     product_name: Optional[str] = None
@@ -340,30 +363,169 @@ class PerformanceUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+
+# ---------------- Generation progress jobs ----------------
+class ProgressStartResponse(BaseModel):
+    jobId: str
+    status: str = "queued"
+
+IMAGE_PROGRESS = {
+    "queued": (5, "Preparing your creative request."),
+    "validated": (12, "Request validated."),
+    "loading_brand_kit": (20, "Applying your Active Brand."),
+    "building_prompts": (32, "Building creative strategy and prompts."),
+    "generating_creative": (48, "Generating ad copy and image."),
+    "uploading_creative": (82, "Uploading your creative."),
+    "saving_library": (94, "Saving to your Library."),
+    "succeeded": (100, "Creative complete."),
+    "failed": (100, "Creative generation stopped."),
+}
+
+OPTIMIZER_PROGRESS = {
+    "queued": (5, "Preparing campaign analysis."),
+    "validated": (12, "Campaign details validated."),
+    "loading_brand_kit": (20, "Applying your Active Brand."),
+    "analyzing_creative": (34, "Analyzing uploaded creative."),
+    "evaluating_performance": (52, "Evaluating performance and creative."),
+    "building_recommendations": (78, "Building recommendations and improved copy."),
+    "saving_results": (94, "Preparing optimization results."),
+    "succeeded": (100, "Optimization complete."),
+    "failed": (100, "Optimization stopped."),
+}
+
+OPTIMIZER_GENERATION_PROGRESS = {
+    "queued": (5, "Preparing optimized creative."),
+    "validated": (12, "Optimization results validated."),
+    "loading_brand_kit": (22, "Applying your Active Brand."),
+    "building_prompt": (34, "Building improved creative direction."),
+    "generating_creative": (54, "Generating optimized image."),
+    "uploading_creative": (84, "Uploading your creative."),
+    "saving_library": (94, "Saving to your Library."),
+    "succeeded": (100, "Optimized creative complete."),
+    "failed": (100, "Creative generation stopped."),
+}
+
+def _progress_collection(kind: str) -> str:
+    return "image_generation_jobs" if kind == "image" else "optimizer_jobs"
+
+def set_generation_progress(
+    db,
+    kind: str,
+    job_id: Optional[str],
+    stage: str,
+    *,
+    message: Optional[str] = None,
+    percent: Optional[int] = None,
+    extra: Optional[Dict[str, Any]] = None,
+):
+    if not job_id:
+        return
+    table = (
+        IMAGE_PROGRESS
+        if kind == "image"
+        else OPTIMIZER_GENERATION_PROGRESS
+        if kind == "optimizer_generation"
+        else OPTIMIZER_PROGRESS
+    )
+    default_percent, default_message = table.get(stage, (0, stage.replace("_", " ").title()))
+    payload = {
+        "progressStage": stage,
+        "progressMessage": message or default_message,
+        "progressPercent": int(default_percent if percent is None else percent),
+        "updatedAt": int(time.time()),
+    }
+    if extra:
+        payload.update(extra)
+    db.collection(_progress_collection(kind)).document(job_id).set(payload, merge=True)
+
+async def _run_image_generation_job(job_id: str, payload: AdRequest, authorization: str):
+    db = get_db()
+    try:
+        result = await generate_ad(payload, authorization, progress_job_id=job_id)
+        set_generation_progress(
+            db, "image", job_id, "succeeded",
+            extra={"status": "succeeded", "result": result, "error": None},
+        )
+    except HTTPException as exc:
+        set_generation_progress(
+            db, "image", job_id, "failed",
+            message=str(exc.detail) if isinstance(exc.detail, str) else "Creative generation failed.",
+            extra={"status": "failed", "error": exc.detail},
+        )
+    except Exception as exc:
+        set_generation_progress(
+            db, "image", job_id, "failed",
+            message="Creative generation failed.",
+            extra={"status": "failed", "error": str(exc)},
+        )
+
+async def _run_optimizer_job(job_id: str, payload: OptimizeAdRequest, authorization: str):
+    db = get_db()
+    try:
+        result = await optimize_ad(payload, authorization, progress_job_id=job_id)
+        result_data = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        set_generation_progress(
+            db, "optimizer", job_id, "succeeded",
+            extra={"status": "succeeded", "result": result_data, "error": None},
+        )
+    except HTTPException as exc:
+        set_generation_progress(
+            db, "optimizer", job_id, "failed",
+            message=str(exc.detail) if isinstance(exc.detail, str) else "Optimization failed.",
+            extra={"status": "failed", "error": exc.detail},
+        )
+    except Exception as exc:
+        set_generation_progress(
+            db, "optimizer", job_id, "failed",
+            message="Optimization failed.",
+            extra={"status": "failed", "error": str(exc)},
+        )
+
+async def _run_optimizer_generation_job(
+    job_id: str,
+    payload: GenerateFromOptimizerRequest,
+    authorization: str,
+):
+    db = get_db()
+    try:
+        result = await generate_from_optimizer(
+            payload, authorization, progress_job_id=job_id
+        )
+        set_generation_progress(
+            db, "optimizer_generation", job_id, "succeeded",
+            extra={"status": "succeeded", "result": result, "error": None},
+        )
+    except HTTPException as exc:
+        set_generation_progress(
+            db, "optimizer_generation", job_id, "failed",
+            message=str(exc.detail) if isinstance(exc.detail, str) else "Creative generation failed.",
+            extra={"status": "failed", "error": exc.detail},
+        )
+    except Exception as exc:
+        set_generation_progress(
+            db, "optimizer_generation", job_id, "failed",
+            message="Creative generation failed.",
+            extra={"status": "failed", "error": str(exc)},
+        )
+
+def _read_progress_job(db, collection: str, job_id: str, uid: str, admin: bool):
+    snap = db.collection(collection).document(job_id).get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Progress job not found.")
+    data = snap.to_dict() or {}
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    return {"jobId": job_id, **data}
+
 # ---------------- Helpers ----------------
-def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> str:
-    """
-    Upload PNG bytes to Firebase Storage and return a direct download URL.
-    Uses firebaseStorageDownloadTokens so the URL can be fetched without auth.
-    """
-    from firebase_admin import storage  # type: ignore (lazy import)
-
-    bucket_name = (os.getenv("FIREBASE_STORAGE_BUCKET") or "").strip()
-    if not bucket_name:
-        raise RuntimeError("FIREBASE_STORAGE_BUCKET is missing.")
-
-    bucket = storage.bucket(bucket_name)
-
-    object_id = f"generated_ads/{uid}/{uuid.uuid4().hex}.png"
-    token = uuid.uuid4().hex
-
-    blob = bucket.blob(object_id)
-    blob.metadata = {"firebaseStorageDownloadTokens": token}
-    blob.upload_from_string(img_bytes, content_type="image/png")
-
-    return (
-        f"https://firebasestorage.googleapis.com/v0/b/{bucket_name}/o/"
-        f"{quote(object_id, safe='')}?alt=media&token={token}"
+def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> dict:
+    """Upload a generated PNG and return durable storage metadata."""
+    return upload_bytes_to_firebase_storage_with_metadata(
+        img_bytes,
+        uid,
+        content_type="image/png",
+        folder="generated_ads",
+        filename_hint="creative.png",
     )
 
 async def analyze_uploaded_creatives(urls: List[str]) -> str:
@@ -1008,6 +1170,40 @@ def me(authorization: str | None = Header(default=None)):
         "isAdmin": is_admin(claims),
     }
 
+@app.get("/me/entitlements")
+def me_entitlements(authorization: str | None = Header(default=None)):
+    uid, email, claims = require_user(authorization)
+    db = get_db()
+
+    user_ref = db.collection("users").document(uid)
+    user_doc = user_ref.get().to_dict() or {}
+    user_doc = ensure_stripe_period_for_user(db, uid, user_doc)
+    tier, status = get_tier_and_status(user_doc)
+
+    payload = build_entitlements_payload(tier)
+    payload.update({
+        "uid": uid,
+        "email": email,
+        "status": status,
+        "isAdmin": is_admin(claims),
+        "usage": {
+            "images": peek_resource(db, uid, tier, "images", user_doc),
+            "videoCredits": peek_resource(db, uid, tier, "video_credits", user_doc),
+            "optimizerRuns": peek_resource(db, uid, tier, "optimizer_runs", user_doc),
+            "storage": get_storage_summary(db, uid, tier),
+        },
+        "period": get_usage_period(user_doc),
+    })
+    return payload
+
+@app.get("/storage/usage")
+def storage_usage(authorization: str | None = Header(default=None)):
+    uid, _email, _claims = require_user(authorization)
+    db = get_db()
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+    return get_storage_summary(db, uid, tier)
+
 # ---------------- Contact ----------------
 @app.post("/contact")
 def send_contact_email(payload: ContactForm):
@@ -1109,14 +1305,16 @@ async def upload_creatives(
         if len(data) > 8 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="File too large. Max 8MB per image.")
 
-        url = upload_bytes_to_firebase_storage(
-            data,
-            uid,
-            content_type=ct,
-            folder="uploaded_creatives",
-            filename_hint=f.filename or None,
+        db = get_db()
+        user_doc = db.collection("users").document(uid).get().to_dict() or {}
+        tier, _status = get_tier_and_status(user_doc)
+        if not admin:
+            ensure_storage_available(db, uid, tier, len(data))
+        stored = upload_bytes_to_firebase_storage_with_metadata(
+            data, uid, content_type=ct, folder="uploaded_creatives", filename_hint=f.filename or None
         )
-        urls.append(url)
+        register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+        urls.append(stored["url"])
 
     if not urls:
         raise HTTPException(status_code=400, detail="No valid files uploaded.")
@@ -1154,13 +1352,15 @@ async def upload_brand_logo(
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Logo too large. Max 5MB.")
 
-    logo_url = upload_bytes_to_firebase_storage(
-        data,
-        uid,
-        content_type=ct,
-        folder="brand_logos",
-        filename_hint=file.filename or "logo",
+    db = get_db()
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+    ensure_storage_available(db, uid, tier, len(data))
+    stored = upload_bytes_to_firebase_storage_with_metadata(
+        data, uid, content_type=ct, folder="brand_logos", filename_hint=file.filename or "logo"
     )
+    register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="other")
+    logo_url = stored["url"]
 
     db = get_db()
     db.collection("users").document(uid).set(
@@ -1205,31 +1405,143 @@ async def upload_reference_images(
         if len(data) > 8 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Reference image too large. Max 8MB per image.")
 
-        url = upload_bytes_to_firebase_storage(
-            data,
-            uid,
-            content_type=ct,
-            folder="reference_images",
-            filename_hint=f.filename or "reference-image",
+        db = get_db()
+        user_doc = db.collection("users").document(uid).get().to_dict() or {}
+        tier, _status = get_tier_and_status(user_doc)
+        ensure_storage_available(db, uid, tier, len(data))
+        stored = upload_bytes_to_firebase_storage_with_metadata(
+            data, uid, content_type=ct, folder="reference_images", filename_hint=f.filename or "reference-image"
         )
-
-        urls.append(url)
+        register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+        urls.append(stored["url"])
 
     if not urls:
         raise HTTPException(status_code=400, detail="No valid images uploaded.")
 
     return {"urls": urls}
 
+
+# ---------------- Async generation job routes ----------------
+@app.post("/image/start", response_model=ProgressStartResponse)
+async def start_image_generation(
+    payload: AdRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+    job_id = uuid.uuid4().hex
+    db.collection("image_generation_jobs").document(job_id).set({
+        "uid": uid,
+        "createdAt": int(time.time()),
+        "updatedAt": int(time.time()),
+        "status": "queued",
+        "jobType": "image",
+        "progressStage": "queued",
+        "progressMessage": IMAGE_PROGRESS["queued"][1],
+        "progressPercent": IMAGE_PROGRESS["queued"][0],
+        "result": None,
+        "error": None,
+    })
+    background_tasks.add_task(_run_image_generation_job, job_id, payload, authorization or "")
+    return ProgressStartResponse(jobId=job_id, status="queued")
+
+@app.get("/image/status/{job_id}")
+async def image_generation_status(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    return _read_progress_job(
+        get_db(), "image_generation_jobs", job_id, uid, is_admin(claims)
+    )
+
+@app.post("/optimizer/start", response_model=ProgressStartResponse)
+async def start_optimizer_analysis(
+    payload: OptimizeAdRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+    job_id = uuid.uuid4().hex
+    db.collection("optimizer_jobs").document(job_id).set({
+        "uid": uid,
+        "createdAt": int(time.time()),
+        "updatedAt": int(time.time()),
+        "status": "queued",
+        "jobType": "optimizer",
+        "progressStage": "queued",
+        "progressMessage": OPTIMIZER_PROGRESS["queued"][1],
+        "progressPercent": OPTIMIZER_PROGRESS["queued"][0],
+        "result": None,
+        "error": None,
+    })
+    background_tasks.add_task(_run_optimizer_job, job_id, payload, authorization or "")
+    return ProgressStartResponse(jobId=job_id, status="queued")
+
+@app.get("/optimizer/status/{job_id}")
+async def optimizer_status(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    return _read_progress_job(
+        get_db(), "optimizer_jobs", job_id, uid, is_admin(claims)
+    )
+
+@app.post("/optimizer/generate/start", response_model=ProgressStartResponse)
+async def start_optimizer_generation(
+    payload: GenerateFromOptimizerRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+    job_id = uuid.uuid4().hex
+    db.collection("optimizer_jobs").document(job_id).set({
+        "uid": uid,
+        "createdAt": int(time.time()),
+        "updatedAt": int(time.time()),
+        "status": "queued",
+        "jobType": "optimizer_generation",
+        "progressStage": "queued",
+        "progressMessage": OPTIMIZER_GENERATION_PROGRESS["queued"][1],
+        "progressPercent": OPTIMIZER_GENERATION_PROGRESS["queued"][0],
+        "result": None,
+        "error": None,
+    })
+    background_tasks.add_task(
+        _run_optimizer_generation_job, job_id, payload, authorization or ""
+    )
+    return ProgressStartResponse(jobId=job_id, status="queued")
+
+@app.get("/optimizer/generate/status/{job_id}")
+async def optimizer_generation_status(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    return _read_progress_job(
+        get_db(), "optimizer_jobs", job_id, uid, is_admin(claims)
+    )
+
 # ---------------- Generate Ad ----------------
 @app.post("/generate-ad")
-async def generate_ad(payload: AdRequest, authorization: str | None = Header(default=None)):
+async def generate_ad(
+    payload: AdRequest,
+    authorization: str | None = Header(default=None),
+    progress_job_id: Optional[str] = None,
+):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     db = get_db()
+    set_generation_progress(db, "image", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
+    set_generation_progress(db, "image", progress_job_id, "loading_brand_kit")
+    brand_kit = resolve_brand_kit(db, uid, payload.brandKitId, user_doc) if payload.useBrandKit else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -1292,6 +1604,8 @@ async def generate_ad(payload: AdRequest, authorization: str | None = Header(def
             winners_line = "\n" + winners_line
     elif winner_guidance:
         winners_line = f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
+
+    set_generation_progress(db, "image", progress_job_id, "building_prompts")
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
     
@@ -1638,12 +1952,20 @@ It should be visually impressive enough to appear in a professional design portf
                     input_image_urls=reference_image_urls,
                 )
             )
-            return upload_png_to_firebase_storage(img_bytes, uid)
+            if not admin:
+                ensure_storage_available(db, uid, tier, len(img_bytes))
+            set_generation_progress(db, "image", progress_job_id, "uploading_creative")
+            stored = upload_png_to_firebase_storage(img_bytes, uid)
+            register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+            return stored
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"GPT Image generation failed: {e}")
 
-    copy_obj, image_url = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
+    set_generation_progress(db, "image", progress_job_id, "generating_creative")
+    copy_obj, image_asset = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
+    image_url = image_asset["url"]
 
+    set_generation_progress(db, "image", progress_job_id, "saving_library")
     image_job_id = uuid.uuid4().hex
     try:
         db.collection("image_jobs").document(image_job_id).set({
@@ -1666,11 +1988,16 @@ It should be visually impressive enough to appear in a professional design portf
             "referenceImageMode": reference_image_mode,
             "referenceImageCount": len(reference_image_urls),
             "useBrandKit": payload.useBrandKit,
+            "brandKitId": getattr(payload, "brandKitId", None),
             "brandKitUsed": bool(brand_kit_context),
             "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
             "useMyWinners": bool(winner_profile),
             "visualPrompt": visual_prompt,
             "imageUrl": image_url,
+            "storagePath": image_asset.get("storagePath"),
+            "fileSizeBytes": image_asset.get("fileSizeBytes"),
+            "contentType": image_asset.get("contentType"),
+            "storageState": "active",
             "copy": copy_obj,
             "error": None,
             "usage": {
@@ -1712,15 +2039,21 @@ It should be visually impressive enough to appear in a professional design portf
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
-async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = Header(default=None)):
+async def optimize_ad(
+    payload: OptimizeAdRequest,
+    authorization: str | None = Header(default=None),
+    progress_job_id: Optional[str] = None,
+):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     db = get_db()
+    set_generation_progress(db, "optimizer", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
 
-    brand_kit = (user_doc.get("brandKit") or {}) if getattr(payload, "useBrandKit", True) else {}
+    set_generation_progress(db, "optimizer", progress_job_id, "loading_brand_kit")
+    brand_kit = resolve_brand_kit(db, uid, getattr(payload, "brandKitId", None), user_doc) if getattr(payload, "useBrandKit", True) else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
 
     tier, status = get_tier_and_status(user_doc)
@@ -1730,6 +2063,24 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
         require_pro_or_business(tier)
+
+    optimizer_usage_reservation = None
+    if not admin:
+        optimizer_usage_reservation = check_and_increment_resource(
+            db, uid, tier, "optimizer_runs", 1
+        )
+        if not optimizer_usage_reservation.get("allowed"):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "You’ve reached your monthly Optimizer limit.",
+                    "used": optimizer_usage_reservation.get("used"),
+                    "cap": optimizer_usage_reservation.get("cap"),
+                    "remaining": optimizer_usage_reservation.get("remaining"),
+                    "periodEnd": optimizer_usage_reservation.get("periodEnd"),
+                    "upgradePath": "/account",
+                },
+            )
 
     product_name = (payload.product_name or "").strip()[:80]
     description = (payload.description or "").strip()[:800]
@@ -1742,6 +2093,7 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
     metrics = payload.metrics.dict() if payload.metrics else {}
 
     creative_urls = payload.creative_image_urls or []
+    set_generation_progress(db, "optimizer", progress_job_id, "analyzing_creative")
     creative_analysis = await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
 
     extra = {
@@ -1755,6 +2107,8 @@ async def optimize_ad(payload: OptimizeAdRequest, authorization: str | None = He
         "geo": payload.geo,
         "device": payload.device,
     }
+
+    set_generation_progress(db, "optimizer", progress_job_id, "evaluating_performance")
 
     optimizer_prompt = f"""
 You are a senior direct-response creative strategist and performance marketing analyst.
@@ -1872,6 +2226,7 @@ confidence
 """.strip()
 
     try:
+        set_generation_progress(db, "optimizer", progress_job_id, "building_recommendations")
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
                 model=OPENAI_TEXT_MODEL,
@@ -1968,23 +2323,46 @@ confidence
 
         obj["confidence"] = confidence
 
+        set_generation_progress(db, "optimizer", progress_job_id, "saving_results")
         return OptimizeAdResponse(**obj)
 
     except HTTPException:
+        if not admin and optimizer_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "optimizer_runs",
+                optimizer_usage_reservation.get("periodKey"),
+                1,
+            )
         raise
     except Exception as e:
+        if not admin and optimizer_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "optimizer_runs",
+                optimizer_usage_reservation.get("periodKey"),
+                1,
+            )
         raise HTTPException(status_code=502, detail=f"Optimization failed: {e}")
 
 # ---------------- Generate New Creative from Optimizer (Pro/Business only, CONSUMES usage) ----------------
 @app.post("/generate-from-optimizer")
-async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authorization: str | None = Header(default=None)):
+async def generate_from_optimizer(
+    payload: GenerateFromOptimizerRequest,
+    authorization: str | None = Header(default=None),
+    progress_job_id: Optional[str] = None,
+):
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     db = get_db()
+    set_generation_progress(db, "optimizer_generation", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    brand_kit = (user_doc.get("brandKit") or {}) if payload.useBrandKit else {}
+    set_generation_progress(db, "optimizer_generation", progress_job_id, "loading_brand_kit")
+    brand_kit = resolve_brand_kit(db, uid, payload.brandKitId, user_doc) if payload.useBrandKit else {}
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -2021,6 +2399,8 @@ async def generate_from_optimizer(payload: GenerateFromOptimizerRequest, authori
 
     if not product_name:
         product_name = "the same product as the reference creative"
+
+    set_generation_progress(db, "optimizer_generation", progress_job_id, "building_prompt")
 
     visual_prompt = f"""
 You are the Lead Creative Director at a world-class advertising agency.
@@ -2225,6 +2605,7 @@ Improve it.
     try:
         reference_image_urls = (payload.creative_image_urls or [])[:3]
 
+        set_generation_progress(db, "optimizer_generation", progress_job_id, "generating_creative")
         img_bytes = await asyncio.to_thread(
             lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
@@ -2234,8 +2615,14 @@ Improve it.
         )
     )
 
-        image_url = upload_png_to_firebase_storage(img_bytes, uid)
+        if not admin:
+            ensure_storage_available(db, uid, tier, len(img_bytes))
+        set_generation_progress(db, "optimizer_generation", progress_job_id, "uploading_creative")
+        image_asset = upload_png_to_firebase_storage(img_bytes, uid)
+        register_storage_asset(db, uid, size_bytes=image_asset["fileSizeBytes"], asset_type="image")
+        image_url = image_asset["url"]
 
+        set_generation_progress(db, "optimizer_generation", progress_job_id, "saving_library")
         image_job_id = uuid.uuid4().hex
         try:
             db.collection("image_jobs").document(image_job_id).set({
@@ -2257,6 +2644,10 @@ Improve it.
                 "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
                 "visualPrompt": visual_prompt,
                 "imageUrl": image_url,
+                "storagePath": image_asset.get("storagePath"),
+                "fileSizeBytes": image_asset.get("fileSizeBytes"),
+                "contentType": image_asset.get("contentType"),
+                "storageState": "active",
                 "copy": {
                     "headline": payload.improved_headline,
                     "primary_text": payload.improved_primary_text,
@@ -2373,23 +2764,20 @@ def admin_list_users(
             remaining = int(usage_info.get("remaining") or max(0, cap - used))
             usage_pct = 0 if cap <= 0 else round((used / cap) * 100)
 
-            VIDEO_CAPS = {
-                "early_access": 3,
-                "pro_monthly": 15,
-                "business_monthly": 50,
-            }
-
-            usage_period = get_usage_period(prof)
-            period_key = usage_period["periodKey"]
-
-            video_cap = int(VIDEO_CAPS.get(tier_for_caps) or 0)
-            video_used = int(prof.get("video_used") or 0)
-            video_current_period = prof.get("video_period_key") or prof.get("video_month_key")
-
-            if video_current_period != period_key:
-                video_used = 0
-
-            video_remaining = max(0, video_cap - video_used) if video_cap else 0
+            video_usage_info = peek_resource(
+                db,
+                auth_uid,
+                tier_for_caps,
+                "video_credits",
+                prof,
+            )
+            video_used = int(video_usage_info.get("used") or 0)
+            video_cap = int(video_usage_info.get("cap") or 0)
+            video_remaining = int(
+                video_usage_info.get("remaining")
+                if video_usage_info.get("remaining") is not None
+                else max(0, video_cap - video_used)
+            )
             video_usage_pct = 0 if video_cap <= 0 else round((video_used / video_cap) * 100)
 
             if tier_norm != "all" and user_tier.lower() != tier_norm:
@@ -2587,7 +2975,7 @@ def clear_requested_tier(
 
     return {"ok": True}
 
-# --- Video Usage (My Account) ---
+# --- Video Credit Usage (My Account + Dashboard compatibility) ---
 @app.get("/video/usage")
 def get_video_usage(authorization: str | None = Header(default=None)):
     uid, _email, _claims = require_user(authorization)
@@ -2595,79 +2983,55 @@ def get_video_usage(authorization: str | None = Header(default=None)):
 
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-
     user_doc = ensure_stripe_period_for_user(db, uid, user_doc)
 
     tier, _status = get_tier_and_status(user_doc)
-
-    VIDEO_CAPS = {
-        "early_access": 3,
-        "pro_monthly": 15,
-        "business_monthly": 50,
-    }
-
-    usage_period = get_usage_period(user_doc)
-    period_key = usage_period["periodKey"]
-
-    video_used = int(user_doc.get("video_used", 0) or 0)
-    video_current_period = user_doc.get("video_period_key") or user_doc.get("video_month_key")
-
-    if video_current_period != period_key:
-        video_used = 0
-
-    cap = VIDEO_CAPS.get(tier, 0)
-    remaining = max(0, int(cap) - int(video_used)) if cap else 0
+    usage = peek_resource(db, uid, tier, "video_credits", user_doc)
 
     return {
-        **usage_period,
-        "used": video_used,
-        "cap": cap,
-        "remaining": remaining,
-        "enabled": tier in VIDEO_CAPS,
+        **usage,
+        "enabled": int(usage.get("cap") or 0) > 0,
         "tier": tier,
+        "unit": "video_credits",
     }
+
 
 @app.post("/admin/users/{target_uid}/video/usage/grant")
 def admin_grant_video_credits(
     target_uid: str,
     authorization: str | None = Header(default=None),
-    credits: int = Query(default=1, ge=1, le=10),
+    credits: int = Query(default=1, ge=1, le=25),
 ):
-    uid, _email, claims = require_user(authorization)
+    _uid, _email, claims = require_user(authorization)
     if not is_admin(claims):
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    user_ref = db.collection("users").document(target_uid)
-
-    target_snap = user_ref.get()
-    target_doc = target_snap.to_dict() or {}
-
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
+    usage_ref = db.collection("usage").document(target_uid)
 
     @gc_firestore.transactional
     def _tx(transaction: gc_firestore.Transaction):
-        snap = user_ref.get(transaction=transaction)
-        doc = snap.to_dict() or {}
-
-        used = int(doc.get("video_used") or 0)
-        current_period = doc.get("video_period_key") or doc.get("video_month_key")
+        snap = usage_ref.get(transaction=transaction)
+        data = snap.to_dict() or {}
+        current_period = data.get("periodKey") or data.get("month")
+        used = int(data.get("videoCreditsUsed") or 0)
 
         if current_period != period_key:
             used = 0
 
         new_used = max(0, used - credits)
-
         transaction.set(
-            user_ref,
+            usage_ref,
             {
-                "video_used": new_used,
-                "video_period_key": period_key,
-                "video_period_start": usage_period.get("periodStart"),
-                "video_period_end": usage_period.get("periodEnd"),
-                "video_period_source": usage_period.get("periodSource"),
-                "video_month_key": usage_period.get("month"),
+                "periodKey": period_key,
+                "periodStart": usage_period.get("periodStart"),
+                "periodEnd": usage_period.get("periodEnd"),
+                "periodSource": usage_period.get("periodSource"),
+                "month": usage_period.get("month"),
+                "videoCreditsUsed": new_used,
                 "updatedAt": gc_firestore.SERVER_TIMESTAMP,
             },
             merge=True,
@@ -2676,13 +3040,13 @@ def admin_grant_video_credits(
         return {
             "ok": True,
             "uid": target_uid,
+            "videoCreditsUsed": new_used,
             "video_used": new_used,
             "granted": credits,
             **usage_period,
         }
 
-    tx = db.transaction()
-    return _tx(tx)
+    return _tx(db.transaction())
 
 
 @app.post("/admin/users/{target_uid}/video/usage/reset")
@@ -2690,27 +3054,24 @@ def admin_reset_video_usage(
     target_uid: str,
     authorization: str | None = Header(default=None),
 ):
-    uid, _email, claims = require_user(authorization)
+    _uid, _email, claims = require_user(authorization)
     if not is_admin(claims):
         raise HTTPException(status_code=403, detail="Admin only")
 
     db = get_db()
-    user_ref = db.collection("users").document(target_uid)
-
-    target_snap = user_ref.get()
-    target_doc = target_snap.to_dict() or {}
-
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
+    usage_ref = db.collection("usage").document(target_uid)
 
-    user_ref.set(
+    usage_ref.set(
         {
-            "video_used": 0,
-            "video_period_key": period_key,
-            "video_period_start": usage_period.get("periodStart"),
-            "video_period_end": usage_period.get("periodEnd"),
-            "video_period_source": usage_period.get("periodSource"),
-            "video_month_key": usage_period.get("month"),
+            "periodKey": period_key,
+            "periodStart": usage_period.get("periodStart"),
+            "periodEnd": usage_period.get("periodEnd"),
+            "periodSource": usage_period.get("periodSource"),
+            "month": usage_period.get("month"),
+            "videoCreditsUsed": 0,
             "updatedAt": gc_firestore.SERVER_TIMESTAMP,
         },
         merge=True,
@@ -2719,9 +3080,11 @@ def admin_reset_video_usage(
     return {
         "ok": True,
         "uid": target_uid,
+        "videoCreditsUsed": 0,
         "video_used": 0,
         **usage_period,
     }
+
 
 @app.get("/download-image/{job_id}")
 async def download_image(
@@ -2816,6 +3179,26 @@ async def get_image_job(
 
     data["id"] = snap.id
     return data
+
+@app.delete("/image/jobs/{job_id}")
+def delete_image_job(job_id: str, authorization: str | None = Header(default=None)):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+    ref = db.collection("image_jobs").document(job_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Image job not found.")
+    data = snap.to_dict() or {}
+    if not admin and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    if data.get("storageState") != "deleted":
+        path = data.get("storagePath")
+        if path:
+            delete_firebase_storage_object(path)
+        release_storage_asset(db, data.get("uid") or uid, size_bytes=int(data.get("fileSizeBytes") or 0), asset_type="image")
+    ref.delete()
+    return {"ok": True, "jobId": job_id}
 
 @app.post("/creative/performance/{kind}/{job_id}")
 async def update_creative_performance(
@@ -3101,6 +3484,44 @@ async def winners_profile(
 
 # ---------------- Stripe routes ----------------
 app.include_router(stripe_router)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -82,6 +82,7 @@ export function WorkspaceProvider({ children }) {
 
   const [usage, setUsage] = useState(null);
   const [videoUsage, setVideoUsage] = useState(null);
+  const [storageUsage, setStorageUsage] = useState(null);
   const [recentCreatives, setRecentCreatives] = useState([]);
   const [brandKitStatus, setBrandKitStatus] = useState(getBrandKitStatus(null));
   const [loading, setLoading] = useState(false);
@@ -122,7 +123,7 @@ export function WorkspaceProvider({ children }) {
 
       const token = await user.getIdToken();
 
-      const [usageRes, videoRes, videoJobsRes, imageJobsRes, userSnap] =
+      const [usageRes, videoRes, entitlementsRes, videoJobsRes, imageJobsRes, brandKitsRes, userSnap] =
         await Promise.all([
           fetch(`${apiBase}/usage`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -130,10 +131,14 @@ export function WorkspaceProvider({ children }) {
           fetch(`${apiBase}/video/usage`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
+          fetch(`${apiBase}/me/entitlements`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiBase}/video/jobs?limit=50`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
           fetch(`${apiBase}/image/jobs?limit=50`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${apiBase}/brand-kits`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
           getDoc(doc(db, "users", user.uid)),
@@ -141,14 +146,18 @@ export function WorkspaceProvider({ children }) {
 
       const usageData = usageRes.ok ? await usageRes.json() : null;
       const videoData = videoRes.ok ? await videoRes.json() : null;
+      const entitlementsData = entitlementsRes.ok ? await entitlementsRes.json() : null;
       const videoJobsData = videoJobsRes.ok ? await videoJobsRes.json() : { items: [] };
       const imageJobsData = imageJobsRes.ok ? await imageJobsRes.json() : { items: [] };
+      const brandKitsData = brandKitsRes.ok ? await brandKitsRes.json() : { items: [] };
 
       setUsage(usageData);
       setVideoUsage(videoData);
+      setStorageUsage(entitlementsData?.usage?.storage || null);
 
-      const brandKit = userSnap.data()?.brandKit || null;
-      setBrandKitStatus(getBrandKitStatus(brandKit));
+      const brandKitItems = Array.isArray(brandKitsData.items) ? brandKitsData.items : [];
+      const defaultKit = brandKitItems.find((item) => item.id === brandKitsData.defaultBrandKitId) || brandKitItems[0] || userSnap.data()?.brandKit || null;
+      setBrandKitStatus(getBrandKitStatus(defaultKit));
 
       const videoItems = Array.isArray(videoJobsData.items) ? videoJobsData.items : [];
       const imageItems = Array.isArray(imageJobsData.items) ? imageJobsData.items : [];
@@ -203,6 +212,7 @@ export function WorkspaceProvider({ children }) {
         planLabel,
         usage,
         videoUsage,
+        storageUsage,
         recentCreatives,
         brandKitStatus,
         loading,

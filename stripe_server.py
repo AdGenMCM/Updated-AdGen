@@ -24,10 +24,13 @@ FRONTEND_URL: str = "http://localhost:3000"
 FIREBASE_SA_PATH: Optional[str] = None
 
 PRICE_MAP: Dict[str, str] = {}
+LEGACY_PRICE_MAP: Dict[str, str] = {}
+PRICE_TO_TIER: Dict[str, str] = {}
 
 
 def _load_settings_from_env() -> None:
-    global STRIPE_SECRET_KEY, WEBHOOK_SECRET, FRONTEND_URL, FIREBASE_SA_PATH, PRICE_MAP
+    global STRIPE_SECRET_KEY, WEBHOOK_SECRET, FRONTEND_URL, FIREBASE_SA_PATH
+    global PRICE_MAP, LEGACY_PRICE_MAP, PRICE_TO_TIER
 
     load_dotenv(override=True)
 
@@ -37,6 +40,7 @@ def _load_settings_from_env() -> None:
     FIREBASE_SA_PATH = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
 
     price_map_json = (os.getenv("STRIPE_PRICE_MAP_JSON") or "").strip()
+    legacy_price_map_json = (os.getenv("STRIPE_LEGACY_PRICE_MAP_JSON") or "{}").strip()
 
     if not STRIPE_SECRET_KEY:
         raise RuntimeError("Missing STRIPE_SECRET_KEY")
@@ -50,10 +54,33 @@ def _load_settings_from_env() -> None:
     except Exception:
         raise RuntimeError("STRIPE_PRICE_MAP_JSON must be valid JSON")
 
-    required = {"trial_monthly", "early_access", "starter_monthly", "pro_monthly", "business_monthly"}
+    try:
+        LEGACY_PRICE_MAP = json.loads(legacy_price_map_json)
+    except Exception:
+        raise RuntimeError("STRIPE_LEGACY_PRICE_MAP_JSON must be valid JSON")
+
+    if not isinstance(PRICE_MAP, dict):
+        raise RuntimeError("STRIPE_PRICE_MAP_JSON must be a JSON object")
+
+    if not isinstance(LEGACY_PRICE_MAP, dict):
+        raise RuntimeError("STRIPE_LEGACY_PRICE_MAP_JSON must be a JSON object")
+
+    required = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
     missing = required - set(PRICE_MAP.keys())
     if missing:
         raise RuntimeError(f"STRIPE_PRICE_MAP_JSON missing keys: {sorted(missing)}")
+
+    PRICE_TO_TIER = {
+        str(price_id).strip(): str(tier).strip()
+        for tier, price_id in PRICE_MAP.items()
+        if str(price_id or "").strip() and str(tier or "").strip()
+    }
+
+    for price_id, tier in LEGACY_PRICE_MAP.items():
+        normalized_price_id = str(price_id or "").strip()
+        normalized_tier = str(tier or "").strip()
+        if normalized_price_id and normalized_tier:
+            PRICE_TO_TIER[normalized_price_id] = normalized_tier
 
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -77,10 +104,7 @@ class PortalPayload(BaseModel):
 def price_id_to_tier(price_id: Optional[str]) -> Optional[str]:
     if not price_id:
         return None
-    for tier, pid in PRICE_MAP.items():
-        if pid == price_id:
-            return tier
-    return None
+    return PRICE_TO_TIER.get(str(price_id).strip())
 
 
 def extract_subscription_period(subscription: Dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
@@ -133,8 +157,9 @@ def create_checkout_session(body: CheckoutPayload):
       - users/{uid}.stripe.customerId + status='pending' + requestedTier
     """
     try:
-        if body.tier not in PRICE_MAP:
-            raise HTTPException(status_code=400, detail="Invalid tier")
+        allowed_checkout_tiers = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
+        if body.tier not in allowed_checkout_tiers or body.tier not in PRICE_MAP:
+            raise HTTPException(status_code=400, detail="Invalid or unavailable tier")
 
         price_id = PRICE_MAP[body.tier]
         db = get_db()
@@ -410,6 +435,11 @@ def sync_subscription(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+
+
+
+
 
 
 

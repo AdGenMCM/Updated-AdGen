@@ -6,6 +6,8 @@ import { auth } from "../firebaseConfig";
 import { useWinnersProfile } from "../hooks/useWinnersProfile";
 import StepSection from "../components/ui/StepSection";
 import InfoTip from "../components/ui/InfoTip";
+import BrandKitSelector from "../components/BrandKitSelector";
+import GenerationProgress from "../components/GenerationProgress";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -59,15 +61,7 @@ function estimateSpeechSeconds(text) {
   return Math.round(((words / 2.5) + 0.6) * 10) / 10;
 }
 
-const VIDEO_LOADING_MESSAGES = [
-  "Analyzing your video request...",
-  "Building video direction...",
-  "Applying your Brand Kit if selected...",
-  "Applying Winner Profile if selected...",
-  "Preparing motion and pacing...",
-  "Generating your video...",
-  "Adding final polish...",
-];
+
 
 // --- helpers for winners guidance ---
 
@@ -87,7 +81,9 @@ export default function VideoAds() {
 
   // ========== Shared video settings ==========
   const [duration, setDuration] = useState(6);
-  const [videoLoadingMessage, setVideoLoadingMessage] = useState(VIDEO_LOADING_MESSAGES[0]);
+  const [progressStage, setProgressStage] = useState("queued");
+  const [progressMessage, setProgressMessage] = useState("Preparing your video request.");
+  const [progressPercent, setProgressPercent] = useState(5);
 
   // Combined dropdown state
   const [formatId, setFormatId] = useState(FORMAT_OPTIONS[0].id);
@@ -123,12 +119,62 @@ export default function VideoAds() {
   // ========== Winners guidance (Shared Hook) ==========
   const [useWinners, setUseWinners] = useState(false);
   const [useBrandKit, setUseBrandKit] = useState(true);
+  const [brandKitId, setBrandKitId] = useState(null);
+  const [brandKit, setBrandKit] = useState(null);
+  const lastVideoBrandDefaultsRef = useRef({});
 
   const canUseWinners = useMemo(() => {
     if (me.isAdmin) return true;
     const t = String(me.tier || "").toLowerCase();
     return t === "pro_monthly" || t === "business_monthly";
   }, [me]);
+
+  const videoBrandDefaults = useMemo(() => {
+    if (!brandKit) return {};
+
+    const platformFormatMap = {
+      meta: "meta_4x5",
+      tiktok: "tiktok_9x16_720",
+      google: "yt_16x9_720",
+      linkedin: "meta_1x1",
+      pinterest: "tiktok_9x16_720",
+    };
+
+    const sceneStyleMap = {
+      Premium: "studio product",
+      Minimal: "minimal abstract",
+      Bold: "studio product",
+      Lifestyle: "lifestyle",
+      UGC: "ugc",
+      Luxury: "cinematic",
+      "Studio Product": "studio product",
+      Photorealistic: "studio product",
+      "Dark & Cinematic": "cinematic",
+      "Bright & Clean": "studio product",
+    };
+
+    return {
+      audience: brandKit.targetAudience || "",
+      tone: brandKit.voice || brandKit.brandPersonality || "",
+      offer: brandKit.offerStyle || "",
+      callToAction: brandKit.preferredCta || "",
+      formatId: platformFormatMap[brandKit.preferredPlatform] || "",
+      sceneStyle: sceneStyleMap[brandKit.imageStyle] || "",
+    };
+  }, [brandKit]);
+
+  useEffect(() => {
+    const nextDefaults = useBrandKit && brandKit ? videoBrandDefaults : {};
+
+    setAudience(nextDefaults.audience || "");
+    setTone(nextDefaults.tone || "confident");
+    setOffer(nextDefaults.offer || "");
+    setCallToAction(nextDefaults.callToAction || "Tap to learn more.");
+    setFormatId(nextDefaults.formatId || FORMAT_OPTIONS[0].id);
+    setSceneStyle(nextDefaults.sceneStyle || "studio product");
+
+    lastVideoBrandDefaultsRef.current = nextDefaults;
+  }, [useBrandKit, brandKit, videoBrandDefaults]);
 
   const { winnersProfile, winnerGuidance, winnersLoading } = useWinnersProfile({
     kind: "video",
@@ -151,7 +197,13 @@ export default function VideoAds() {
   const canUseVideoAds = useMemo(() => {
     if (me.isAdmin) return true;
     const t = String(me.tier || "").toLowerCase();
-    return t === "early_access" || t === "pro_monthly" || t === "business_monthly";
+    return [
+      "trial_monthly",
+      "starter_monthly",
+      "pro_monthly",
+      "business_monthly",
+      "early_access",
+    ].includes(t);
   }, [me]);
 
   // ✅ winners guidance should be Pro/Business only (admin allowed)
@@ -187,6 +239,9 @@ export default function VideoAds() {
     setStatus(null);
     setFinalVideoUrl(null);
     setError(null);
+    setProgressStage("queued");
+    setProgressMessage("Preparing your video request.");
+    setProgressPercent(5);
   };
 
   const getIdToken = async () => {
@@ -194,21 +249,7 @@ export default function VideoAds() {
     if (!user) throw new Error("You must be logged in.");
     return await user.getIdToken(true);
   };
-  useEffect(() => {
-    if (!isGenerating) {
-      setVideoLoadingMessage(VIDEO_LOADING_MESSAGES[0]);
-      return;
-    }
 
-    let index = 0;
-
-    const interval = setInterval(() => {
-      index = (index + 1) % VIDEO_LOADING_MESSAGES.length;
-      setVideoLoadingMessage(VIDEO_LOADING_MESSAGES[index]);
-    }, 2400);
-
-    return () => clearInterval(interval);
-  }, [isGenerating]);
 
   // Fetch /me
   useEffect(() => {
@@ -373,6 +414,7 @@ export default function VideoAds() {
 
       const payload = {
         useBrandKit,
+        brandKitId,
         promptImageUrl,
         promptText,
         duration,
@@ -406,6 +448,9 @@ export default function VideoAds() {
 
       setJobId(data.jobId);
       setStatus(data.status || "running");
+      setProgressStage(data.progressStage || "waiting_for_runway");
+      setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+      setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
       setError(e?.message || "Failed to start video job.");
       throw e;
@@ -426,6 +471,7 @@ export default function VideoAds() {
 
       const payload = {
         useBrandKit,
+        brandKitId,
         productName,
         description,
         offer: offer || null,
@@ -475,6 +521,9 @@ export default function VideoAds() {
 
       setJobId(data.jobId);
       setStatus(data.status || "running");
+      setProgressStage(data.progressStage || "waiting_for_runway");
+      setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+      setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
       setError(e?.message || "Failed to start video job.");
       throw e;
@@ -503,6 +552,9 @@ export default function VideoAds() {
         if (cancelled) return;
 
         setStatus(data.status);
+        setProgressStage(data.progressStage || (data.status === "succeeded" ? "succeeded" : "waiting_for_runway"));
+        setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+        setProgressPercent(data.progressPercent ?? (data.status === "succeeded" ? 100 : 45));
 
         if (data.status === "succeeded" && data.finalVideoUrl) {
           setFinalVideoUrl(data.finalVideoUrl);
@@ -556,8 +608,8 @@ export default function VideoAds() {
         </div>
 
         <div className="box">
-          <h2>🔒 Early Access, Pro, & Business only</h2>
-          <p>Upgrade to unlock Video Ads.</p>
+          <h2>🔒 Video Ads require an active plan</h2>
+          <p>Choose a paid plan to unlock AI video generation.</p>
           <button className="primary" onClick={() => navigate("/account")}>Upgrade</button>
           {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
         </div>
@@ -566,16 +618,14 @@ export default function VideoAds() {
   }
 return (
   <div className="videoAds">
-    <div
-      className={`loading-overlay ${isGenerating ? "show" : ""}`}
-      role="status"
-      aria-live="polite"
-    >
-      <div className="loading-overlay-content">
-        <div className="adgen-spinner" />
-        <div className="loading-text">{videoLoadingMessage}</div>
-      </div>
-    </div>
+    <GenerationProgress
+      open={isGenerating}
+      stage={progressStage}
+      message={progressMessage}
+      percent={progressPercent}
+      voiceoverEnabled={voiceEnabled && !!(voiceoverScript || "").trim()}
+      failed={status === "failed"}
+    />
 
     <div className="videoAdsHeader videoAdsHero">
       <h1>Generate Video</h1>
@@ -584,6 +634,13 @@ return (
         winning creative insights, and optional AI voiceover.
       </p>
     </div>
+
+    <BrandKitSelector
+      value={brandKitId}
+      onChange={setBrandKitId}
+      onKitChange={setBrandKit}
+      disabled={isGenerating || !useBrandKit}
+    />
 
     <div className="videoAdsLayout">
       <main className="videoAdsMain">
@@ -664,8 +721,8 @@ return (
                 onChange={(e) => setDuration(Number(e.target.value))}
                 disabled={isGenerating}
               >
-                <option value={6}>6 seconds</option>
-                <option value={10}>10 seconds</option>
+                <option value={6}>6 seconds (1 Credit)</option>
+                <option value={10}>10 second (2 Credits)</option>
               </select>
             </div>
 
@@ -687,6 +744,7 @@ return (
               </select>
             </div>
           </div>
+
 
           <div className="videoEnhancementGrid">
             <div className="videoEnhancementCard">

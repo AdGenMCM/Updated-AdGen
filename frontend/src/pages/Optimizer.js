@@ -8,24 +8,12 @@ import StepSection from "../components/ui/StepSection";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
+import BrandKitSelector from "../components/BrandKitSelector";
+import GenerationProgress from "../components/GenerationProgress";
 
-const optimizeMessages = [
-  "Reviewing campaign context...",
-  "Checking performance metrics...",
-  "Finding creative weaknesses...",
-  "Applying Brand Kit guidance if selected...",
-  "Writing improved copy...",
-  "Building optimized image direction...",
-];
 
-const generateMessages = [
-  "Reading optimizer recommendations...",
-  "Applying improved headline and copy...",
-  "Building the image prompt...",
-  "Applying Brand Kit direction if selected...",
-  "Generating updated creative...",
-  "Saving optimized creative...",
-];
+
+
 
 export default function Optimizer() {
   const navigate = useNavigate();
@@ -86,6 +74,7 @@ export default function Optimizer() {
   const [err, setErr] = useState(null);
   const [result, setResult] = useState(null);
   const [useBrandKit, setUseBrandKit] = useState(true);
+  const [brandKitId, setBrandKitId] = useState(null);
 
   // Regenerate state
   const [regenSize, setRegenSize] = useState("1024x1024");
@@ -93,22 +82,14 @@ export default function Optimizer() {
   const [regenErr, setRegenErr] = useState(null);
   const [regenResult, setRegenResult] = useState(null); // { copy, imageUrl, usage }
 
-const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+const [progress, setProgress] = useState({
+  type: "optimizer",
+  stage: "queued",
+  message: "Preparing campaign analysis.",
+  percent: 5,
+  failed: false,
+});
 
-useEffect(() => {
-  if (!loading && !regenLoading) {
-    setLoadingMessageIndex(0);
-    return;
-  }
-
-  const activeMessages = loading ? optimizeMessages : generateMessages;
-
-  const interval = setInterval(() => {
-    setLoadingMessageIndex((prev) => (prev + 1) % activeMessages.length);
-  }, 1400);
-
-  return () => clearInterval(interval);
-}, [loading, regenLoading]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -277,6 +258,46 @@ useEffect(() => {
     }
   };
 
+  const pollProgressJob = async ({ jobId, token, statusPath, type }) => {
+    for (;;) {
+      const res = await fetch(`${apiBase}${statusPath}/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(
+          safeDetailMessage(data?.detail) ||
+            `Could not load progress (${res.status})`
+        );
+      }
+
+      setProgress({
+        type,
+        stage: data.progressStage || "queued",
+        message: data.progressMessage || "Working on your request.",
+        percent: data.progressPercent ?? 5,
+        failed: data.status === "failed",
+      });
+
+      if (data.status === "succeeded") {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        return data.result;
+      }
+
+      if (data.status === "failed") {
+        const error = new Error(
+          safeDetailMessage(data.error) || "The request failed."
+        );
+        error.detail = data.error;
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  };
+
   const handleOptimize = async (e) => {
     e?.preventDefault?.();
 
@@ -286,6 +307,13 @@ useEffect(() => {
     }
 
     setLoading(true);
+    setProgress({
+      type: "optimizer",
+      stage: "queued",
+      message: "Preparing campaign analysis.",
+      percent: 5,
+      failed: false,
+    });
     setErr(null);
     setResult(null);
     setRegenResult(null);
@@ -302,6 +330,7 @@ useEffect(() => {
 
       const payload = {
         useBrandKit,
+        brandKitId,
         product_name: form.product_name,
         description: form.description,
         audience: form.audience,
@@ -343,7 +372,7 @@ useEffect(() => {
         },
       };
 
-      const res = await fetch(`${apiBase}/optimize-ad`, {
+      const res = await fetch(`${apiBase}/optimizer/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -360,9 +389,21 @@ useEffect(() => {
         return;
       }
 
-      setResult(data);
-    } catch {
-      setErr("Something went wrong. Please try again.");
+      if (!data?.jobId) {
+        setErr("No optimization job was returned from the server.");
+        return;
+      }
+
+      const optimizedResult = await pollProgressJob({
+        jobId: data.jobId,
+        token,
+        statusPath: "/optimizer/status",
+        type: "optimizer",
+      });
+
+      setResult(optimizedResult);
+    } catch (error) {
+      setErr(error?.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -379,6 +420,13 @@ useEffect(() => {
     }
 
     setRegenLoading(true);
+    setProgress({
+      type: "optimizerGeneration",
+      stage: "queued",
+      message: "Preparing optimized creative.",
+      percent: 5,
+      failed: false,
+    });
     setRegenErr(null);
     setRegenResult(null);
 
@@ -394,6 +442,7 @@ useEffect(() => {
       const payload = {
         // Brand Kit
         useBrandKit,
+        brandKitId,
 
         // Campaign context
         companyName: form.companyName,
@@ -416,7 +465,7 @@ useEffect(() => {
         creative_image_urls: uploadedUrls.length ? uploadedUrls : null,
       };
 
-      const res = await fetch(`${apiBase}/generate-from-optimizer`, {
+      const res = await fetch(`${apiBase}/optimizer/generate/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -440,9 +489,24 @@ useEffect(() => {
         return;
       }
 
-      setRegenResult(data);
-    } catch {
-      setRegenErr("Something went wrong generating a new creative. Please try again.");
+      if (!data?.jobId) {
+        setRegenErr("No generation job was returned from the server.");
+        return;
+      }
+
+      const generatedResult = await pollProgressJob({
+        jobId: data.jobId,
+        token,
+        statusPath: "/optimizer/generate/status",
+        type: "optimizerGeneration",
+      });
+
+      setRegenResult(generatedResult);
+    } catch (error) {
+      setRegenErr(
+        error?.message ||
+          "Something went wrong generating a new creative. Please try again."
+      );
     } finally {
       setRegenLoading(false);
     }
@@ -491,37 +555,14 @@ useEffect(() => {
 
   return (
   <div className="opt-page">
-    {(loading || regenLoading) && (
-      <div className="opt-loadingOverlay">
-        <div className="opt-loadingCard">
-          <div className="opt-spinner" />
-
-          <p className="opt-loadingEyebrow">
-            {loading ? "AI OPTIMIZATION" : "CREATIVE GENERATION"}
-          </p>
-
-          <h3>{loading ? "Analyzing Campaign" : "Generating Updated Creative"}</h3>
-
-          <p className="opt-loadingMessage">
-            {(loading ? optimizeMessages : generateMessages)[loadingMessageIndex]}
-          </p>
-
-          <div className="opt-loadingSteps">
-            {(loading ? optimizeMessages : generateMessages).map((msg, index) => (
-              <div
-                key={msg}
-                className={`opt-loadingStep ${
-                  index <= loadingMessageIndex ? "active" : ""
-                }`}
-              >
-                <span>{index < loadingMessageIndex ? "✓" : index + 1}</span>
-                <p>{msg}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )}
+    <GenerationProgress
+      open={loading || regenLoading}
+      type={progress.type}
+      stage={progress.stage}
+      message={progress.message}
+      percent={progress.percent}
+      failed={progress.failed}
+    />
 
     <div className="opt-shell">
       <main className="opt-main">
@@ -530,6 +571,14 @@ useEffect(() => {
           title="Optimize Ad"
           description="Analyze an existing ad, identify weak points, and generate stronger copy, creative direction, and performance-focused recommendations."
         />
+
+        {auth.currentUser && canUseOptimizer && (
+          <BrandKitSelector
+            value={brandKitId}
+            onChange={setBrandKitId}
+            disabled={loading || regenLoading || !useBrandKit}
+          />
+        )}
 
         {!auth.currentUser ? (
           <Card className="opt-authCard">
@@ -738,6 +787,7 @@ useEffect(() => {
               }
               description="Choose which intelligence layers AdGen should use during optimization."
             >
+
               <div className="opt-enhancementGrid">
                 <div className="opt-enhancementCard">
                   <label className="opt-toggle">
@@ -935,6 +985,7 @@ useEffect(() => {
   </div>
 );
 }
+
 
 
 

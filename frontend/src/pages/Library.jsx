@@ -27,6 +27,14 @@ function formatDate(ts) {
   });
 }
 
+
+function formatBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (!n) return "—";
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function keyFor(kind, id) {
   return `${kind}-${id}`;
 }
@@ -160,6 +168,7 @@ export default function Library() {
       prompt: v.directorPrompt || v.userPrompt || "",
       performance: v.performance || null,
       error: v.error || null,
+      fileSizeBytes: v.fileSizeBytes || 0,
     }));
 
     const mappedImages = images.map((i) => ({
@@ -175,6 +184,7 @@ export default function Library() {
       copy: i.copy || null,
       performance: i.performance || null,
       error: i.error || null,
+      fileSizeBytes: i.fileSizeBytes || 0,
     }));
 
     let out = [...mappedVideos, ...mappedImages].filter((item) => item.status === "succeeded");
@@ -368,6 +378,19 @@ export default function Library() {
     }
   };
 
+
+  const deleteCreative = async (item) => {
+    if (!window.confirm(`Delete this ${item.kind} from your Library?`)) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/${item.kind === "image" ? "image" : "video"}/jobs/${item.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data?.detail || "Delete failed.");
+      if (item.kind === "image") setImages((prev) => prev.filter((x) => x.id !== item.id));
+      else setVideos((prev) => prev.filter((x) => x.id !== item.id));
+    } catch (e) { alert(e?.message || "Delete failed."); }
+  };
+
   const togglePerf = (key) => {
     setExpandedPerf((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -534,7 +557,8 @@ export default function Library() {
                 </div>
 
                 <h3>{item.title}</h3>
-                <p className="lib-date">{formatDate(item.createdAt)}</p>
+                <p className="lib-date">{formatDate(item.createdAt)} · {formatBytes(item.fileSizeBytes)}</p>
+                <button type="button" className="lib-perfToggle" onClick={() => deleteCreative(item)}>Delete Creative</button>
 
                 {item.error && <div className="lib-errorSmall">{String(item.error).slice(0, 140)}</div>}
 

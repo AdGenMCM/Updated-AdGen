@@ -32,6 +32,7 @@ class OptimizeAdRequest(BaseModel):
     notes: Optional[str] = None
 
     useBrandKit: bool = True
+    brandKitId: Optional[str] = None
 
     # Extra optimization inputs
     flight_start: Optional[str] = None  # "YYYY-MM-DD"
@@ -64,6 +65,7 @@ class OptimizeAdResponse(BaseModel):
     improved_cta: str
     improved_image_prompt: str
     confidence: Confidence = "medium"
+
 
 
 

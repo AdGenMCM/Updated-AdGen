@@ -3,13 +3,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
 import { auth } from "../firebaseConfig";
-import { onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { useWinnersProfile } from "../hooks/useWinnersProfile";
 import InfoTip from "../components/ui/InfoTip";
 import StepSection from "../components/ui/StepSection";
+import BrandKitSelector from "../components/BrandKitSelector";
+import GenerationProgress from "../components/GenerationProgress";
 
-const db = getFirestore();
 
 const INITIAL_FORM = {
   companyName: "",
@@ -49,16 +48,7 @@ const STYLE_MAP = {
 };
 
 const MAX_REFERENCE_IMAGES = 3;
-const LOADING_MESSAGES = [
-  "Analyzing your product...",
-  "Understanding your audience...",
-  "Applying your Brand Kit if selected...",
-  "Applying Winner Profile if selected...",
-  "Building high-converting copy...",
-  "Designing your creative...",
-  "Rendering your advertisement...",
-  "Putting on the finishing touches..."
-];
+
 
 function AdGenerator() {
   const navigate = useNavigate();
@@ -66,10 +56,10 @@ function AdGenerator() {
 
   const [form, setForm] = useState(INITIAL_FORM);
   const [useBrandKit, setUseBrandKit] = useState(true);
+  const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
   const [brandKitLoading, setBrandKitLoading] = useState(true);
   const [brandKitAppliedFields, setBrandKitAppliedFields] = useState({});
-  const [touchedFields, setTouchedFields] = useState({});
   const [useWinners, setUseWinners] = useState(false);
   const [referenceImages, setReferenceImages] = useState([]);
   const [referenceImageMode, setReferenceImageMode] = useState("product_reference");
@@ -78,49 +68,18 @@ function AdGenerator() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uiError, setUiError] = useState(null);
-  const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
+  const [progress, setProgress] = useState({
+    stage: "queued",
+    message: "Preparing your creative request.",
+    percent: 5,
+    failed: false,
+  });
+  const brandKitAppliedFieldsRef = useRef({});
 
   const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
   const hasReferenceImages = referenceImages.length > 0;
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setBrandKit(null);
-        setBrandKitLoading(false);
-        return;
-      }
 
-      try {
-        setBrandKitLoading(true);
-        const snap = await getDoc(doc(db, "users", user.uid));
-        setBrandKit(snap.data()?.brandKit || null);
-      } catch (err) {
-        console.error("Failed to load Brand Kit:", err);
-        setBrandKit(null);
-      } finally {
-        setBrandKitLoading(false);
-      }
-    });
-
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-  if (!loading) {
-    setLoadingMessage(LOADING_MESSAGES[0]);
-    return;
-  }
-
-  let index = 0;
-
-  const interval = setInterval(() => {
-    index = (index + 1) % LOADING_MESSAGES.length;
-    setLoadingMessage(LOADING_MESSAGES[index]);
-  }, 2200);
-
-  return () => clearInterval(interval);
-}, [loading]);
 
   const brandKitDefaults = useMemo(() => {
     if (!brandKit) return {};
@@ -136,6 +95,7 @@ function AdGenerator() {
       : "";
 
     return {
+      companyName: brandKit.brandName || "",
       audience: brandKit.targetAudience || "",
       tone: brandKit.voice || brandKit.brandPersonality || "",
       platform,
@@ -146,39 +106,60 @@ function AdGenerator() {
   }, [brandKit]);
 
   useEffect(() => {
-    if (!useBrandKit || !brandKit) return;
+    const controlledFields = [
+      "companyName",
+      "audience",
+      "tone",
+      "platform",
+      "imageSize",
+      "offer",
+      "stylePreset",
+    ];
 
-    setForm((prev) => {
-      const next = { ...prev };
-      const applied = {};
+    setForm((previous) => {
+      const next = { ...previous };
 
-      Object.entries(brandKitDefaults).forEach(([key, value]) => {
-        if (!value || touchedFields[key]) return;
-        if (!prev[key] || prev[key] === INITIAL_FORM[key]) {
-          next[key] = value;
-          applied[key] = true;
-        }
+      controlledFields.forEach((key) => {
+        const selectedBrandValue = brandKitDefaults[key];
+
+        next[key] =
+          useBrandKit && brandKit && selectedBrandValue !== undefined && selectedBrandValue !== null && selectedBrandValue !== ""
+            ? selectedBrandValue
+            : INITIAL_FORM[key];
       });
-
-      if (Object.keys(applied).length) {
-        setBrandKitAppliedFields((old) => ({ ...old, ...applied }));
-      }
 
       return next;
     });
-  }, [useBrandKit, brandKit, brandKitDefaults, touchedFields]);
 
+    const applied = {};
+
+    if (useBrandKit && brandKit) {
+      controlledFields.forEach((key) => {
+        const value = brandKitDefaults[key];
+        if (value !== undefined && value !== null && value !== "") {
+          applied[key] = true;
+        }
+      });
+    }
+
+    brandKitAppliedFieldsRef.current = applied;
+    setBrandKitAppliedFields(applied);
+  }, [useBrandKit, brandKit, brandKitDefaults]);
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setTouchedFields((prev) => ({ ...prev, [name]: true }));
+    delete brandKitAppliedFieldsRef.current[name];
+
     setBrandKitAppliedFields((prev) => {
       const next = { ...prev };
       delete next[name];
       return next;
     });
 
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const safeDetailMessage = (detail) => {
@@ -287,9 +268,55 @@ function AdGenerator() {
     };
   }, [referenceImages]);
 
+  const pollImageJob = async (jobId, token) => {
+    for (;;) {
+      const statusRes = await fetch(`${apiBase}/image/status/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const statusData = await statusRes.json().catch(() => null);
+
+      if (!statusRes.ok) {
+        throw new Error(
+          safeDetailMessage(statusData?.detail) ||
+            `Could not load generation status (${statusRes.status})`
+        );
+      }
+
+      setProgress({
+        stage: statusData.progressStage || "queued",
+        message: statusData.progressMessage || "Creating your ad.",
+        percent: statusData.progressPercent ?? 5,
+        failed: statusData.status === "failed",
+      });
+
+      if (statusData.status === "succeeded") {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        return statusData.result;
+      }
+
+      if (statusData.status === "failed") {
+        const detail = statusData.error;
+        const error = new Error(
+          safeDetailMessage(detail) || "Creative generation failed."
+        );
+        error.detail = detail;
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setProgress({
+      stage: "queued",
+      message: "Preparing your creative request.",
+      percent: 5,
+      failed: false,
+    });
     setResult(null);
     setUiError(null);
 
@@ -315,6 +342,7 @@ function AdGenerator() {
       const payload = {
         ...form,
         useBrandKit,
+        brandKitId,
         campaignObjective: form.campaignObjective,
         referenceImageUrls: referenceImages.map((img) => img.url).filter(Boolean),
         referenceImageMode,
@@ -346,7 +374,7 @@ function AdGenerator() {
         }
       }
 
-      const response = await fetch(`${apiBase}/generate-ad`, {
+      const response = await fetch(`${apiBase}/image/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -400,12 +428,14 @@ function AdGenerator() {
         return;
       }
 
-      if (!data) {
-        alert("No data returned from server.");
+      if (!data?.jobId) {
+        alert("No generation job was returned from server.");
         return;
       }
 
-      if (!data.imageUrl) {
+      data = await pollImageJob(data.jobId, token);
+
+      if (!data?.imageUrl) {
         alert("Ad copy generated, but no image URL was returned.");
       }
 
@@ -464,6 +494,16 @@ function AdGenerator() {
               </p>
             </div>
           </div>
+
+          <BrandKitSelector
+            value={brandKitId}
+            onChange={setBrandKitId}
+            onKitChange={(selectedKit) => {
+              setBrandKit(selectedKit);
+              setBrandKitLoading(false);
+            }}
+            disabled={loading || !useBrandKit}
+          />
 
           <form className="adgen-form" onSubmit={handleSubmit}>
             <StepSection
@@ -612,6 +652,7 @@ function AdGenerator() {
               description="Apply your Brand Kit and upload optional reference images."
             >
 
+
               <div className="enhancement-grid">
                 <div className="option-card enhancement-card">
                   <label className="option-toggle">
@@ -751,23 +792,24 @@ function AdGenerator() {
         </aside>
       </div>
 
-      <div
-        className={`loading-overlay ${loading ? "show" : ""}`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className="loading-overlay-content">
-          <div className="adgen-spinner" />
-          <div className="loading-text">
-            {loadingMessage}
-          </div>
-        </div>
-      </div>
+      <GenerationProgress
+        open={loading}
+        type="image"
+        stage={progress.stage}
+        message={progress.message}
+        percent={progress.percent}
+        failed={progress.failed}
+      />
     </div>
   );
 }
 
 export default AdGenerator;
+
+
+
+
+
 
 
 
