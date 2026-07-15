@@ -74,6 +74,7 @@ export default function Library() {
   const [perfSaving, setPerfSaving] = useState({});
   const [perfNotice, setPerfNotice] = useState({});
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
+  const [visibleCount, setVisibleCount] = useState(2);
  
   const canTrackPerformance = useMemo(() => {
   if (me.isAdmin) return true;
@@ -152,6 +153,16 @@ export default function Library() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [
+    filter,
+    sortBy,
+    onlyWithPerf,
+    onlySuccessful,
+    search,
+  ]);
 
   const combined = useMemo(() => {
     const mappedVideos = videos.map((v) => ({
@@ -506,7 +517,7 @@ export default function Library() {
       )}
 
       <div className="lib-grid">
-        {combined.map((item) => {
+        {combined.slice(0, visibleCount).map((item) => {
           const k = keyFor(item.kind, item.id);
           const d = perfDrafts[k] || {};
           const saving = !!perfSaving[k];
@@ -674,6 +685,20 @@ export default function Library() {
           );
         })}
       </div>
+      {visibleCount < combined.length && (
+        <div className="lib-loadMore">
+          <Button
+            type="button"
+            onClick={() =>
+              setVisibleCount((count) =>
+                Math.min(count + 12, combined.length)
+              )
+            }
+          >
+            Load More Creatives
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

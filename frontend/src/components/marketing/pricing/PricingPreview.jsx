@@ -10,35 +10,36 @@ import TiltCard from "../../motion/TiltCard";
 const plans = [
   {
     name: "Starter",
-    price: "$24.99",
-    text: "For solo creators testing and producing ad creative.",
+    price: "$34.99",
+    text:
+      "For creators and small businesses producing consistent creative content.",
     features: [
-      "25 image generations",
-      "Creative Studio",
-      "Creative Library",
+      "40 image generations",
+      "6 video credits",
+      "Brand Kit",
     ],
   },
   {
     name: "Pro",
-    price: "$49.99",
+    price: "$79.99",
     text:
-      "For marketers who want more creative volume and optimization.",
+      "For growing brands creating and optimizing campaigns every week.",
     features: [
-      "60 image generations",
-      "Creative Optimizer",
-      "Performance Insights",
+      "100 image generations",
+      "15 video credits",
+      "30 Optimizer runs",
     ],
     featured: true,
   },
   {
     name: "Business",
-    price: "$124.99",
+    price: "$199.99",
     text:
-      "For teams producing more creative across image and video formats.",
+      "For teams managing high-volume creative production across campaigns.",
     features: [
-      "175 image generations",
-      "Video Ads",
-      "Higher monthly limits",
+      "300 image generations",
+      "50 video credits",
+      "100 Optimizer runs",
     ],
   },
 ];

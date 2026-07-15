@@ -424,7 +424,7 @@ export default function Platform() {
       <div className="platform-product-story">
         {sections.map((section, index) => (
           <React.Fragment key={section.title}>
-            <Reveal>
+            <Reveal delay={100}>
               <section
               className={[
                 "platform-showcase",
@@ -517,13 +517,13 @@ export default function Platform() {
             </Reveal>
 
             {section.number === "02" && (
-              <Reveal>
+              <Reveal delay={100}>
                 <GeneratedImageExamples />
               </Reveal>
             )}
 
             {section.number === "03" && (
-              <Reveal>
+              <Reveal delay={100}>
                 <GeneratedVideoExample />
               </Reveal>
             )}
@@ -533,7 +533,7 @@ export default function Platform() {
 
       <section className="platform-final">
         <div className="platform-container platform-final-inner">
-          <Reveal>
+          <Reveal delay={100}>
             <div className="platform-final-content">
               <span className="platform-pill">
                 Ready to build better ads?

@@ -4,7 +4,6 @@
   animation-iteration-count: infinite;
   animation-direction: alternate;
   animation-delay: var(--float-delay);
-  will-change: transform;
 }
 
 .adgen-float-sm {

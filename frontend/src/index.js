@@ -5,7 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./AuthProvider";
 
-//New UI Styles
+// New UI Styles
 import "./styles/variables.css";
 import "./styles/theme.css";
 import "./styles/design-system.css";
@@ -13,15 +13,16 @@ import "./styles/layout.css";
 import "./styles/animations.css";
 import "./styles/utilities.css";
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+const root = ReactDOM.createRoot(
+  document.getElementById("root")
+);
+
 root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>
+  <BrowserRouter>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </BrowserRouter>
 );
 
 

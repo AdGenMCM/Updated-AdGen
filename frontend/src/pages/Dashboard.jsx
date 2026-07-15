@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import "./Dashboard.css";
 import SectionTitle from "../components/ui/SectionTitle";
 import StatCard from "../components/ui/StatCard";
@@ -59,20 +58,12 @@ export default function Dashboard() {
     storageUsage,
     recentCreatives,
     brandKitStatus,
-    refreshWorkspace,
   } = useWorkspace() || {};
 
   const imageUsed = usage?.used ?? 0;
   const imageCap = usage?.cap ?? 0;
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
-
-  useEffect(() => {
-    refreshWorkspace?.();
-    // Refresh once whenever the Dashboard mounts so usage, storage,
-    // recent creatives, and Brand Kit data are current.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const missingBrandItems = brandKitStatus?.missing || [];
 
@@ -222,23 +213,34 @@ export default function Dashboard() {
                     rel="noreferrer"
                   >
                     <div className="dashboard-recent-thumb">
-                    {item.thumb ? (
-                        item.kind === "video" ? (
-                        <video
-                            src={item.thumb}
+                      {item.kind === "video" ? (
+                        item.url ? (
+                          <video
+                            src={`${item.url}#t=0.1`}
                             muted
                             playsInline
-                            preload="metadata"
-                        />
+                            preload="auto"
+                            aria-label={item.title}
+                            onLoadedMetadata={(event) => {
+                              try {
+                                event.currentTarget.currentTime = 0.1;
+                              } catch {
+                                // The media fragment above remains the fallback.
+                              }
+                            }}
+                          />
                         ) : (
-                        <img
-                            src={item.thumb}
-                            alt={item.title}
-                        />
+                          <span>Video</span>
                         )
-                    ) : (
-                        <span>{item.kind === "video" ? "Video" : "Image"}</span>
-                    )}
+                      ) : item.thumb ? (
+                        <img
+                          src={item.thumb}
+                          alt={item.title}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span>Image</span>
+                      )}
                     </div>
                     <strong>{item.title}</strong>
                     <span>{item.kind}</span>

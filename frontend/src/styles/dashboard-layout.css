@@ -29,9 +29,9 @@
   overflow: hidden;
   padding: 18px;
   border-right: 1px solid var(--ag-border);
-  background: rgba(7, 11, 20, 0.86);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  background: #070b14;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .dash-sidebar-head {
@@ -362,9 +362,9 @@
   gap: 18px;
   padding: 14px 24px;
   border-bottom: 1px solid var(--ag-border);
-  background: rgba(7, 11, 20, 0.78);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #070b14;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .dash-topbar-left {

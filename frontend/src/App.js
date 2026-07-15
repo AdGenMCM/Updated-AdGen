@@ -16,6 +16,7 @@ import BrandKit from "./pages/BrandKit";
 import Dashboard from "./pages/Dashboard";
 import CreativeStudio from "./pages/CreativeStudio";
 import DesignLab from "./pages/DesignLab";
+import ScrollToTop from "./components/ScrollToTop";
 
 // NEW: Public pages
 import About from "./pages/About";
@@ -74,6 +75,7 @@ function ConditionalNavbar() {
 export default function App() {
   return (
     <>
+    <ScrollToTop />
     <ConditionalNavbar />
     <div className="container">
         <MetaPixelPageView />

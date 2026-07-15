@@ -42,9 +42,6 @@
     180ms;
 
   transform-style: preserve-3d;
-
-  will-change: transform;
-
 }
 
 .adgen-tilt-card:hover .adgen-tilt-content {

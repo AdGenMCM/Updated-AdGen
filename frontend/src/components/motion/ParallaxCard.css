@@ -31,42 +31,21 @@
 
   transform-style: preserve-3d;
 
-  will-change: transform;
-
 }
 
 .adgen-parallax-glow {
-
   position: absolute;
-
-  inset: -20%;
-
+  inset: -8%;
   z-index: 1;
-
   pointer-events: none;
-
   opacity: 0;
-
   background:
-
     radial-gradient(
-
       circle,
-
-      rgba(79,70,229,.12),
-
+      rgba(79, 70, 229, 0.1),
       transparent 65%
-
     );
-
-  filter: blur(60px);
-
-  transition:
-
-    opacity
-    220ms
-    ease;
-
+  transition: opacity 220ms ease;
 }
 
 .adgen-parallax-card:hover .adgen-parallax-glow{
