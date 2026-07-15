@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const [stripe, setStripe] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // -----------------------------
   // 1️⃣ Firebase Auth listener
@@ -36,8 +37,11 @@ export function AuthProvider({ children }) {
     if (!currentUser) {
       setUserDoc(null);
       setStripe(null);
+      setProfileLoading(false);
       return;
     }
+
+    setProfileLoading(true);
 
     const ref = doc(db, "users", currentUser.uid);
 
@@ -51,10 +55,12 @@ export function AuthProvider({ children }) {
 
         // ✅ keep stripe logic working
         setStripe(data?.stripe ?? null);
+        setProfileLoading(false);
       },
       () => {
         setUserDoc(null);
         setStripe(null);
+        setProfileLoading(false);
       }
     );
 
@@ -68,9 +74,11 @@ export function AuthProvider({ children }) {
     () => ({
       currentUser,
       stripe,
-      userDoc, // ✅ now accessible everywhere
+      userDoc,
+      loading,
+      profileLoading,
     }),
-    [currentUser, stripe, userDoc]
+    [currentUser, stripe, userDoc, loading, profileLoading]
   );
 
   return (
@@ -83,6 +91,7 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+
 
 
 

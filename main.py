@@ -74,6 +74,11 @@ from storage_tracking import (
 )
 from brand_kits import router as brand_kits_router, resolve_brand_kit
 
+from notification_utils import (
+    create_notification,
+    create_usage_notifications,
+)
+
 #Library Performace Schemas
 from typing import Optional
 from collections import defaultdict
@@ -95,6 +100,13 @@ app.include_router(brand_kits_router)
 
 class AdminRequestTierBody(BaseModel):
     requestedTier: str  # e.g. "starter_monthly", "pro_monthly", etc.
+
+class AdminGrantCreditsBody(BaseModel):
+    credits: int
+
+
+class AdminClearTierRequestBody(BaseModel):
+    confirm: bool = True
 
 # -------------- visual prompt for image generation -----------------
 def build_visual_prompt(
@@ -447,66 +459,277 @@ async def _run_image_generation_job(job_id: str, payload: AdRequest, authorizati
             extra={"status": "succeeded", "result": result, "error": None},
         )
     except HTTPException as exc:
+        error_message = (
+            str(exc.detail)
+            if isinstance(exc.detail, str)
+            else "Creative generation failed."
+        )
+
         set_generation_progress(
-            db, "image", job_id, "failed",
-            message=str(exc.detail) if isinstance(exc.detail, str) else "Creative generation failed.",
+            db,
+            "image",
+            job_id,
+            "failed",
+            message=error_message,
             extra={"status": "failed", "error": exc.detail},
+        )
+
+        create_notification(
+            db,
+            uid=(
+                db.collection("image_generation_jobs")
+                .document(job_id)
+                .get()
+                .to_dict()
+                or {}
+            ).get("uid"),
+            event_key=f"image_failed_{job_id}",
+            title="Image generation failed",
+            body="Your creative could not be completed. Review the request and try again.",
+            notification_type="generation_failed",
+            link="/adgenerator",
+            metadata={"jobId": job_id},
         )
     except Exception as exc:
         set_generation_progress(
-            db, "image", job_id, "failed",
+            db,
+            "image",
+            job_id,
+            "failed",
             message="Creative generation failed.",
             extra={"status": "failed", "error": str(exc)},
         )
 
-async def _run_optimizer_job(job_id: str, payload: OptimizeAdRequest, authorization: str):
-    db = get_db()
-    try:
-        result = await optimize_ad(payload, authorization, progress_job_id=job_id)
-        result_data = result.model_dump() if hasattr(result, "model_dump") else dict(result)
-        set_generation_progress(
-            db, "optimizer", job_id, "succeeded",
-            extra={"status": "succeeded", "result": result_data, "error": None},
+        job_data = (
+            db.collection("image_generation_jobs")
+            .document(job_id)
+            .get()
+            .to_dict()
+            or {}
         )
-    except HTTPException as exc:
-        set_generation_progress(
-            db, "optimizer", job_id, "failed",
-            message=str(exc.detail) if isinstance(exc.detail, str) else "Optimization failed.",
-            extra={"status": "failed", "error": exc.detail},
+
+        create_notification(
+            db,
+            uid=job_data.get("uid"),
+            event_key=f"image_failed_{job_id}",
+            title="Image generation failed",
+            body="Your creative could not be completed. Review the request and try again.",
+            notification_type="generation_failed",
+            link="/adgenerator",
+            metadata={"jobId": job_id},
         )
-    except Exception as exc:
-        set_generation_progress(
-            db, "optimizer", job_id, "failed",
-            message="Optimization failed.",
-            extra={"status": "failed", "error": str(exc)},
-        )
+
+async def _run_optimizer_job(
+        job_id: str,
+        payload: OptimizeAdRequest,
+        authorization: str,
+    ):
+        db = get_db()
+
+        try:
+            result = await optimize_ad(
+                payload,
+                authorization,
+                progress_job_id=job_id,
+            )
+
+            result_data = (
+                result.model_dump()
+                if hasattr(result, "model_dump")
+                else dict(result)
+            )
+
+            set_generation_progress(
+                db,
+                "optimizer",
+                job_id,
+                "succeeded",
+                extra={
+                    "status": "succeeded",
+                    "result": result_data,
+                    "error": None,
+                },
+            )
+
+        except HTTPException as exc:
+            set_generation_progress(
+                db,
+                "optimizer",
+                job_id,
+                "failed",
+                message=(
+                    str(exc.detail)
+                    if isinstance(exc.detail, str)
+                    else "Optimization failed."
+                ),
+                extra={
+                    "status": "failed",
+                    "error": exc.detail,
+                },
+            )
+
+            job_data = (
+                db.collection("optimizer_jobs")
+                .document(job_id)
+                .get()
+                .to_dict()
+                or {}
+            )
+
+            create_notification(
+                db,
+                uid=job_data.get("uid"),
+                event_key=f"optimizer_failed_{job_id}",
+                title="Optimization could not be completed",
+                body=(
+                    "Your campaign analysis stopped before completion. "
+                    "Review the inputs and try again."
+                ),
+                notification_type="generation_failed",
+                link="/optimizer",
+                metadata={"jobId": job_id},
+            )
+
+        except Exception as exc:
+            set_generation_progress(
+                db,
+                "optimizer",
+                job_id,
+                "failed",
+                message="Optimization failed.",
+                extra={
+                    "status": "failed",
+                    "error": str(exc),
+                },
+            )
+
+            job_data = (
+                db.collection("optimizer_jobs")
+                .document(job_id)
+                .get()
+                .to_dict()
+                or {}
+            )
+
+            create_notification(
+                db,
+                uid=job_data.get("uid"),
+                event_key=f"optimizer_failed_{job_id}",
+                title="Optimization could not be completed",
+                body=(
+                    "Your campaign analysis stopped before completion. "
+                    "Review the inputs and try again."
+                ),
+                notification_type="generation_failed",
+                link="/optimizer",
+                metadata={
+                    "jobId": job_id,
+                    "error": str(exc)[:300],
+                },
+            )
 
 async def _run_optimizer_generation_job(
-    job_id: str,
-    payload: GenerateFromOptimizerRequest,
-    authorization: str,
-):
-    db = get_db()
-    try:
-        result = await generate_from_optimizer(
-            payload, authorization, progress_job_id=job_id
-        )
-        set_generation_progress(
-            db, "optimizer_generation", job_id, "succeeded",
-            extra={"status": "succeeded", "result": result, "error": None},
-        )
-    except HTTPException as exc:
-        set_generation_progress(
-            db, "optimizer_generation", job_id, "failed",
-            message=str(exc.detail) if isinstance(exc.detail, str) else "Creative generation failed.",
-            extra={"status": "failed", "error": exc.detail},
-        )
-    except Exception as exc:
-        set_generation_progress(
-            db, "optimizer_generation", job_id, "failed",
-            message="Creative generation failed.",
-            extra={"status": "failed", "error": str(exc)},
-        )
+        job_id: str,
+        payload: GenerateFromOptimizerRequest,
+        authorization: str,
+    ):
+        db = get_db()
+
+        try:
+            result = await generate_from_optimizer(
+                payload,
+                authorization,
+                progress_job_id=job_id,
+            )
+
+            set_generation_progress(
+                db,
+                "optimizer_generation",
+                job_id,
+                "succeeded",
+                extra={
+                    "status": "succeeded",
+                    "result": result,
+                    "error": None,
+                },
+            )
+
+        except HTTPException as exc:
+            set_generation_progress(
+                db,
+                "optimizer_generation",
+                job_id,
+                "failed",
+                message=(
+                    str(exc.detail)
+                    if isinstance(exc.detail, str)
+                    else "Creative generation failed."
+                ),
+                extra={
+                    "status": "failed",
+                    "error": exc.detail,
+                },
+            )
+
+            job_data = (
+                db.collection("optimizer_jobs")
+                .document(job_id)
+                .get()
+                .to_dict()
+                or {}
+            )
+
+            create_notification(
+                db,
+                uid=job_data.get("uid"),
+                event_key=f"optimizer_creative_failed_{job_id}",
+                title="Optimized creative failed",
+                body=(
+                    "The optimized image could not be completed. "
+                    "Your analysis results are still available."
+                ),
+                notification_type="generation_failed",
+                link="/optimizer",
+                metadata={"jobId": job_id},
+            )
+
+        except Exception as exc:
+            set_generation_progress(
+                db,
+                "optimizer_generation",
+                job_id,
+                "failed",
+                message="Creative generation failed.",
+                extra={
+                    "status": "failed",
+                    "error": str(exc),
+                },
+            )
+
+            job_data = (
+                db.collection("optimizer_jobs")
+                .document(job_id)
+                .get()
+                .to_dict()
+                or {}
+            )
+
+            create_notification(
+                db,
+                uid=job_data.get("uid"),
+                event_key=f"optimizer_creative_failed_{job_id}",
+                title="Optimized creative failed",
+                body=(
+                    "The optimized image could not be completed. "
+                    "Your analysis results are still available."
+                ),
+                notification_type="generation_failed",
+                link="/optimizer",
+                metadata={
+                    "jobId": job_id,
+                    "error": str(exc)[:300],
+                },
+            )
 
 def _read_progress_job(db, collection: str, job_id: str, uid: str, admin: bool):
     snap = db.collection(collection).document(job_id).get()
@@ -1559,17 +1782,44 @@ async def generate_ad(
             raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
 
         cap_result = check_and_increment_usage(db, uid, tier)
+
         if not cap_result["allowed"]:
+            create_usage_notifications(
+                db,
+                uid,
+                resource="images",
+                used=int(cap_result.get("used") or 0),
+                cap=int(cap_result.get("cap") or 0),
+                period_key=(
+                    cap_result.get("periodKey")
+                    or cap_result.get("month")
+                ),
+                link="/account",
+            )
+
             raise HTTPException(
                 status_code=429,
                 detail={
-                    "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
+                    "message": (
+                        "You’ve reached your monthly ad generation "
+                        "limit. Upgrade to continue."
+                    ),
                     "used": cap_result["used"],
                     "cap": cap_result["cap"],
                     "month": cap_result["month"],
                     "upgradePath": "/account",
                 },
             )
+        
+        create_usage_notifications(
+            db,
+            uid,
+            resource="images",
+            used=int(cap_result.get("used") or 0),
+            cap=int(cap_result.get("cap") or 0),
+            period_key=cap_result.get("periodKey") or cap_result.get("month"),
+            link="/account",
+        )
     else:
         cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
 
@@ -2065,11 +2315,34 @@ async def optimize_ad(
         require_pro_or_business(tier)
 
     optimizer_usage_reservation = None
+
     if not admin:
         optimizer_usage_reservation = check_and_increment_resource(
-            db, uid, tier, "optimizer_runs", 1
+            db,
+            uid,
+            tier,
+            "optimizer_runs",
+            1,
         )
+
         if not optimizer_usage_reservation.get("allowed"):
+            create_usage_notifications(
+                db,
+                uid,
+                resource="optimizer",
+                used=int(
+                    optimizer_usage_reservation.get("used") or 0
+                ),
+                cap=int(
+                    optimizer_usage_reservation.get("cap") or 0
+                ),
+                period_key=(
+                    optimizer_usage_reservation.get("periodKey")
+                    or optimizer_usage_reservation.get("month")
+                ),
+                link="/optimizer",
+            )
+
             raise HTTPException(
                 status_code=429,
                 detail={
@@ -2081,6 +2354,23 @@ async def optimize_ad(
                     "upgradePath": "/account",
                 },
             )
+
+        create_usage_notifications(
+            db,
+            uid,
+            resource="optimizer",
+            used=int(
+                optimizer_usage_reservation.get("used") or 0
+            ),
+            cap=int(
+                optimizer_usage_reservation.get("cap") or 0
+            ),
+            period_key=(
+                optimizer_usage_reservation.get("periodKey")
+                or optimizer_usage_reservation.get("month")
+            ),
+            link="/optimizer",
+        )
 
     product_name = (payload.product_name or "").strip()[:80]
     description = (payload.description or "").strip()[:800]
@@ -2368,12 +2658,31 @@ async def generate_from_optimizer(
 
     if not admin:
         allowed_statuses = {"active", "trialing"}
+
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
+
         require_pro_or_business(tier)
 
         cap_result = check_and_increment_usage(db, uid, tier)
+
         if not cap_result["allowed"]:
+            create_usage_notifications(
+                db,
+                uid,
+                resource="images",
+                used=int(cap_result.get("used") or 0),
+                cap=int(cap_result.get("cap") or 0),
+                period_key=(
+                    cap_result.get("periodKey")
+                    or cap_result.get("month")
+                ),
+                link="/account",
+            )
+
             raise HTTPException(
                 status_code=429,
                 detail={
@@ -2384,8 +2693,27 @@ async def generate_from_optimizer(
                     "upgradePath": "/account",
                 },
             )
+
+        create_usage_notifications(
+            db,
+            uid,
+            resource="images",
+            used=int(cap_result.get("used") or 0),
+            cap=int(cap_result.get("cap") or 0),
+            period_key=(
+                cap_result.get("periodKey")
+                or cap_result.get("month")
+            ),
+            link="/account",
+        )
+
     else:
-        cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
+        cap_result = {
+            "used": 0,
+            "cap": 0,
+            "month": None,
+            "allowed": True,
+        }
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
@@ -2689,6 +3017,258 @@ Improve it.
 
 # ---------------- Creation of Admin Page Routes ----------------
 
+def _require_admin_request(authorization: str | None):
+    """Return the authenticated admin UID and claims or raise 403."""
+    admin_uid, _email, claims = require_user(authorization)
+
+    if not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    return admin_uid, claims
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _usage_percent(used: int, cap: int) -> int:
+    if cap <= 0:
+        return 0
+    return max(0, round((used / cap) * 100))
+
+
+def _firebase_timestamp_to_iso(value):
+    if not value:
+        return None
+
+    try:
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+    return None
+
+
+def _auth_timestamp_to_iso(milliseconds):
+    try:
+        if not milliseconds:
+            return None
+
+        return datetime.fromtimestamp(
+            milliseconds / 1000,
+            tz=timezone.utc,
+        ).isoformat()
+    except Exception:
+        return None
+
+
+def _get_admin_target_user(db, target_uid: str):
+    """
+    Return the Firestore reference and user document for an admin target.
+    The Firebase Auth user must exist.
+    """
+    try:
+        auth_user = admin_auth.get_user(target_uid)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User not found: {exc}",
+        )
+
+    user_ref = db.collection("users").document(target_uid)
+    user_snapshot = user_ref.get()
+    user_doc = user_snapshot.to_dict() or {}
+
+    return auth_user, user_ref, user_doc
+
+
+def _current_usage_period(db, target_uid: str):
+    target_doc = (
+        db.collection("users")
+        .document(target_uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    return target_doc, get_usage_period(target_doc)
+
+def _resource_admin_fields(resource: str) -> tuple[str, str]:
+    mapping = {
+        "images": ("imageUsed", "bonusImageCredits"),
+        "video_credits": ("videoCreditsUsed", "bonusVideoCredits"),
+        "optimizer_runs": ("optimizerRunsUsed", "bonusOptimizerRuns"),
+    }
+
+    if resource not in mapping:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported resource: {resource}",
+        )
+
+    return mapping[resource]
+
+
+def _grant_bonus_capacity(
+    *,
+    db,
+    target_uid: str,
+    resource: str,
+    credits: int,
+):
+    """
+    Adds true bonus capacity to the current usage period.
+
+    Example:
+        plan cap = 10
+        current used = 2
+        grant 1 bonus credit
+        new effective cap = 11
+        displayed usage = 2 / 11
+    """
+    if credits <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Credits must be greater than zero.",
+        )
+
+    target_doc = (
+        db.collection("users")
+        .document(target_uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
+
+    used_field, bonus_field = _resource_admin_fields(resource)
+    usage_ref = db.collection("usage").document(target_uid)
+
+    @gc_firestore.transactional
+    def _tx(transaction: gc_firestore.Transaction):
+        snapshot = usage_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
+
+        current_period = data.get("periodKey") or data.get("month")
+
+        if resource == "images":
+            used = int(
+                data.get(
+                    used_field,
+                    data.get("used", 0),
+                )
+                or 0
+            )
+        else:
+            used = int(data.get(used_field, 0) or 0)
+
+        current_bonus = int(data.get(bonus_field, 0) or 0)
+
+        # A new billing period starts with fresh usage and no prior bonus.
+        if current_period != period_key:
+            used = 0
+            current_bonus = 0
+
+        new_bonus = current_bonus + credits
+
+        update = {
+            "periodKey": period_key,
+            "periodStart": usage_period.get("periodStart"),
+            "periodEnd": usage_period.get("periodEnd"),
+            "periodSource": usage_period.get("periodSource"),
+            "month": usage_period.get("month"),
+            used_field: used,
+            bonus_field: new_bonus,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        }
+
+        # Preserve temporary backward compatibility for image usage.
+        if resource == "images":
+            update["used"] = used
+
+        transaction.set(
+            usage_ref,
+            update,
+            merge=True,
+        )
+
+        return {
+            "ok": True,
+            "uid": target_uid,
+            "resource": resource,
+            "used": used,
+            "bonus": new_bonus,
+            "granted": credits,
+            **usage_period,
+        }
+
+    return _tx(db.transaction())
+
+
+def _reset_resource_usage(
+    *,
+    db,
+    target_uid: str,
+    resource: str,
+    clear_bonus: bool = False,
+):
+    """
+    Resets consumed usage to zero.
+
+    By default, bonus capacity remains available for the current period.
+    Pass clear_bonus=True only when you explicitly want to remove bonuses too.
+    """
+    target_doc = (
+        db.collection("users")
+        .document(target_uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
+
+    used_field, bonus_field = _resource_admin_fields(resource)
+    usage_ref = db.collection("usage").document(target_uid)
+
+    update = {
+        "periodKey": period_key,
+        "periodStart": usage_period.get("periodStart"),
+        "periodEnd": usage_period.get("periodEnd"),
+        "periodSource": usage_period.get("periodSource"),
+        "month": usage_period.get("month"),
+        used_field: 0,
+        "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+    }
+
+    if resource == "images":
+        update["used"] = 0
+
+    if clear_bonus:
+        update[bonus_field] = 0
+
+    usage_ref.set(update, merge=True)
+
+    return {
+        "ok": True,
+        "uid": target_uid,
+        "resource": resource,
+        "used": 0,
+        "bonusCleared": bool(clear_bonus),
+        **usage_period,
+    }
+
+
 @app.get("/admin/users")
 def admin_list_users(
     authorization: str | None = Header(default=None),
@@ -2699,9 +3279,7 @@ def admin_list_users(
     page_token: str = Query(default=""),
 ) -> dict[str, Any]:
     try:
-        uid, _email, claims = require_user(authorization)
-        if not is_admin(claims):
-            raise HTTPException(status_code=403, detail="Admin only")
+        _require_admin_request(authorization)
 
         db = get_db()
 
@@ -2709,220 +3287,487 @@ def admin_list_users(
         tier_norm = (tier or "all").strip().lower()
         status_norm = (status or "all").strip().lower()
 
-        pt = page_token or None
-        page = admin_auth.list_users(page_token=pt, max_results=limit)
+        page = admin_auth.list_users(
+            page_token=page_token or None,
+            max_results=limit,
+        )
 
         results = []
 
-        for u in page.users:
-            auth_uid = u.uid
-            auth_email = u.email or ""
-            display_name = (u.display_name or "").strip()
+        for auth_user in page.users:
+            auth_uid = auth_user.uid
+            auth_email = auth_user.email or ""
+            display_name = (auth_user.display_name or "").strip()
 
-            created_iso = None
+            created_iso = _auth_timestamp_to_iso(
+                getattr(
+                    auth_user.user_metadata,
+                    "creation_timestamp",
+                    None,
+                )
+            )
+
+            last_sign_in_iso = _auth_timestamp_to_iso(
+                getattr(
+                    auth_user.user_metadata,
+                    "last_sign_in_timestamp",
+                    None,
+                )
+            )
+
+            profile = {}
+
             try:
-                ms = u.user_metadata.creation_timestamp
-                if ms:
-                    created_iso = datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+                snapshot = db.collection("users").document(auth_uid).get()
+                if snapshot.exists:
+                    profile = snapshot.to_dict() or {}
             except Exception:
-                created_iso = None
+                profile = {}
 
-            prof = {}
-            try:
-                snap = db.collection("users").document(auth_uid).get()
-                if snap.exists:
-                    prof = snap.to_dict() or {}
-            except Exception:
-                prof = {}
+            first_name = (profile.get("firstName") or "").strip()
+            last_name = (profile.get("lastName") or "").strip()
 
-            first = (prof.get("firstName") or "").strip()
-            last = (prof.get("lastName") or "").strip()
+            if not first_name and not last_name and display_name:
+                name_parts = display_name.split()
 
-            if (not first and not last) and display_name:
-                parts = display_name.split()
-                if len(parts) >= 2:
-                    first = first or parts[0]
-                    last = last or " ".join(parts[1:])
+                if len(name_parts) >= 2:
+                    first_name = name_parts[0]
+                    last_name = " ".join(name_parts[1:])
                 else:
-                    first = first or display_name
+                    first_name = display_name
 
-            tier_for_caps, stripe_status_from_helper = get_tier_and_status(prof)
+            full_name = f"{first_name} {last_name}".strip()
 
-            stripe_obj = prof.get("stripe") or {}
-            requested_tier = (stripe_obj.get("requestedTier") or "").strip()
-            customer_id = (stripe_obj.get("customerId") or "").strip()
+            tier_for_caps, helper_status = get_tier_and_status(profile)
+            stripe_object = profile.get("stripe") or {}
 
-            user_tier = stripe_obj.get("tier") or stripe_obj.get("requestedTier") or prof.get("tier") or "-"
+            requested_tier = (
+                stripe_object.get("requestedTier") or ""
+            ).strip()
+
+            user_tier = (
+                stripe_object.get("tier")
+                or profile.get("tier")
+                or "-"
+            )
             user_tier = str(user_tier).strip() or "-"
 
-            stripe_status = stripe_obj.get("status") or stripe_status_from_helper or "inactive"
+            stripe_status = (
+                stripe_object.get("status")
+                or helper_status
+                or "inactive"
+            )
             stripe_status = str(stripe_status).strip().lower()
 
-            usage_info = peek_usage(db, auth_uid, tier_for_caps)
-            used = int(usage_info.get("used") or 0)
-            cap = int(usage_info.get("cap") or 0)
-            remaining = int(usage_info.get("remaining") or max(0, cap - used))
-            usage_pct = 0 if cap <= 0 else round((used / cap) * 100)
+            customer_id = (
+                stripe_object.get("customerId") or ""
+            ).strip()
 
-            video_usage_info = peek_resource(
+            subscription_id = (
+                stripe_object.get("subscriptionId") or ""
+            ).strip()
+
+            price_id = (
+                stripe_object.get("priceId") or ""
+            ).strip()
+
+            period_start = _safe_int(
+                stripe_object.get("currentPeriodStart"),
+                0,
+            ) or None
+
+            period_end = _safe_int(
+                stripe_object.get("currentPeriodEnd"),
+                0,
+            ) or None
+
+            requested_tier_at = _firebase_timestamp_to_iso(
+                stripe_object.get("requestedTierAt")
+            )
+
+            image_usage = peek_usage(
+                db,
+                auth_uid,
+                tier_for_caps,
+                profile,
+            )
+            image_used = _safe_int(image_usage.get("used"))
+            image_cap = _safe_int(image_usage.get("cap"))
+            image_remaining = _safe_int(
+                image_usage.get("remaining"),
+                max(0, image_cap - image_used),
+            )
+            image_usage_pct = _usage_percent(
+                image_used,
+                image_cap,
+            )
+
+            video_usage = peek_resource(
                 db,
                 auth_uid,
                 tier_for_caps,
                 "video_credits",
-                prof,
+                profile,
             )
-            video_used = int(video_usage_info.get("used") or 0)
-            video_cap = int(video_usage_info.get("cap") or 0)
-            video_remaining = int(
-                video_usage_info.get("remaining")
-                if video_usage_info.get("remaining") is not None
-                else max(0, video_cap - video_used)
+            video_used = _safe_int(video_usage.get("used"))
+            video_cap = _safe_int(video_usage.get("cap"))
+            video_remaining = _safe_int(
+                video_usage.get("remaining"),
+                max(0, video_cap - video_used),
             )
-            video_usage_pct = 0 if video_cap <= 0 else round((video_used / video_cap) * 100)
+            video_usage_pct = _usage_percent(
+                video_used,
+                video_cap,
+            )
+
+            optimizer_usage = peek_resource(
+                db,
+                auth_uid,
+                tier_for_caps,
+                "optimizer_runs",
+                profile,
+            )
+            optimizer_used = _safe_int(
+                optimizer_usage.get("used")
+            )
+            optimizer_cap = _safe_int(
+                optimizer_usage.get("cap")
+            )
+            optimizer_remaining = _safe_int(
+                optimizer_usage.get("remaining"),
+                max(0, optimizer_cap - optimizer_used),
+            )
+            optimizer_usage_pct = _usage_percent(
+                optimizer_used,
+                optimizer_cap,
+            )
+
+            storage_summary = {}
+
+            try:
+                storage_summary = get_storage_summary(
+                    db,
+                    auth_uid,
+                    tier_for_caps,
+                ) or {}
+            except Exception:
+                storage_summary = {}
+
+            storage_used_bytes = _safe_int(
+                storage_summary.get("usedBytes")
+                or storage_summary.get("used_bytes")
+            )
+            storage_limit_bytes = _safe_int(
+                storage_summary.get("limitBytes")
+                or storage_summary.get("limit_bytes")
+            )
+            storage_asset_count = _safe_int(
+                storage_summary.get("assetCount")
+                or storage_summary.get("asset_count")
+            )
+
+            storage_usage_pct = _safe_int(
+                storage_summary.get("usagePct")
+                or storage_summary.get("usage_pct")
+            )
+
+            if storage_usage_pct <= 0 and storage_limit_bytes > 0:
+                storage_usage_pct = _usage_percent(
+                    storage_used_bytes,
+                    storage_limit_bytes,
+                )
 
             if tier_norm != "all" and user_tier.lower() != tier_norm:
                 continue
 
-            if status_norm != "all" and stripe_status.lower() != status_norm:
+            if (
+                status_norm != "all"
+                and stripe_status.lower() != status_norm
+            ):
                 continue
 
             if q_norm:
-                hay = f"{first} {last} {auth_email} {display_name}".lower()
-                if q_norm not in hay:
+                search_text = " ".join(
+                    [
+                        first_name,
+                        last_name,
+                        full_name,
+                        display_name,
+                        auth_email,
+                        auth_uid,
+                        customer_id,
+                    ]
+                ).lower()
+
+                if q_norm not in search_text:
                     continue
 
-            results.append({
-                "uid": auth_uid,
-                "firstName": first,
-                "lastName": last,
-                "email": auth_email,
-                "createdAt": created_iso,
+            results.append(
+                {
+                    "uid": auth_uid,
+                    "firstName": first_name,
+                    "lastName": last_name,
+                    "fullName": full_name or display_name or "-",
+                    "displayName": display_name,
+                    "email": auth_email,
+                    "emailVerified": bool(auth_user.email_verified),
+                    "disabled": bool(auth_user.disabled),
+                    "createdAt": created_iso,
+                    "lastSignInAt": last_sign_in_iso,
 
-                "tier": user_tier,
-                "requestedTier": requested_tier,
-                "stripeStatus": stripe_status,
-                "customerId": customer_id,
+                    "tier": user_tier,
+                    "requestedTier": requested_tier,
+                    "requestedTierAt": requested_tier_at,
+                    "stripeStatus": stripe_status,
+                    "customerId": customer_id,
+                    "subscriptionId": subscription_id,
+                    "priceId": price_id,
+                    "currentPeriodStart": period_start,
+                    "currentPeriodEnd": period_end,
 
-                "used": used,
-                "cap": cap,
-                "remaining": remaining,
-                "usagePct": usage_pct,
-                "monthlyUsage": used,
+                    "used": image_used,
+                    "cap": image_cap,
+                    "remaining": image_remaining,
+                    "usagePct": image_usage_pct,
+                    "monthlyUsage": image_used,
 
-                "hasProfile": bool(prof),
+                    "videoUsed": video_used,
+                    "videoCap": video_cap,
+                    "videoRemaining": video_remaining,
+                    "videoUsagePct": video_usage_pct,
 
-                "videoUsed": video_used,
-                "videoCap": video_cap,
-                "videoRemaining": video_remaining,
-                "videoUsagePct": video_usage_pct,
-            })
+                    "optimizerUsed": optimizer_used,
+                    "optimizerCap": optimizer_cap,
+                    "optimizerRemaining": optimizer_remaining,
+                    "optimizerUsagePct": optimizer_usage_pct,
 
-        next_token = page.next_page_token or ""
-        return {"users": results, "nextCursor": next_token}
+                    "storageUsedBytes": storage_used_bytes,
+                    "storageLimitBytes": storage_limit_bytes,
+                    "storageAssetCount": storage_asset_count,
+                    "storageUsagePct": storage_usage_pct,
+
+                    "hasProfile": bool(profile),
+                    "periodKey": image_usage.get("periodKey"),
+                    "periodStart": image_usage.get("periodStart"),
+                    "periodEnd": image_usage.get("periodEnd"),
+                    "periodSource": image_usage.get("periodSource"),
+                }
+            )
+
+        return {
+            "users": results,
+            "nextCursor": page.next_page_token or "",
+            "returned": len(results),
+        }
 
     except HTTPException:
         raise
-    except Exception as e:
-        print("ADMIN USERS ERROR:", repr(e))
+
+    except Exception as exc:
+        print("ADMIN USERS ERROR:", repr(exc))
         traceback.print_exc()
-        return JSONResponse(status_code=500, content={"detail": str(e)})
 
-@app.post("/admin/users/{target_uid}/usage/grant")
-def admin_grant_usage_credits(
-    target_uid: str,
-    authorization: str | None = Header(default=None),
-    credits: int = Query(default=5, ge=1, le=100),
-):
-    uid, _email, claims = require_user(authorization)
-    if not is_admin(claims):
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    db = get_db()
-
-    target_snap = db.collection("users").document(target_uid).get()
-    target_doc = target_snap.to_dict() or {}
-
-    usage_period = get_usage_period(target_doc)
-    period_key = usage_period["periodKey"]
-
-    usage_ref = db.collection("usage").document(target_uid)
-
-    @gc_firestore.transactional
-    def _tx(transaction: gc_firestore.Transaction):
-        snap = usage_ref.get(transaction=transaction)
-        data = snap.to_dict() or {}
-
-        current_period = data.get("periodKey") or data.get("month")
-        used = int(data.get("used") or 0)
-
-        if current_period != period_key:
-            used = 0
-
-        new_used = max(0, used - credits)
-
-        transaction.set(
-            usage_ref,
-            {
-                "periodKey": period_key,
-                "periodStart": usage_period.get("periodStart"),
-                "periodEnd": usage_period.get("periodEnd"),
-                "periodSource": usage_period.get("periodSource"),
-                "month": usage_period.get("month"),
-                "used": new_used,
-                "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc)},
         )
 
-        return {
-            "ok": True,
-            "uid": target_uid,
-            "used": new_used,
-            "granted": credits,
-            **usage_period,
-        }
 
-    tx = db.transaction()
-    return _tx(tx)
+# ---------- Image usage ----------
 
-@app.post("/admin/users/{target_uid}/usage/reset")
-def admin_reset_usage(
+@app.post("/admin/users/{target_uid}/usage/grant")
+def admin_grant_image_credits(
     target_uid: str,
     authorization: str | None = Header(default=None),
+    credits: int = Query(default=5, ge=1, le=1000),
 ):
-    uid, _email, claims = require_user(authorization)
-    if not is_admin(claims):
-        raise HTTPException(status_code=403, detail="Admin only")
+    _require_admin_request(authorization)
+
+    result = _grant_bonus_capacity(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="images",
+        credits=credits,
+    )
+
+    return {
+        **result,
+        "bonusImageCredits": result["bonus"],
+    }
+
+
+@app.post("/admin/users/{target_uid}/usage/reset")
+def admin_reset_image_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    clear_bonus: bool = Query(default=False),
+):
+    _require_admin_request(authorization)
+
+    result = _reset_resource_usage(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="images",
+        clear_bonus=clear_bonus,
+    )
+
+    return {
+        **result,
+        "imageUsed": 0,
+        "used": 0,
+    }
+
+
+# ---------- Video usage ----------
+
+@app.post("/admin/users/{target_uid}/video/usage/grant")
+def admin_grant_video_credits(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    credits: int = Query(default=1, ge=1, le=250),
+):
+    _require_admin_request(authorization)
+
+    result = _grant_bonus_capacity(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="video_credits",
+        credits=credits,
+    )
+
+    return {
+        **result,
+        "bonusVideoCredits": result["bonus"],
+        "videoCreditsUsed": result["used"],
+        "video_used": result["used"],
+    }
+
+
+@app.post("/admin/users/{target_uid}/video/usage/reset")
+def admin_reset_video_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    clear_bonus: bool = Query(default=False),
+):
+    _require_admin_request(authorization)
+
+    result = _reset_resource_usage(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="video_credits",
+        clear_bonus=clear_bonus,
+    )
+
+    return {
+        **result,
+        "videoCreditsUsed": 0,
+        "video_used": 0,
+    }
+
+
+# ---------- Optimizer usage ----------
+
+@app.post("/admin/users/{target_uid}/optimizer/usage/grant")
+def admin_grant_optimizer_runs(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    credits: int = Query(default=5, ge=1, le=500),
+):
+    _require_admin_request(authorization)
+
+    result = _grant_bonus_capacity(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="optimizer_runs",
+        credits=credits,
+    )
+
+    return {
+        **result,
+        "bonusOptimizerRuns": result["bonus"],
+        "optimizerRunsUsed": result["used"],
+    }
+
+
+@app.post("/admin/users/{target_uid}/optimizer/usage/reset")
+def admin_reset_optimizer_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    clear_bonus: bool = Query(default=False),
+):
+    _require_admin_request(authorization)
+
+    result = _reset_resource_usage(
+        db=get_db(),
+        target_uid=target_uid,
+        resource="optimizer_runs",
+        clear_bonus=clear_bonus,
+    )
+
+    return {
+        **result,
+        "optimizerRunsUsed": 0,
+    }
+
+
+
+@app.post("/admin/users/{target_uid}/usage/reset-all")
+def admin_reset_all_usage(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+    clear_bonus: bool = Query(default=False),
+):
+    _require_admin_request(authorization)
 
     db = get_db()
 
-    target_snap = db.collection("users").document(target_uid).get()
-    target_doc = target_snap.to_dict() or {}
+    target_doc = (
+        db.collection("users")
+        .document(target_uid)
+        .get()
+        .to_dict()
+        or {}
+    )
 
     usage_period = get_usage_period(target_doc)
-    period_key = usage_period["periodKey"]
-
     usage_ref = db.collection("usage").document(target_uid)
 
-    usage_ref.set(
-        {
-            "periodKey": period_key,
-            "periodStart": usage_period.get("periodStart"),
-            "periodEnd": usage_period.get("periodEnd"),
-            "periodSource": usage_period.get("periodSource"),
-            "month": usage_period.get("month"),
-            "used": 0,
-            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    update = {
+        "periodKey": usage_period["periodKey"],
+        "periodStart": usage_period.get("periodStart"),
+        "periodEnd": usage_period.get("periodEnd"),
+        "periodSource": usage_period.get("periodSource"),
+        "month": usage_period.get("month"),
+        "imageUsed": 0,
+        "used": 0,
+        "videoCreditsUsed": 0,
+        "optimizerRunsUsed": 0,
+        "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+    }
+
+    if clear_bonus:
+        update.update(
+            {
+                "bonusImageCredits": 0,
+                "bonusVideoCredits": 0,
+                "bonusOptimizerRuns": 0,
+            }
+        )
+
+    usage_ref.set(update, merge=True)
 
     return {
         "ok": True,
         "uid": target_uid,
-        "used": 0,
+        "imagesUsed": 0,
+        "videoCreditsUsed": 0,
+        "optimizerRunsUsed": 0,
+        "bonusCleared": bool(clear_bonus),
         **usage_period,
     }
+
+
+# ---------- Requested plan changes ----------
 
 @app.post("/admin/users/{target_uid}/tier/request")
 def admin_request_tier_change(
@@ -2930,50 +3775,264 @@ def admin_request_tier_change(
     body: AdminRequestTierBody,
     authorization: str | None = Header(default=None),
 ):
-    uid, _email, claims = require_user(authorization)
-    if not is_admin(claims):
-        raise HTTPException(status_code=403, detail="Admin only")
+    _require_admin_request(authorization)
 
-    requested = (body.requestedTier or "").strip()
-    allowed = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly", "early_access"}
-    if requested not in allowed:
-        raise HTTPException(status_code=400, detail=f"Invalid requestedTier. Allowed: {sorted(allowed)}")
+    requested_tier = (body.requestedTier or "").strip()
+
+    allowed_tiers = {
+        "trial_monthly",
+        "starter_monthly",
+        "pro_monthly",
+        "business_monthly",
+    }
+
+    if requested_tier not in allowed_tiers:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid requestedTier. "
+                f"Allowed: {sorted(allowed_tiers)}"
+            ),
+        )
 
     db = get_db()
-    user_ref = db.collection("users").document(target_uid)
+    _auth_user, user_ref, _user_doc = _get_admin_target_user(
+        db,
+        target_uid,
+    )
 
-    # Store on stripe object (matches your existing stripe metadata pattern)
     user_ref.set(
         {
             "stripe": {
-                "requestedTier": requested,
+                "requestedTier": requested_tier,
                 "requestedTierAt": gc_firestore.SERVER_TIMESTAMP,
             }
         },
         merge=True,
     )
 
-    return {"ok": True, "uid": target_uid, "requestedTier": requested}
+    return {
+        "ok": True,
+        "uid": target_uid,
+        "requestedTier": requested_tier,
+    }
 
+
+@app.post("/admin/users/{target_uid}/tier/clear-request")
+def admin_clear_requested_tier(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+):
+    _require_admin_request(authorization)
+
+    db = get_db()
+    _auth_user, user_ref, _user_doc = _get_admin_target_user(
+        db,
+        target_uid,
+    )
+
+    user_ref.set(
+        {
+            "stripe": {
+                "requestedTier": gc_firestore.DELETE_FIELD,
+                "requestedTierAt": gc_firestore.DELETE_FIELD,
+            }
+        },
+        merge=True,
+    )
+
+    return {
+        "ok": True,
+        "uid": target_uid,
+        "requestedTier": None,
+    }
+
+
+# Keep this existing self-service route outside the admin UI.
 @app.post("/users/me/tier/clear-request")
 def clear_requested_tier(
     authorization: str | None = Header(default=None),
 ):
     uid, _email, _claims = require_user(authorization)
 
-    db = get_db()
-    user_ref = db.collection("users").document(uid)
-
-    user_ref.set(
+    get_db().collection("users").document(uid).set(
         {
             "stripe": {
-                "requestedTier": gc_firestore.DELETE_FIELD
+                "requestedTier": gc_firestore.DELETE_FIELD,
+                "requestedTierAt": gc_firestore.DELETE_FIELD,
             }
         },
         merge=True,
     )
 
     return {"ok": True}
+
+
+# ---------- Subscription sync ----------
+
+@app.post("/admin/users/{target_uid}/subscription/sync")
+def admin_sync_user_subscription(
+    target_uid: str,
+    authorization: str | None = Header(default=None),
+):
+    _require_admin_request(authorization)
+
+    db = get_db()
+    _auth_user, user_ref, user_doc = _get_admin_target_user(
+        db,
+        target_uid,
+    )
+
+    stripe_object = user_doc.get("stripe") or {}
+    customer_id = (
+        stripe_object.get("customerId") or ""
+    ).strip()
+
+    if not customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This user does not have a billing customer ID.",
+        )
+
+    try:
+        subscriptions = stripe.Subscription.list(
+            customer=customer_id,
+            status="all",
+            limit=10,
+            expand=["data.items"],
+        )
+
+        if not subscriptions.data:
+            user_ref.set(
+                {
+                    "stripe": {
+                        "customerId": customer_id,
+                        "status": "inactive",
+                        "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+                    }
+                },
+                merge=True,
+            )
+
+            return {
+                "ok": True,
+                "uid": target_uid,
+                "customerId": customer_id,
+                "subscriptionId": None,
+                "status": "inactive",
+                "subscriptionStatus": None,
+                "tier": None,
+                "priceId": None,
+                "currentPeriodStart": None,
+                "currentPeriodEnd": None,
+                "message": "No subscription exists for this customer.",
+            }
+
+        status_priority = {
+            "active": 0,
+            "trialing": 1,
+            "past_due": 2,
+            "incomplete": 3,
+            "unpaid": 4,
+            "paused": 5,
+            "canceled": 6,
+        }
+
+        latest = sorted(
+            subscriptions.data,
+            key=lambda subscription: (
+                status_priority.get(
+                    subscription.get("status") or "",
+                    99,
+                ),
+                -_safe_int(subscription.get("created")),
+            ),
+        )[0]
+
+        subscription_id = latest.get("id")
+        subscription_status = (
+            latest.get("status") or "inactive"
+        )
+
+        if subscription_status in {
+            "active",
+            "trialing",
+            "past_due",
+        }:
+            app_status = subscription_status
+        else:
+            app_status = "inactive"
+
+        items = (
+            latest.get("items") or {}
+        ).get("data") or []
+
+        price_id = None
+        resolved_tier = None
+
+        if items and items[0].get("price"):
+            price_id = items[0]["price"].get("id")
+            resolved_tier = price_id_to_tier(price_id)
+
+        period_start, period_end = extract_subscription_period(
+            latest
+        )
+
+        stripe_update = {
+            "customerId": customer_id,
+            "subscriptionId": subscription_id,
+            "status": app_status,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        }
+
+        if price_id:
+            stripe_update["priceId"] = price_id
+
+        if resolved_tier:
+            stripe_update["tier"] = resolved_tier
+
+        if period_start:
+            stripe_update["currentPeriodStart"] = int(
+                period_start
+            )
+
+        if period_end:
+            stripe_update["currentPeriodEnd"] = int(
+                period_end
+            )
+
+        user_ref.set(
+            {"stripe": stripe_update},
+            merge=True,
+        )
+
+        return {
+            "ok": True,
+            "uid": target_uid,
+            "customerId": customer_id,
+            "subscriptionId": subscription_id,
+            "status": app_status,
+            "subscriptionStatus": subscription_status,
+            "tier": resolved_tier,
+            "priceId": price_id,
+            "currentPeriodStart": period_start,
+            "currentPeriodEnd": period_end,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        print(
+            "ADMIN SUBSCRIPTION SYNC ERROR:",
+            repr(exc),
+        )
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not sync subscription: {exc}",
+        )
 
 # --- Video Credit Usage (My Account + Dashboard compatibility) ---
 @app.get("/video/usage")
@@ -2995,95 +4054,6 @@ def get_video_usage(authorization: str | None = Header(default=None)):
         "unit": "video_credits",
     }
 
-
-@app.post("/admin/users/{target_uid}/video/usage/grant")
-def admin_grant_video_credits(
-    target_uid: str,
-    authorization: str | None = Header(default=None),
-    credits: int = Query(default=1, ge=1, le=25),
-):
-    _uid, _email, claims = require_user(authorization)
-    if not is_admin(claims):
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    db = get_db()
-    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
-    usage_period = get_usage_period(target_doc)
-    period_key = usage_period["periodKey"]
-    usage_ref = db.collection("usage").document(target_uid)
-
-    @gc_firestore.transactional
-    def _tx(transaction: gc_firestore.Transaction):
-        snap = usage_ref.get(transaction=transaction)
-        data = snap.to_dict() or {}
-        current_period = data.get("periodKey") or data.get("month")
-        used = int(data.get("videoCreditsUsed") or 0)
-
-        if current_period != period_key:
-            used = 0
-
-        new_used = max(0, used - credits)
-        transaction.set(
-            usage_ref,
-            {
-                "periodKey": period_key,
-                "periodStart": usage_period.get("periodStart"),
-                "periodEnd": usage_period.get("periodEnd"),
-                "periodSource": usage_period.get("periodSource"),
-                "month": usage_period.get("month"),
-                "videoCreditsUsed": new_used,
-                "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
-
-        return {
-            "ok": True,
-            "uid": target_uid,
-            "videoCreditsUsed": new_used,
-            "video_used": new_used,
-            "granted": credits,
-            **usage_period,
-        }
-
-    return _tx(db.transaction())
-
-
-@app.post("/admin/users/{target_uid}/video/usage/reset")
-def admin_reset_video_usage(
-    target_uid: str,
-    authorization: str | None = Header(default=None),
-):
-    _uid, _email, claims = require_user(authorization)
-    if not is_admin(claims):
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    db = get_db()
-    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
-    usage_period = get_usage_period(target_doc)
-    period_key = usage_period["periodKey"]
-    usage_ref = db.collection("usage").document(target_uid)
-
-    usage_ref.set(
-        {
-            "periodKey": period_key,
-            "periodStart": usage_period.get("periodStart"),
-            "periodEnd": usage_period.get("periodEnd"),
-            "periodSource": usage_period.get("periodSource"),
-            "month": usage_period.get("month"),
-            "videoCreditsUsed": 0,
-            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
-
-    return {
-        "ok": True,
-        "uid": target_uid,
-        "videoCreditsUsed": 0,
-        "video_used": 0,
-        **usage_period,
-    }
 
 
 @app.get("/download-image/{job_id}")

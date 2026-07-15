@@ -39,6 +39,11 @@ from entitlements import require_pro_or_business
 from brand_kits import resolve_brand_kit
 from plan_config import get_limit, video_credits_for_duration
 
+from notification_utils import (
+    create_notification,
+    create_usage_notifications,
+)
+
 
 
 # -----------------------------
@@ -830,6 +835,18 @@ async def start_image_video(
             status,
             int(req.duration),
         )
+        create_usage_notifications(
+            db,
+            uid,
+            resource="video",
+            used=int(usage_reservation.get("used") or 0),
+            cap=int(usage_reservation.get("cap") or 0),
+            period_key=(
+                usage_reservation.get("periodKey")
+                or usage_reservation.get("month")
+            ),
+            link="/videoads",
+        )
 
     job_id = str(uuid.uuid4())
 
@@ -1117,6 +1134,18 @@ async def start_prompt_video(
             tier,
             status,
             int(req.duration),
+        )
+        create_usage_notifications(
+            db,
+            uid,
+            resource="video",
+            used=int(usage_reservation.get("used") or 0),
+            cap=int(usage_reservation.get("cap") or 0),
+            period_key=(
+                usage_reservation.get("periodKey")
+                or usage_reservation.get("month")
+            ),
+            link="/videoads",
         )
 
     # Build concise prompt-to-video creative direction.
@@ -1474,6 +1503,26 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 "contentType": stored.get("contentType") or "video/mp4",
             })
 
+            product_name = (
+                job.get("productName")
+                or job.get("description")
+                or "Your creative"
+            )
+
+            create_notification(
+                db,
+                uid,
+                event_key=f"video_ready_{job_id}",
+                title="Your video is ready",
+                body=f"{str(product_name)[:80]} has finished generating and is available in your Library.",
+                notification_type="video_ready",
+                link="/library",
+                metadata={
+                    "jobId": job_id,
+                    "finalVideoUrl": final_url,
+                },
+            )
+
     except Exception as exc:
         job_ref.update({
             "status": "failed",
@@ -1482,6 +1531,20 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             **progress_payload("failed"),
             "progressUpdatedAt": int(time.time()),
         })
+
+        create_notification(
+            db,
+            uid,
+            event_key=f"video_failed_{job_id}",
+            title="Video generation failed",
+            body="Your video could not be completed. Review the request and try again.",
+            notification_type="generation_failed",
+            link="/videoads",
+            metadata={
+                "jobId": job_id,
+                "error": str(exc)[:300],
+            },
+        )
 
 
 @router.get("/video/status/{job_id}", response_model=VideoStatusResponse)
@@ -1523,12 +1586,40 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
 
     try:
         task = await get_task(runway_video_task_id)
-    except RunwayError as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        return VideoStatusResponse(jobId=job_id, status="failed", error=str(e))
-    except Exception as e:
-        job_ref.update({"status": "failed", "error": str(e)})
-        return VideoStatusResponse(jobId=job_id, status="failed", error=str(e))
+
+    except (RunwayError, Exception) as exc:
+        error_message = str(exc)
+
+        job_ref.update({
+            "status": "failed",
+            "error": error_message,
+            **progress_payload("failed"),
+            "progressUpdatedAt": int(time.time()),
+        })
+
+        create_notification(
+            db,
+            uid,
+            event_key=f"video_failed_{job_id}",
+            title="Video generation failed",
+            body=(
+                "The video service could not complete your request. "
+                "Review the creative direction and try again."
+            ),
+            notification_type="generation_failed",
+            link="/videoads",
+            metadata={
+                "jobId": job_id,
+                "error": error_message[:300],
+            },
+        )
+
+        return VideoStatusResponse(
+            jobId=job_id,
+            status="failed",
+            error=error_message,
+            **progress_payload("failed"),
+        )
 
     st = task.get("status")
 
@@ -1550,9 +1641,41 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         )
 
     if st in ("FAILED", "CANCELED"):
-        err = task.get("error") or task.get("failureReason") or "Runway task failed."
-        job_ref.update({"status": "failed", "error": err, **progress_payload("failed")})
-        return VideoStatusResponse(jobId=job_id, status="failed", error=err, **progress_payload("failed"))
+        err = (
+            task.get("error")
+            or task.get("failureReason")
+            or "Runway task failed."
+        )
+
+        job_ref.update({
+            "status": "failed",
+            "error": err,
+            **progress_payload("failed"),
+        })
+
+        create_notification(
+            db,
+            uid,
+            event_key=f"video_failed_{job_id}",
+            title="Video generation failed",
+            body=(
+                "The video service could not complete your request. "
+                "Review the creative direction and try again."
+            ),
+            notification_type="generation_failed",
+            link="/videoads",
+            metadata={
+                "jobId": job_id,
+                "error": str(err)[:300],
+            },
+        )
+
+        return VideoStatusResponse(
+            jobId=job_id,
+            status="failed",
+            error=err,
+            **progress_payload("failed"),
+        )
 
     refreshed = job_ref.get().to_dict() or job
     return VideoStatusResponse(

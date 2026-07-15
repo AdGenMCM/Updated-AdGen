@@ -1,6 +1,25 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { signOut, onAuthStateChanged, getIdTokenResult } from "firebase/auth";
+import {
+  Menu,
+  X,
+  ChevronDown,
+  Home,
+  Layers3,
+  CircleDollarSign,
+  Building2,
+  Mail,
+  FileText,
+  ShieldCheck,
+  UserRound,
+  LogOut,
+  Settings,
+} from "lucide-react";
+import {
+  signOut,
+  onAuthStateChanged,
+  getIdTokenResult,
+} from "firebase/auth";
 import { auth } from "./firebaseConfig";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import "./Navbar.css";
@@ -9,281 +28,338 @@ const db = getFirestore();
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
-  const [subStatus, setSubStatus] = useState("checking"); // checking | inactive | pending | active | trialing
+  const [subStatus, setSubStatus] = useState("checking");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
-  // Dropdown state
-  const [infoOpen, setInfoOpen] = useState(false);
-  const infoRef = useRef(null);
+  const moreRef = useRef(null);
+  const accountRef = useRef(null);
 
-  // Auth state
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
+    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      setUser(nextUser);
 
-      if (!u) {
+      if (!nextUser) {
         setIsAdmin(false);
         return;
       }
 
       try {
-        // Force refresh so updated custom claims show up
-        const tokenResult = await getIdTokenResult(u, true);
+        const tokenResult = await getIdTokenResult(nextUser, true);
         setIsAdmin(tokenResult?.claims?.role === "admin");
-      } catch (e) {
-        console.warn("[Navbar] Failed to read token claims:", e);
+      } catch (error) {
+        console.warn("[Navbar] Failed to read token claims:", error);
         setIsAdmin(false);
       }
     });
 
-    return () => unsub();
+    return () => unsubscribe();
   }, []);
 
-  // Subscription status listener
   useEffect(() => {
     if (!user) {
       setSubStatus("inactive");
-      return;
+      return undefined;
     }
 
     const ref = doc(db, "users", user.uid);
-    const unsub = onSnapshot(
+
+    const unsubscribe = onSnapshot(
       ref,
-      (snap) => {
-        const s = snap.data()?.stripe?.status ?? "inactive";
-        setSubStatus(s);
+      (snapshot) => {
+        setSubStatus(snapshot.data()?.stripe?.status ?? "inactive");
       },
       () => setSubStatus("inactive")
     );
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [user]);
 
-  const verified = !!user && user.emailVerified;
-  const isActive = subStatus === "active" || subStatus === "trialing";
-
-  // ✅ Admin should see everything regardless of subscription / verification
-  const canAccessPaid = !!user && (isAdmin || (verified && isActive));
-
-  // Close dropdown on outside click + Escape
   useEffect(() => {
-    const onDocMouseDown = (e) => {
-      if (!infoRef.current) return;
-      if (!infoRef.current.contains(e.target)) setInfoOpen(false);
+    const handlePointerDown = (event) => {
+      if (!moreRef.current?.contains(event.target)) {
+        setMoreOpen(false);
+      }
+
+      if (!accountRef.current?.contains(event.target)) {
+        setAccountOpen(false);
+      }
     };
 
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setInfoOpen(false);
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setMobileOpen(false);
+        setMoreOpen(false);
+        setAccountOpen(false);
+      }
     };
 
-    document.addEventListener("mousedown", onDocMouseDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
     return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
-  // Dropdown items (routes that exist)
-  const dropdownItems = [
+  const verified = Boolean(user?.emailVerified);
+  const hasActiveAccess =
+    subStatus === "active" ||
+    subStatus === "trialing" ||
+    subStatus === "past_due";
+
+  const canAccessWorkspace =
+    Boolean(user) && (isAdmin || (verified && hasActiveAccess));
+
+  const primaryLinks = [
     { to: "/", label: "Home" },
     { to: "/platform", label: "Platform" },
+    { to: "/pricing", label: "Pricing" },
     { to: "/about", label: "About" },
-    { to: "/pricing", label: "Products" },
-    { to: "/contact", label: "Contact Us" },
-
-    // ✅ Optimizer link for any logged-in user (tier enforced in-page + backend)
-    ...(user
-      ? [
-          { divider: true, mobileOnly: true },
-          { to: "/brand-kit", label: "Brand Kit", mobileOnly: true },
-          { to: "/optimizer", label: "Ad Optimizer", mobileOnly: true },
-          { to: "/insights", label: "Insights", mobileOnly: true },
-          { to: "/library", label: "Creative Library", mobileOnly: true },
-        ]
-      : []),
-
-    // ✅ Mobile-only paid links inside dropdown
-    ...(canAccessPaid
-      ? [
-          { divider: true, mobileOnly: true },
-          { to: "/adgenerator", label: "Ad Generator", mobileOnly: true },
-          { to: "/creative-studio", label: "Creative Studio", mobileOnly: true },
-
-          // ✅ NEW: Video Ads (page will show upgrade if tier not eligible)
-          { to: "/video-ads", label: "Video Ads", mobileOnly: true },
-        ]
-      : []),
-
-    ...(user
-      ? [
-          ...(isAdmin
-            ? [
-                { divider: true },
-                { to: "/admin/users", label: "Admin" },
-              ]
-            : []),
-          { divider: true },
-          { to: "/account", label: "My Account" },
-        ]
-      : []),
-
-    { divider: true },
-    { to: "/terms", label: "Terms of Service" },
-    { to: "/privacy", label: "Privacy Policy" },
+    { to: "/contact", label: "Contact" },
   ];
 
+  const utilityLinks = [
+    { to: "/terms", label: "Terms of Service", icon: FileText },
+    { to: "/privacy", label: "Privacy Policy", icon: ShieldCheck },
+  ];
+
+  const mobileLinks = [
+    { to: "/", label: "Home", icon: Home },
+    { to: "/platform", label: "Platform", icon: Layers3 },
+    { to: "/pricing", label: "Pricing", icon: CircleDollarSign },
+    { to: "/about", label: "About", icon: Building2 },
+    { to: "/contact", label: "Contact", icon: Mail },
+    ...utilityLinks,
+  ];
+
+  const closeAll = () => {
+    setMobileOpen(false);
+    setMoreOpen(false);
+    setAccountOpen(false);
+  };
+
   return (
-    <nav className="nav-wrap">
-      <div className="nav-inner">
-        {/* Brand left */}
-        <Link to="/" className="brand" onClick={() => setInfoOpen(false)}>
-          ADGen MCM
+    <nav className="marketing-nav">
+      <div className="marketing-nav-inner">
+        <Link to="/" className="marketing-nav-brand" onClick={closeAll}>
+          <img
+            src="/images/ADGen MCM Logo Update Transparent Copy.png"
+            alt="ADGen MCM"
+            className="marketing-nav-brand-logo"
+          />
         </Link>
 
-        {/* Right side */}
-        <div className="nav-right">
-          {/* FAR RIGHT DROPDOWN */}
-          <div className="nav-dropdown" ref={infoRef}>
-            <button
-              className="dropdown-toggle"
-              onClick={() => setInfoOpen((v) => !v)}
-              aria-label="Open menu"
-              aria-haspopup="menu"
-              aria-expanded={infoOpen}
-              type="button"
+        <div className="marketing-nav-center" aria-label="Primary navigation">
+          {primaryLinks.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                `marketing-nav-link ${isActive ? "is-active" : ""}`
+              }
             >
-              ☰
+              {label}
+            </NavLink>
+          ))}
+
+          <div className="marketing-nav-more" ref={moreRef}>
+            <button
+              type="button"
+              className={`marketing-nav-link marketing-nav-more-toggle ${
+                moreOpen ? "is-active" : ""
+              }`}
+              onClick={() => {
+                setMoreOpen((open) => !open);
+                setAccountOpen(false);
+              }}
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+            >
+              Legal
+              <ChevronDown size={14} />
             </button>
 
-            {infoOpen && (
-              <div className="dropdown-menu dropdown-menu-right" role="menu">
-                {dropdownItems.map((item, idx) => {
-                  if (item.divider) {
-                    return (
-                      <div
-                        className={`dropdown-divider ${item.mobileOnly ? "mobile-only" : ""}`}
-                        key={`div-${idx}`}
-                      />
-                    );
-                  }
-
-                  return (
-                    <Link
-                      key={`${item.to}-${idx}`}
-                      to={item.to}
-                      className={`dropdown-item ${item.mobileOnly ? "mobile-only" : ""}`}
-                      role="menuitem"
-                      onClick={() => setInfoOpen(false)}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
+            {moreOpen && (
+              <div className="marketing-nav-more-menu" role="menu">
+                {utilityLinks.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={closeAll}
+                    role="menuitem"
+                  >
+                    <Icon size={16} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
               </div>
             )}
           </div>
+        </div>
 
-          {/* ✅ Optimizer (desktop) — shown when logged in */}
-          {user && (
-            <NavLink
-              to="/brand-kit"
-              className="nav-link"
-              onClick={() => setInfoOpen(false)}
-            >
-              Brand Kit
-            </NavLink>
-          )}
-          {user && (
-            <NavLink
-              to="/optimizer"
-              className="nav-link"
-              onClick={() => setInfoOpen(false)}
-            >
-              Ad Optimizer
-            </NavLink>
-          )}
-          {user && (
-            <NavLink to="/insights" className="nav-link" onClick={() => setInfoOpen(false)}>
-                Insights
-            </NavLink>
-            )}
-          {user && (
-            <NavLink
-              to="/library"
-              className="nav-link"
-              onClick={() => setInfoOpen(false)}
-            >
-              Library
-            </NavLink>
-          )}
-
-          {/* ✅ Admin (desktop) — admin only */}
-          {isAdmin && (
-            <NavLink
-              to="/admin/users"
-              className="nav-link"
-              onClick={() => setInfoOpen(false)}
-            >
-              Admin
-            </NavLink>
-          )}
-
-          {/* Paid features links (desktop only via CSS) */}
-          {canAccessPaid && (
+        <div className="marketing-nav-actions">
+          {user ? (
             <>
-              <NavLink
-                to="/adgenerator"
-                className="nav-link"
-                onClick={() => setInfoOpen(false)}
+              <Link
+                to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
+                className="marketing-nav-workspace"
               >
-                Ad Generator
-              </NavLink>
+                {canAccessWorkspace ? "Open workspace" : "Choose a plan"}
+              </Link>
 
-              <NavLink
-                to="/creative-studio"
-                className="nav-link"
-                onClick={() => setInfoOpen(false)}
-              >
-                Creative Studio
-              </NavLink>
+              <div className="marketing-nav-account" ref={accountRef}>
+                <button
+                  type="button"
+                  className="marketing-nav-account-toggle"
+                  onClick={() => {
+                    setAccountOpen((open) => !open);
+                    setMoreOpen(false);
+                  }}
+                  aria-label="Open account menu"
+                  aria-expanded={accountOpen}
+                  aria-haspopup="menu"
+                >
+                  <span className="marketing-nav-avatar">
+                    {(user.displayName || user.email || "U")
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+                  <ChevronDown size={14} />
+                </button>
 
-              {/* ✅ NEW: Video Ads */}
-              <NavLink
-                to="/video-ads"
-                className="nav-link"
-                onClick={() => setInfoOpen(false)}
-              >
-                Video Ads
-              </NavLink>
+                {accountOpen && (
+                  <div className="marketing-nav-account-menu" role="menu">
+                    <div className="marketing-nav-user">
+                      <span>{user.displayName || "AdGen user"}</span>
+                      <small>{user.email}</small>
+                    </div>
+
+                    <Link to="/account" onClick={closeAll} role="menuitem">
+                      <UserRound size={16} />
+                      My Account
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        to="/admin/users"
+                        onClick={closeAll}
+                        role="menuitem"
+                      >
+                        <Settings size={16} />
+                        Admin
+                      </Link>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeAll();
+                        signOut(auth);
+                      }}
+                      role="menuitem"
+                    >
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="marketing-nav-login">
+                Sign in
+              </Link>
+              <Link to="/login" className="marketing-nav-primary">
+                Start creating
+              </Link>
             </>
           )}
 
-          {/* Auth button */}
-          {user ? (
-            <button
-              className="btn primary"
-              onClick={() => {
-                setInfoOpen(false);
-                signOut(auth);
-              }}
-            >
-              Logout
-            </button>
-          ) : (
-            <NavLink
-              to="/login"
-              className="btn primary"
-              onClick={() => setInfoOpen(false)}
-            >
-              Login/Register
-            </NavLink>
-          )}
+          <button
+            type="button"
+            className="marketing-nav-mobile-toggle"
+            onClick={() => setMobileOpen((open) => !open)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X size={21} /> : <Menu size={21} />}
+          </button>
         </div>
       </div>
+
+      {mobileOpen && (
+        <div className="marketing-nav-mobile-panel">
+          <div className="marketing-nav-mobile-links">
+            {mobileLinks.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                onClick={closeAll}
+                className={({ isActive }) =>
+                  isActive ? "is-active" : ""
+                }
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </div>
+
+          <div className="marketing-nav-mobile-actions">
+            {user ? (
+              <>
+                <Link
+                  to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
+                  onClick={closeAll}
+                  className="is-primary"
+                >
+                  {canAccessWorkspace ? "Open workspace" : "Choose a plan"}
+                </Link>
+
+                <Link to="/account" onClick={closeAll}>
+                  My Account
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeAll();
+                    signOut(auth);
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" onClick={closeAll}>
+                  Sign in
+                </Link>
+                <Link
+                  to="/login"
+                  onClick={closeAll}
+                  className="is-primary"
+                >
+                  Start creating
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
+
+
 
 
 

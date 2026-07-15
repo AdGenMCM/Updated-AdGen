@@ -1,252 +1,444 @@
 /* Navbar.css */
 
-/* Navbar.css */
-
-/* ------------------------------ */
-/* Base (desktop-first)           */
-/* ------------------------------ */
-
-.nav-wrap {
+.marketing-nav {
   position: sticky;
   top: 0;
-  z-index: 50;
-  background: #333;
-  border-bottom: 1px solid #eee;
-  margin-bottom: 20px;
-  padding: 10px 0px 10px 0px;
+  z-index: 1000;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.96),
+      rgba(248, 250, 252, 0.88)
+    );
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
 }
 
-.nav-inner {
-  display: flex;
-  justify-content: space-between;
+.marketing-nav-inner {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
   align-items: center;
-  padding: 0 15px;
-  max-width: 100%;
+  gap: 28px;
+  width: min(100%, 1280px);
+  min-height: 84px;
   margin: 0 auto;
-  height: 60px;
-
-  /* IMPORTANT: allow dropdown to render outside without being clipped */
-  overflow: visible;
+  padding: 0 28px;
 }
 
-/* Brand left */
-.brand {
-  font-weight: 700;
-  font-size: 40px;
-  color: white;
-  text-decoration: none;
-
-  /* Prevent brand from forcing overflow */
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.brand:hover {
-  background-color: #555;
-}
-
-/* Right side nav container */
-.nav-right {
+.marketing-nav-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-
-  /* Prevent layout from wrapping weirdly */
-  flex-wrap: nowrap;
+  width: 180px;
+  height: 52px;
+  overflow: hidden;
 }
 
-/* Nav links */
-.nav-link {
-  font-size: 20px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  color: white;
-  text-decoration: none;
-  transition: background-color 0.2s ease, color 0.2s ease;
-  white-space: nowrap;
+.marketing-nav-brand-logo {
+  width: 220px;
+  max-width: none;
+  height: auto;
+  object-fit: contain;
+  transform: scale(.85);
+  transform-origin: left center;
 }
 
-.nav-link:hover {
-  background-color: #555;
-}
-
-.nav-link.active {
-  background-color: #555;
-  color: white;
-}
-
-/* Buttons styled same as AuthForm */
-.btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 20px;
-  border: none;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background-color 0.2s ease, transform 0.02s ease;
-  white-space: nowrap;
-}
-
-.btn.primary {
-  background-color: #4a90e2;
-  color: #fff;
-}
-
-.btn.primary:hover {
-  background-color: #357ab8;
-}
-
-.btn:active {
-  transform: translateY(1px);
-}
-
-/* ------------------------------ */
-/* Dropdown styles (far right)    */
-/* ------------------------------ */
-
-.nav-dropdown {
-  position: relative;
-  /* ensure menu stacks above content */
-  z-index: 2000;
-}
-
-.dropdown-toggle {
-  display: inline-flex;
+.marketing-nav-center {
+  display: flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+}
+
+.marketing-nav-link {
+  position: relative;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 11px;
+  color: #64748b;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.marketing-nav-link::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: 5px;
+  left: 14px;
+  height: 2px;
+  border-radius: 999px;
+  opacity: 0;
+  background: linear-gradient(90deg, #7c3aed, #4f46e5);
+  transform: scaleX(0.4);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.marketing-nav-link:hover {
+  color: #4f46e5;
+  background: rgba(99, 102, 241, 0.10);
+}
+
+.marketing-nav-link.is-active {
+  color: #0f172a;
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.marketing-nav-link:hover {
+  transform: translateY(-1px);
+}
+
+.marketing-nav-link.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.marketing-nav-more {
+  position: relative;
+}
+
+.marketing-nav-more-toggle.is-active svg {
+  transform: rotate(180deg);
+}
+
+.marketing-nav-more-toggle svg {
+  transition: transform 180ms ease;
+}
+
+.marketing-nav-more-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  display: grid;
+  width: 220px;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.13),
+    0 38px 90px rgba(79, 70, 229, 0.07);
+  animation: marketingNavEnter 180ms ease both;
+}
+
+.marketing-nav-more-menu a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border-radius: 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.marketing-nav-more-menu a:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.marketing-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.marketing-nav-login,
+.marketing-nav-workspace,
+.marketing-nav-primary {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.marketing-nav-login {
+  border: 1px solid #0f172a;
+  color: #475569;
+}
+
+.marketing-nav-login:hover {
+  color: #4f46e5;
+  border-color: rgba(99, 102, 241, 0.20);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.12);
+}
+
+.marketing-nav-workspace {
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.marketing-nav-primary {
+  border: 1px solid #0f172a;
+  color: #ffffff;
+  background: linear-gradient(180deg, #182236, #0f172a);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.14),
+    0 18px 42px rgba(79, 70, 229, 0.08);
+}
+
+.marketing-nav-workspace:hover,
+.marketing-nav-primary:hover {
+  transform: translateY(-2px);
+}
+
+.marketing-nav-account {
+  position: relative;
+}
+
+.marketing-nav-account-toggle {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 0 6px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 12px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.marketing-nav-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.marketing-nav-account-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 230px;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.13),
+    0 38px 90px rgba(79, 70, 229, 0.07);
+  animation: marketingNavEnter 180ms ease both;
+}
+
+@keyframes marketingNavEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.marketing-nav-user {
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.marketing-nav-user span {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.marketing-nav-user small {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketing-nav-account-menu a,
+.marketing-nav-account-menu button {
+  display: flex;
+  width: 100%;
+  min-height: 43px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 10px;
+  color: #475569;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.marketing-nav-account-menu a:hover,
+.marketing-nav-account-menu button:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.marketing-nav-mobile-toggle {
+  display: none;
+  place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: white;
-  font-size: 22px;
-  transition: background-color 0.2s ease;
-}
-
-.dropdown-toggle:hover {
-  background-color: #555;
-}
-
-/* Dropdown panel */
-.dropdown-menu {
-  position: absolute;
-
-  /* anchor to the button more reliably */
-  top: calc(100% + 8px);
-
-  min-width: 220px;
-  background: #333;
-  border: 1px solid #555;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.09);
   border-radius: 12px;
-  padding: 8px 0;
-  z-index: 3000;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-
-  /* don't let long labels break layout */
-  overflow: hidden;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
 }
 
-/* Right align the dropdown panel */
-.dropdown-menu-right {
-  right: 0;
-  left: auto;
+.marketing-nav-mobile-panel {
+  display: none;
 }
 
-.dropdown-item {
-  display: block;
-  padding: 10px 14px;
-  color: white;
-  text-decoration: none;
-  font-size: 16px;
-}
-
-.dropdown-item:hover {
-  background-color: #555;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background: #555;
-  margin: 6px 0;
-}
-
-/* ------------------------------ */
-/* Mobile fixes                    */
-/* ------------------------------ */
-
-@media (max-width: 768px) {
-  .nav-wrap {
-    margin-bottom: 12px;
-    padding: 8px 0;
+@media (max-width: 1100px) {
+  .marketing-nav-inner {
+    grid-template-columns: auto 1fr auto;
   }
 
-  .nav-inner {
-    height: 56px;
-    padding: 0 12px;
-    gap: 10px;
-  }
-
-  /* Brand was causing the big left overflow/clipping */
-  .brand {
-    font-size: 26px;   /* was 40px */
-    max-width: 55vw;   /* keep room for ☰ + Login/Logout */
-  }
-
-  .nav-right {
-    gap: 10px;
-  }
-
-  /* Hide these on mobile (they’re accessible via dropdown already) */
-  .nav-link {
+  .marketing-nav-center,
+  .marketing-nav-actions > .marketing-nav-login,
+  .marketing-nav-actions > .marketing-nav-workspace,
+  .marketing-nav-actions > .marketing-nav-primary,
+  .marketing-nav-actions > .marketing-nav-account {
     display: none;
   }
 
-  /* Make auth button more compact on mobile */
-  .btn {
-    font-size: 16px;
-    padding: 8px 12px;
-    border-radius: 10px;
+  .marketing-nav-mobile-toggle {
+    display: inline-grid;
   }
 
-  .dropdown-toggle {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    font-size: 22px;
-  }
-
-  /* Mobile dropdown: make it a nice panel that doesn't cover the brand */
-  .dropdown-menu {
-    position: fixed;
-
-    /* place under navbar */
-    top: 64px;
-
-    /* inset from edges */
-    left: 12px;
-    right: 12px;
-
-    /* override min-width so it doesn’t overflow */
-    min-width: 0;
-
+  .marketing-nav-mobile-panel {
+    display: grid;
+    gap: 16px;
+    width: min(calc(100% - 32px), 760px);
+    margin: 0 auto 12px;
+    padding: 14px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
     border-radius: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow:
+      0 18px 44px rgba(15, 23, 42, 0.12),
+      0 34px 80px rgba(79, 70, 229, 0.06);
+    animation: marketingNavEnter 180ms ease both;
   }
 
-  /* right align class no longer needed on mobile fixed menu */
-  .dropdown-menu-right {
-    right: 12px;
-    left: 12px;
+  .marketing-nav-mobile-links,
+  .marketing-nav-mobile-actions {
+    display: grid;
+    gap: 5px;
   }
 
-  .dropdown-item {
-    font-size: 18px;
-    padding: 14px 12px;
+  .marketing-nav-mobile-links a,
+  .marketing-nav-mobile-actions a,
+  .marketing-nav-mobile-actions button {
+    display: flex;
+    min-height: 46px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 11px;
+    color: #475569;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 750;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .marketing-nav-mobile-links a:hover,
+  .marketing-nav-mobile-links a.is-active,
+  .marketing-nav-mobile-actions a:hover,
+  .marketing-nav-mobile-actions button:hover {
+    color: #0f172a;
+    background: rgba(15, 23, 42, 0.05);
+  }
+
+  .marketing-nav-mobile-actions {
+    padding-top: 13px;
+    border-top: 1px solid rgba(15, 23, 42, 0.07);
+  }
+
+  .marketing-nav-mobile-actions .is-primary {
+    justify-content: center;
+    color: #ffffff;
+    background: #0f172a;
   }
 }
+
+@media (max-width: 620px) {
+  .marketing-nav-inner {
+    min-height: 74px;
+    padding: 0 16px;
+  }
+
+  .marketing-nav-brand-logo {
+    max-width: 155px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-nav-link,
+  .marketing-nav-primary,
+  .marketing-nav-workspace,
+  .marketing-nav-more-menu,
+  .marketing-nav-account-menu,
+  .marketing-nav-mobile-panel {
+    animation: none;
+    transition: none;
+  }
+
+  .marketing-nav-link:hover,
+  .marketing-nav-primary:hover,
+  .marketing-nav-workspace:hover {
+    transform: none;
+  }
+}
+
 
 
 

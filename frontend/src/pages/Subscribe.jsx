@@ -7,15 +7,100 @@ import {
   createPortalSession,
   syncSubscription,
 } from "../api/payments";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import {
+  ArrowRight,
+  Check,
+  CreditCard,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import "./Subscribe.css";
 
 const db = getFirestore();
 
 const PLAN_OPTIONS = [
-  { id: "trial_monthly", label: "Trial", price: 9.99 },
-  { id: "starter_monthly", label: "Starter", price: 34.99 },
-  { id: "pro_monthly", label: "Pro", price: 79.99 },
-  { id: "business_monthly", label: "Business", price: 199.99 },
+  {
+    id: "trial_monthly",
+    label: "Trial",
+    price: 9.99,
+    eyebrow: "Explore AdGen",
+    description:
+      "Experience the connected creative workflow with real image and video generation.",
+    images: "10 images",
+    videos: "2 video credits",
+    optimizer: "No Optimizer",
+    brands: "1 Brand Kit",
+    storage: "2 GB storage",
+    features: [
+      "Image generation",
+      "Video generation",
+      "Ad copy",
+      "Creative Studio",
+      "Creative Library",
+    ],
+  },
+  {
+    id: "starter_monthly",
+    label: "Starter",
+    price: 34.99,
+    eyebrow: "For growing creators",
+    description:
+      "A dependable monthly creative workflow for freelancers, brands, and small businesses.",
+    images: "40 images",
+    videos: "5 video credits",
+    optimizer: "No Optimizer",
+    brands: "1 Brand Kit",
+    storage: "10 GB storage",
+    features: [
+      "Everything in Trial",
+      "Higher generation limits",
+      "Brand-aware defaults",
+      "Creative Studio",
+      "Asset storage",
+    ],
+  },
+  {
+    id: "pro_monthly",
+    label: "Pro",
+    price: 79.99,
+    eyebrow: "Most popular",
+    description:
+      "Create, optimize, measure, and improve active campaigns from one connected workspace.",
+    images: "100 images",
+    videos: "12 video credits",
+    optimizer: "20 Optimizer runs",
+    brands: "3 Brand Kits",
+    storage: "50 GB storage",
+    featured: true,
+    features: [
+      "Everything in Starter",
+      "Creative Optimizer",
+      "Performance tracking",
+      "Winner analysis",
+      "Advanced Insights",
+    ],
+  },
+  {
+    id: "business_monthly",
+    label: "Business",
+    price: 199.99,
+    eyebrow: "For teams and agencies",
+    description:
+      "Higher limits and multi-brand capacity for high-volume creative workflows.",
+    images: "250 images",
+    videos: "30 video credits",
+    optimizer: "75 Optimizer runs",
+    brands: "10 Brand Kits",
+    storage: "200 GB storage",
+    features: [
+      "Everything in Pro",
+      "Priority generation",
+      "Expanded storage",
+      "Higher optimizer limits",
+      "Priority support",
+    ],
+  },
 ];
 
 const ALLOWED_TIERS = new Set(PLAN_OPTIONS.map((plan) => plan.id));
@@ -26,7 +111,9 @@ export default function Subscribe() {
   const [stripeInfo, setStripeInfo] = useState(null);
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [tier, setTier] = useState("starter_monthly");
+  const [tier, setTier] = useState("pro_monthly");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutAbandoned, setCheckoutAbandoned] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,9 +124,14 @@ export default function Subscribe() {
 
   const sessionId = params.get("session_id");
   const success = params.get("success") === "1";
-  const from = location.state?.from?.pathname || "/adgenerator";
+  const from = location.state?.from?.pathname || "/dashboard";
   const pollRef = useRef(null);
   const purchaseFiredRef = useRef(false);
+  const notice = location.state?.notice || params.get("notice") || "";
+  const activationMessage =
+    notice === "choose_plan"
+      ? "Choose a plan to activate your AdGen workspace."
+      : "";
 
   const selectedPlan =
     PLAN_OPTIONS.find((plan) => plan.id === tier) || PLAN_OPTIONS[1];
@@ -112,7 +204,12 @@ export default function Subscribe() {
         setStatus(nextStatus);
         setStripeInfo(data?.stripe || null);
 
-        if (nextStatus === "active") {
+        const hasWorkspaceAccess =
+          nextStatus === "active" ||
+          nextStatus === "trialing" ||
+          nextStatus === "past_due";
+
+        if (hasWorkspaceAccess) {
           if (!purchaseFiredRef.current && window.fbq) {
             purchaseFiredRef.current = true;
 
@@ -122,7 +219,21 @@ export default function Subscribe() {
             });
           }
 
-          navigate(from, { replace: true });
+          const storedTarget = localStorage.getItem(
+            "adgen_post_checkout_redirect"
+          );
+
+          const completedCheckout =
+            Boolean(success && sessionId) ||
+            Boolean(storedTarget);
+
+          const destination = completedCheckout
+            ? storedTarget || "/brand-kit"
+            : from || "/dashboard";
+
+          localStorage.removeItem("adgen_post_checkout_redirect");
+
+          navigate(destination, { replace: true });
         }
       },
       (snapshotError) => {
@@ -133,7 +244,7 @@ export default function Subscribe() {
     );
 
     return () => unsubscribe && unsubscribe();
-  }, [currentUser, navigate, from, selectedPlan.price]);
+  }, [currentUser, navigate, from, selectedPlan.price, success, sessionId]);
 
   useEffect(() => {
     if (!currentUser || !sessionId || status !== "pending") {
@@ -173,19 +284,38 @@ export default function Subscribe() {
     };
   }, [currentUser, sessionId, status]);
 
-  if (!currentUser) {
-    return (
-      <div className="auth-container" style={{ minHeight: "60vh" }}>
-        <div style={{ maxWidth: 520 }}>
-          <h2>Sign in to continue</h2>
-          <p>Please log in or create an account before selecting your plan.</p>
-          <button type="button" onClick={() => navigate("/login")}>
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (status !== "pending" || success || sessionId) return;
+
+      window.setTimeout(() => {
+        setCheckoutAbandoned(true);
+        setSyncing(false);
+        localStorage.removeItem("adgen_post_checkout_redirect");
+      }, 500);
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [status, success, sessionId]);
+
+  useEffect(() => {
+    if (status !== "pending" || success || sessionId) {
+      setCheckoutAbandoned(false);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCheckoutAbandoned(true);
+      setSyncing(false);
+      localStorage.removeItem("adgen_post_checkout_redirect");
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [status, success, sessionId]);
 
   const openInNewTab = (url) => {
     const anchor = document.createElement("a");
@@ -198,9 +328,28 @@ export default function Subscribe() {
   };
 
   const startSubscription = async () => {
+    if (!currentUser) {
+      navigate("/login", {
+        state: {
+          from: {
+            pathname: "/subscribe",
+            search: `?tier=${tier}`,
+          },
+        },
+      });
+      return;
+    }
+
     setError("");
+    setCheckoutAbandoned(false);
+    setCheckoutLoading(true);
 
     try {
+      localStorage.setItem(
+        "adgen_post_checkout_redirect",
+        "/brand-kit"
+      );
+
       const { url } = await createCheckoutSession({
         uid: currentUser.uid,
         email: currentUser.email,
@@ -210,7 +359,10 @@ export default function Subscribe() {
       openInNewTab(url);
     } catch (checkoutError) {
       console.error(checkoutError);
+      localStorage.removeItem("adgen_post_checkout_redirect");
       setError(checkoutError.message || "Failed to start checkout.");
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -248,85 +400,258 @@ export default function Subscribe() {
     }
   };
 
+  const pendingCheckoutIsReturning =
+    status === "pending" && Boolean(success && sessionId);
+
   const showSpinner =
-    status === "checking" || syncing || status === "pending";
-  const isActive = status === "active";
+    status === "checking" ||
+    syncing ||
+    (pendingCheckoutIsReturning && !checkoutAbandoned);
+
+  const isActive =
+    status === "active" ||
+    status === "trialing" ||
+    status === "past_due";
+
+  if (!currentUser) {
+    return (
+      <main className="subscribe-v2-page">
+        <section className="subscribe-v2-signin">
+          <div className="subscribe-v2-signin-card">
+            <span className="subscribe-v2-eyebrow">Account required</span>
+            <h1>Sign in to choose your plan.</h1>
+            <p>
+              Create an account or sign in before continuing to secure Stripe
+              checkout.
+            </p>
+            <button type="button" onClick={() => navigate("/login")}>
+              Go to sign in
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <div className="auth-container" style={{ minHeight: "60vh" }}>
-      <form onSubmit={(event) => event.preventDefault()} style={{ maxWidth: 520 }}>
-        <h2 style={{ marginBottom: 8 }}>Choose your AdGen plan</h2>
+    <main className="subscribe-v2-page">
+      <section className="subscribe-v2-hero">
+        <div className="subscribe-v2-hero-bg" aria-hidden="true" />
 
-        <p style={{ marginBottom: 18 }}>
-          {showSpinner
-            ? "Finalizing your subscription…"
-            : isActive
-            ? "Your subscription is active."
-            : "Select a monthly plan, then continue to secure Stripe checkout."}
-        </p>
+        <div className="subscribe-v2-container subscribe-v2-hero-inner">
+          <span className="subscribe-v2-eyebrow">Choose your plan</span>
 
-        {error && (
-          <p style={{ color: "crimson", marginBottom: 12 }}>
-            {error}
+          <h1>
+            <span>Start with the creative workflow</span>
+            <span>that fits how you work.</span>
+          </h1>
+
+          <p>
+            Select a monthly plan, then continue to Stripe’s secure checkout.
+            You can upgrade, downgrade, or manage billing later from your account.
           </p>
-        )}
 
-        {!isActive && (
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", marginBottom: 7 }}>
-              Plan
-            </label>
+          <div className="subscribe-v2-assurances">
+            <span>
+              <ShieldCheck size={15} />
+              Secure Stripe checkout
+            </span>
 
-            <select
-              value={tier}
-              onChange={(event) => setTier(event.target.value)}
-              style={{ width: "100%", padding: 11, borderRadius: 8 }}
-              disabled={showSpinner}
-            >
-              {PLAN_OPTIONS.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.label} Monthly — ${plan.price.toFixed(2)}
-                </option>
-              ))}
-            </select>
+            <span>
+              <CreditCard size={15} />
+              Monthly billing
+            </span>
 
-            <p style={{ margin: "9px 0 0", fontSize: 13, opacity: 0.76 }}>
-              Selected: {selectedPlan.label} at ${selectedPlan.price.toFixed(2)}/month
-            </p>
+            <span>
+              <Sparkles size={15} />
+              Cancel anytime
+            </span>
           </div>
-        )}
-
-        {showSpinner ? (
-          <button type="button" disabled>
-            Processing…
-          </button>
-        ) : !isActive ? (
-          <button type="button" onClick={startSubscription}>
-            Continue to Stripe
-          </button>
-        ) : (
-          <button type="button" onClick={openBilling}>
-            Manage Billing
-          </button>
-        )}
-
-        {status === "pending" && !syncing && (
-          <button
-            type="button"
-            onClick={manualRefresh}
-            style={{ marginTop: 8 }}
-          >
-            Refresh access
-          </button>
-        )}
-
-        <div style={{ marginTop: 18, fontSize: 12, opacity: 0.62 }}>
-          <div>Status: {status}</div>
-          <div>Selected plan: {selectedPlan.label}</div>
-          <div>Customer: {stripeInfo?.customerId || "—"}</div>
         </div>
-      </form>
-    </div>
+      </section>
+
+      <section className="subscribe-v2-plans">
+        <div className="subscribe-v2-container">
+          {activationMessage && (
+            <div className="subscribe-v2-notice" role="status">
+              <span>Activate your workspace</span>
+              <p>{activationMessage}</p>
+            </div>
+          )}
+
+          {checkoutAbandoned && !isActive && (
+            <div className="subscribe-v2-checkout-return" role="status">
+              <div>
+                <span>Checkout not completed</span>
+                <p>
+                  No payment was made. You can select any plan and open a new
+                  secure checkout whenever you are ready.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCheckoutAbandoned(false)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {showSpinner && (
+            <div className="subscribe-v2-processing" role="status">
+              <span className="subscribe-v2-spinner" />
+              <div>
+                <strong>Finalizing your subscription</strong>
+                <p>We are syncing your Stripe checkout and AdGen access.</p>
+              </div>
+
+              {status === "pending" && !syncing && sessionId && (
+                <button type="button" onClick={manualRefresh}>
+                  Refresh access
+                </button>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="subscribe-v2-error" role="alert">
+              <span>!</span>
+              <p>{error}</p>
+            </div>
+          )}
+
+          <div className="subscribe-v2-grid">
+            {PLAN_OPTIONS.map((plan, index) => {
+              const selected = plan.id === tier;
+
+              return (
+                <article
+                  key={plan.id}
+                  className={[
+                    "subscribe-v2-card",
+                    plan.featured ? "featured" : "",
+                    selected ? "selected" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={{ "--plan-delay": `${index * 80}ms` }}
+                >
+                  <div className="subscribe-v2-card-glow" aria-hidden="true" />
+
+                  <button
+                    type="button"
+                    className="subscribe-v2-card-select"
+                    onClick={() => setTier(plan.id)}
+                    disabled={showSpinner || isActive}
+                    aria-pressed={selected}
+                    aria-label={`Select ${plan.label}`}
+                  >
+                    <span className="subscribe-v2-radio">
+                      <i />
+                    </span>
+
+                    <span>{selected ? "Selected" : "Select plan"}</span>
+                  </button>
+
+                  <span className="subscribe-v2-card-eyebrow">
+                    {plan.eyebrow}
+                  </span>
+
+                  <div className="subscribe-v2-card-head">
+                    <h2>{plan.label}</h2>
+
+                    {plan.featured && (
+                      <span className="subscribe-v2-popular">Recommended</span>
+                    )}
+                  </div>
+
+                  <p className="subscribe-v2-card-description">
+                    {plan.description}
+                  </p>
+
+                  <div className="subscribe-v2-price">
+                    <strong>${plan.price.toFixed(2)}</strong>
+                    <span>/ month</span>
+                  </div>
+
+                  <div className="subscribe-v2-usage">
+                    <span>{plan.images}</span>
+                    <span>{plan.videos}</span>
+                    <span>{plan.optimizer}</span>
+                    <span>{plan.brands}</span>
+                    <span>{plan.storage}</span>
+                  </div>
+
+                  <div className="subscribe-v2-divider" />
+
+                  <h3>Included</h3>
+
+                  <ul>
+                    {plan.features.map((feature) => (
+                      <li key={feature}>
+                        <span>
+                          <Check size={12} />
+                        </span>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="subscribe-v2-summary">
+            <div>
+              <span className="subscribe-v2-summary-label">Selected plan</span>
+              <h2>{selectedPlan.label}</h2>
+              <p>
+                ${selectedPlan.price.toFixed(2)} per month · billed monthly
+              </p>
+            </div>
+
+            <div className="subscribe-v2-summary-actions">
+              {!isActive ? (
+                <button
+                  type="button"
+                  className="subscribe-v2-primary"
+                  onClick={startSubscription}
+                  disabled={showSpinner || checkoutLoading}
+                >
+                  <span>
+                    {checkoutLoading
+                      ? "Opening checkout…"
+                      : "Continue to Secure Checkout"}
+                  </span>
+
+                  {!checkoutLoading && <ArrowRight size={18} />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="subscribe-v2-primary"
+                  onClick={openBilling}
+                >
+                  Manage billing
+                  <ArrowRight size={18} />
+                </button>
+              )}
+
+              <Link to="/pricing" className="subscribe-v2-secondary">
+                Compare full plan details
+              </Link>
+            </div>
+          </div>
+
+          <div className="subscribe-v2-account-note">
+            <span>Signed in as</span>
+            <strong>{currentUser.email}</strong>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 
