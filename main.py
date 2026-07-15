@@ -1544,6 +1544,155 @@ async def upload_creatives(
 
     return {"urls": urls}
 
+@app.post("/video/upload-image", response_model=UploadCreativesResponse)
+async def upload_video_image(
+    files: List[UploadFile] = File(...),
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+
+    db = get_db()
+
+    user_doc = (
+        db.collection("users")
+        .document(uid)
+        .get()
+        .to_dict()
+        or {}
+    )
+
+    tier, status = get_tier_and_status(user_doc)
+
+    # Trial, Starter, Pro, and Business may upload images for Video Ads.
+    # Admin bypasses plan checks.
+    if not admin:
+        allowed_statuses = {"active", "trialing"}
+
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
+
+        allowed_video_tiers = {
+            "trial_monthly",
+            "starter_monthly",
+            "pro_monthly",
+            "business_monthly",
+        }
+
+        if tier not in allowed_video_tiers:
+            raise HTTPException(
+                status_code=403,
+                detail="Video generation is not available on your plan.",
+            )
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="No files uploaded.",
+        )
+
+    if len(files) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload one image for image-to-video.",
+        )
+
+    allowed_types = {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+    }
+
+    uploaded_file = files[0]
+
+    content_type = (
+        uploaded_file.content_type or ""
+    ).lower().strip()
+
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported file type. "
+                "Use PNG, JPG, JPEG, or WEBP."
+            ),
+        )
+
+    data = await uploaded_file.read()
+
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded image is empty.",
+        )
+
+    max_file_size = 8 * 1024 * 1024
+
+    if len(data) > max_file_size:
+        raise HTTPException(
+            status_code=413,
+            detail="Image too large. Maximum file size is 8MB.",
+        )
+
+    # Match the storage_tracking function signatures already used
+    # elsewhere in your current main.py.
+    if not admin:
+        ensure_storage_available(
+            db,
+            uid,
+            tier,
+            len(data),
+        )
+
+    try:
+        stored = upload_bytes_to_firebase_storage_with_metadata(
+            data,
+            uid,
+            content_type=content_type,
+            folder="video_source_images",
+            filename_hint=(
+                uploaded_file.filename
+                or "video-source-image"
+            ),
+        )
+
+        register_storage_asset(
+            db,
+            uid,
+            size_bytes=stored["fileSizeBytes"],
+            asset_type="image",
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        print(
+            "VIDEO SOURCE IMAGE UPLOAD ERROR:",
+            repr(exc),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="The image could not be uploaded. Please try again.",
+        )
+
+    image_url = stored.get("url")
+
+    if not image_url:
+        raise HTTPException(
+            status_code=500,
+            detail="Image upload completed, but no image URL was returned.",
+        )
+
+    return {
+        "urls": [image_url],
+    }
+
 @app.post("/upload-brand-logo")
 async def upload_brand_logo(
     file: UploadFile = File(...),

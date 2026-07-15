@@ -337,7 +337,55 @@ async def stripe_webhook(request: Request):
         if event_type == "checkout.session.completed":
             customer_id = obj.get("customer")
             sub_id = obj.get("subscription")
-            status = "active"
+
+            checkout_status = obj.get("status")
+            payment_status = obj.get("payment_status")
+
+            status = (
+                "active"
+                if (
+                    checkout_status == "complete"
+                    and payment_status in {"paid", "no_payment_required"}
+                )
+                else "pending"
+            )
+
+            if sub_id:
+                try:
+                    subscription = stripe.Subscription.retrieve(
+                        sub_id,
+                        expand=["items.data.price"],
+                    )
+
+                    sub_status = (
+                        subscription.get("status")
+                        or "inactive"
+                    )
+
+                    status = (
+                        "active"
+                        if sub_status in {"active", "trialing", "past_due"}
+                        else "inactive"
+                    )
+
+                    items = (
+                        subscription.get("items")
+                        or {}
+                    ).get("data") or []
+
+                    if items and items[0].get("price"):
+                        price_id = items[0]["price"].get("id")
+                        tier = price_id_to_tier(price_id)
+
+                    period_start, period_end = (
+                        extract_subscription_period(subscription)
+                    )
+
+                except Exception as exc:
+                    print(
+                        "CHECKOUT SUBSCRIPTION RETRIEVAL ERROR:",
+                        repr(exc),
+                    )
 
         elif event_type in {
             "customer.subscription.created",

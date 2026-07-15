@@ -335,7 +335,7 @@ export default function AuthForm({ onLogin }) {
           <Link to="/" className="auth-v2-brand">
             <span>
                <img
-                src="/images/ADGen MCM Logo Update Transparent Copy.png"
+                src="/images/ADGen MCM Logo Update Transparent copy.png"
                 alt="ADGen MCM"
                 className="marketing-nav-brand-logo"
               />

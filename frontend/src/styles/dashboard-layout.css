@@ -571,6 +571,12 @@
   display: none;
 }
 
+.dash-notification-copy strong {
+  color: #ffffff;
+  display: block;
+  font-weight: 700;
+}
+
 @media (max-width: 1100px) {
   .dash-account-copy {
     display: none;

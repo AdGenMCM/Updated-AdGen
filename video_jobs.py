@@ -68,12 +68,12 @@ VIDEO_PROGRESS = {
     "queued": (5, "Preparing your video request."),
     "loading_brand_kit": (12, "Applying your Active Brand."),
     "building_prompt": (22, "Building your creative direction."),
-    "submitting_to_runway": (30, "Sending your video request to Runway."),
-    "waiting_for_runway": (45, "Generating your video with Runway."),
-    "processing_video": (70, "Processing the final video."),
+    "submitting_to_runway": (32, "Submitting your video request."),
+    "waiting_for_runway": (48, "Generating your video."),
+    "processing_video": (68, "Processing the final video."),
     "generating_voiceover": (78, "Generating your voiceover."),
     "mixing_audio": (86, "Adding voiceover to your video."),
-    "uploading_video": (94, "Uploading your finished video."),
+    "uploading_video": (93, "Uploading your finished video."),
     "saving_library": (98, "Saving your video to the Library."),
     "succeeded": (100, "Your video is ready."),
     "failed": (100, "Video generation failed."),
@@ -319,6 +319,59 @@ def _enforce_video_entitlements_and_increment(db, uid: str, tier: str, status: s
         raise HTTPException(status_code=403, detail="Video generation is not available for your plan.")
 
     return result
+
+def refund_video_usage_once(
+    db,
+    job_ref,
+    uid: str,
+    *,
+    reason: str,
+    fallback_credits: int = 0,
+    fallback_period_key: Optional[str] = None,
+) -> bool:
+    """Refund reserved video credits exactly once for an undelivered job."""
+    latest = job_ref.get().to_dict() or {}
+
+    if latest.get("usageRefunded"):
+        return True
+
+    credits = int(
+        latest.get("creditsReserved")
+        or fallback_credits
+        or 0
+    )
+    period_key = (
+        latest.get("usagePeriodKey")
+        or fallback_period_key
+    )
+
+    if credits <= 0 or not period_key:
+        return False
+
+    try:
+        refunded = rollback_video_usage(
+            db,
+            uid,
+            period_key,
+            credits,
+        )
+    except Exception as exc:
+        print(
+            "[Video Usage Refund Error]",
+            f"uid={uid}",
+            f"reason={reason}",
+            repr(exc),
+        )
+        return False
+
+    if refunded:
+        job_ref.update({
+            "usageRefunded": True,
+            "usageRefundReason": reason,
+            "usageRefundedAt": int(time.time()),
+        })
+
+    return bool(refunded)
 
 # ---------- Request/Response models ----------
 class VoiceoverConfig(BaseModel):
@@ -641,7 +694,7 @@ def build_director_prompt(
     parts.append(
         "Use photorealistic materials, stable product geometry, "
         "clean commercial framing, smooth physical motion, "
-        "and a polished hero ending."
+        "End on a clean hero view of the product.."
     )
 
     # 7. Short negative safeguards
@@ -689,6 +742,7 @@ def build_image_director_prompt(
     parts.append(
         "Preserve all existing text and logos exactly. "
         "Do not add, rewrite, distort, or invent lettering."
+        "End on a clean hero view of the product. "
     )
 
     parts.append(
@@ -863,6 +917,8 @@ async def start_image_video(
         "duration": req.duration,
         "creditsReserved": int((usage_reservation or {}).get("creditsCharged") or 0),
         "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
+        "usageRefunded": False,
+        "usageRefundReason": None,
         "ratio": req.ratio,
         "model": req.model,
 
@@ -969,11 +1025,15 @@ async def start_image_video(
 
     except RunwayError as e:
         if not admin and usage_reservation:
-            refunded = rollback_video_usage(
+            refunded = refund_video_usage_once(
                 db,
+                job_ref,
                 uid,
-                usage_reservation.get("periodKey"),
-                int(usage_reservation.get("creditsCharged") or 1),
+                reason="image_submission_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
             )
 
             print(
@@ -994,11 +1054,15 @@ async def start_image_video(
 
     except Exception as e:
         if not admin and usage_reservation:
-            refunded = rollback_video_usage(
+            refunded = refund_video_usage_once(
                 db,
+                job_ref,
                 uid,
-                usage_reservation.get("periodKey"),
-                int(usage_reservation.get("creditsCharged") or 1),
+                reason="image_submission_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
             )
 
             print(
@@ -1051,7 +1115,18 @@ async def start_image_video(
         )
 
     except RunwayError as e:
-        # No usage refund: the Runway video task already exists.
+        if not admin and usage_reservation:
+            refund_video_usage_once(
+                db,
+                job_ref,
+                uid,
+                reason="post_accept_voiceover_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
+            )
+
         job_ref.update({
             "status": "failed",
             "error": str(e),
@@ -1064,7 +1139,18 @@ async def start_image_video(
         )
 
     except Exception as e:
-        # No usage refund: the Runway video task already exists.
+        if not admin and usage_reservation:
+            refund_video_usage_once(
+                db,
+                job_ref,
+                uid,
+                reason="post_accept_internal_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
+            )
+
         job_ref.update({
             "status": "failed",
             "error": str(e),
@@ -1209,6 +1295,8 @@ async def start_prompt_video(
         "duration": req.duration,
         "creditsReserved": int((usage_reservation or {}).get("creditsCharged") or 0),
         "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
+        "usageRefunded": False,
+        "usageRefundReason": None,
         "ratio": req.ratio,
         "model": req.model,
 
@@ -1286,11 +1374,15 @@ async def start_prompt_video(
 
     except RunwayError as e:
         if not admin and usage_reservation:
-            refunded = rollback_video_usage(
+            refunded = refund_video_usage_once(
                 db,
+                job_ref,
                 uid,
-                usage_reservation.get("periodKey"),
-                int(usage_reservation.get("creditsCharged") or 1),
+                reason="prompt_submission_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
             )
 
             print(
@@ -1311,11 +1403,15 @@ async def start_prompt_video(
 
     except Exception as e:
         if not admin and usage_reservation:
-            refunded = rollback_video_usage(
+            refunded = refund_video_usage_once(
                 db,
+                job_ref,
                 uid,
-                usage_reservation.get("periodKey"),
-                int(usage_reservation.get("creditsCharged") or 1),
+                reason="prompt_submission_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
             )
 
             print(
@@ -1368,7 +1464,18 @@ async def start_prompt_video(
         )
 
     except RunwayError as e:
-        # No usage refund: the video task was already accepted.
+        if not admin and usage_reservation:
+            refund_video_usage_once(
+                db,
+                job_ref,
+                uid,
+                reason="post_accept_voiceover_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
+            )
+
         job_ref.update({
             "status": "failed",
             "error": str(e),
@@ -1381,7 +1488,18 @@ async def start_prompt_video(
         )
 
     except Exception as e:
-        # No usage refund: the video task was already accepted.
+        if not admin and usage_reservation:
+            refund_video_usage_once(
+                db,
+                job_ref,
+                uid,
+                reason="post_accept_internal_failure",
+                fallback_credits=int(
+                    usage_reservation.get("creditsCharged") or 1
+                ),
+                fallback_period_key=usage_reservation.get("periodKey"),
+            )
+
         job_ref.update({
             "status": "failed",
             "error": str(e),
@@ -1415,11 +1533,20 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             await download_to_file(runway_video_url, raw_video)
 
             normalized_video = os.path.join(td, "runway_norm.mp4")
-            normalize_video_with_ffmpeg(raw_video, normalized_video)
+            await asyncio.to_thread(
+                normalize_video_with_ffmpeg,
+                raw_video,
+                normalized_video,
+            )
 
             target_seconds = int(job.get("duration") or 6)
             enforced_video = os.path.join(td, "runway_enforced.mp4")
-            enforce_exact_duration(normalized_video, enforced_video, target_seconds)
+            await asyncio.to_thread(
+                enforce_exact_duration,
+                normalized_video,
+                enforced_video,
+                target_seconds,
+            )
             final_path = enforced_video
 
             vo_cfg = job.get("voiceover") or {}
@@ -1463,7 +1590,12 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
 
                 set_video_progress(job_ref, "mixing_audio")
                 muxed = os.path.join(td, "final_muxed.mp4")
-                mux_voiceover(enforced_video, audio_path, muxed)
+                await asyncio.to_thread(
+                    mux_voiceover,
+                    enforced_video,
+                    audio_path,
+                    muxed,
+                )
                 final_path = muxed
 
             with open(final_path, "rb") as f:
@@ -1474,7 +1606,12 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             tier, _status = get_tier_and_status(
                 db.collection("users").document(uid).get().to_dict() or {}
             )
-            ensure_storage_available(db, uid, tier, len(data), asset_type="video")
+            ensure_storage_available(
+                db,
+                uid,
+                tier,
+                len(data),
+            )
             stored = upload_bytes_to_firebase_storage_with_metadata(
                 data, uid, content_type="video/mp4", folder="video_ads", filename_hint="video.mp4"
             )
@@ -1482,13 +1619,10 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
 
             set_video_progress(job_ref, "saving_library")
             register_storage_asset(
-                db, uid,
-                storage_path=stored["storagePath"],
-                file_size_bytes=stored["fileSizeBytes"],
+                db,
+                uid,
+                size_bytes=stored["fileSizeBytes"],
                 asset_type="video",
-                source_collection="video_jobs",
-                source_id=job_id,
-                content_type=stored.get("contentType") or "video/mp4",
             )
 
             job_ref.update({
@@ -1524,6 +1658,13 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             )
 
     except Exception as exc:
+        refund_succeeded = refund_video_usage_once(
+            db,
+            job_ref,
+            uid,
+            reason="finalization_failure",
+        )
+
         job_ref.update({
             "status": "failed",
             "error": str(exc),
@@ -1537,12 +1678,21 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             uid,
             event_key=f"video_failed_{job_id}",
             title="Video generation failed",
-            body="Your video could not be completed. Review the request and try again.",
+            body=(
+                "Your video could not be completed. The video credits used "
+                "for this attempt have been returned to your account."
+                if refund_succeeded
+                else
+                "Your video could not be completed. Review the request and try again."
+            ),
             notification_type="generation_failed",
             link="/videoads",
             metadata={
                 "jobId": job_id,
                 "error": str(exc)[:300],
+                "creditsRefunded": int(
+                    (job_ref.get().to_dict() or {}).get("creditsReserved") or 0
+                ) if refund_succeeded else 0,
             },
         )
 
@@ -1589,6 +1739,13 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
 
     except (RunwayError, Exception) as exc:
         error_message = str(exc)
+
+        refund_video_usage_once(
+            db,
+            job_ref,
+            uid,
+            reason="status_check_failure",
+        )
 
         job_ref.update({
             "status": "failed",
@@ -1641,6 +1798,13 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         )
 
     if st in ("FAILED", "CANCELED"):
+        refund_video_usage_once(
+            db,
+            job_ref,
+            uid,
+            reason="provider_generation_failure",
+        )
+
         err = (
             task.get("error")
             or task.get("failureReason")

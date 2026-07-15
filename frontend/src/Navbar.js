@@ -147,7 +147,7 @@ export default function Navbar() {
       <div className="marketing-nav-inner">
         <Link to="/" className="marketing-nav-brand" onClick={closeAll}>
           <img
-            src="/images/ADGen MCM Logo Update Transparent Copy.png"
+            src="/images/ADGen MCM Logo Update Transparent copy.png"
             alt="ADGen MCM"
             className="marketing-nav-brand-logo"
           />

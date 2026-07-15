@@ -6,7 +6,7 @@ const isLocalhost =
 
 const API_BASE =
   (process.env.REACT_APP_API_BASE_URL || "").trim() ||
-  (isLocalhost ? "http://localhost:4242" : "https://updated-adgen.onrender.com");
+  (isLocalhost ? "http://localhost:4242" : "https://updated-adgen-1.onrender.com");
 
 // Helper: try endpoint at root first, then /stripe if 404
 async function fetchWithStripeFallback(path, options) {

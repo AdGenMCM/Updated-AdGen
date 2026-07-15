@@ -311,7 +311,7 @@ export default function VideoAds() {
     const form = new FormData();
     form.append("files", file);
 
-    const res = await fetch(`${API_BASE}/upload-creatives`, {
+    const res = await fetch(`${API_BASE}/video/upload-image`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
@@ -448,8 +448,8 @@ export default function VideoAds() {
 
       setJobId(data.jobId);
       setStatus(data.status || "running");
-      setProgressStage(data.progressStage || "waiting_for_runway");
-      setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+      setProgressStage(data.progressStage || "waiting_for_server");
+      setProgressMessage(data.progressMessage || "Generating your video.");
       setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
       setError(e?.message || "Failed to start video job.");
@@ -521,8 +521,8 @@ export default function VideoAds() {
 
       setJobId(data.jobId);
       setStatus(data.status || "running");
-      setProgressStage(data.progressStage || "waiting_for_runway");
-      setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+      setProgressStage(data.progressStage || "waiting_for_server");
+      setProgressMessage(data.progressMessage || "Generating your video.");
       setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
       setError(e?.message || "Failed to start video job.");
@@ -552,8 +552,8 @@ export default function VideoAds() {
         if (cancelled) return;
 
         setStatus(data.status);
-        setProgressStage(data.progressStage || (data.status === "succeeded" ? "succeeded" : "waiting_for_runway"));
-        setProgressMessage(data.progressMessage || "Generating your video with Runway.");
+        setProgressStage(data.progressStage || (data.status === "succeeded" ? "succeeded" : "waiting_for_server"));
+        setProgressMessage(data.progressMessage || "Generating your video.");
         setProgressPercent(data.progressPercent ?? (data.status === "succeeded" ? 100 : 45));
 
         if (data.status === "succeeded" && data.finalVideoUrl) {
@@ -565,7 +565,7 @@ export default function VideoAds() {
           return;
         }
 
-        timer = setTimeout(poll, 4000);
+        timer = setTimeout(poll, 1500);
       } catch (e) {
         if (cancelled) return;
         setError(e?.message || "Polling failed.");
