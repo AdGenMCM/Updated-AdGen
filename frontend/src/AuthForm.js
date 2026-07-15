@@ -57,6 +57,39 @@ export default function AuthForm({ onLogin }) {
   };
 
 
+
+  const createWelcomeNotification = async (user) => {
+    if (!user?.uid) return;
+
+    const notificationRef = doc(
+      db,
+      "users",
+      user.uid,
+      "notifications",
+      "welcome"
+    );
+
+    const existingNotification = await getDoc(notificationRef);
+
+    if (existingNotification.exists()) {
+      return;
+    }
+
+    await setDoc(notificationRef, {
+      eventKey: "welcome",
+      title: "Welcome to ADGen MCM",
+      body:
+        "Your creative workspace is ready. Start by building your Brand Kit, then create your first campaign-ready asset.",
+      type: "welcome",
+      link: "/brand-kit",
+      read: false,
+      createdAt: serverTimestamp(),
+      metadata: {
+        source: "account_creation",
+      },
+    });
+  };
+
   const continueAfterAuthentication = async (user) => {
     if (typeof onLogin === "function") onLogin(user);
 
@@ -113,6 +146,7 @@ export default function AuthForm({ onLogin }) {
   const ensureGoogleUserProfile = async (user) => {
     const userRef = doc(db, "users", user.uid);
     const existingSnapshot = await getDoc(userRef);
+    const isNewUser = !existingSnapshot.exists();
 
     const displayName = (user.displayName || "").trim();
     const nameParts = displayName.split(/\s+/).filter(Boolean);
@@ -129,7 +163,7 @@ export default function AuthForm({ onLogin }) {
       updatedAt: serverTimestamp(),
     };
 
-    if (!existingSnapshot.exists()) {
+    if (isNewUser) {
       Object.assign(profileData, {
         createdAt: serverTimestamp(),
         tier: "trial",
@@ -139,6 +173,8 @@ export default function AuthForm({ onLogin }) {
     }
 
     await setDoc(userRef, profileData, { merge: true });
+
+    return isNewUser;
   };
 
   const handleGoogleSignIn = async () => {
@@ -149,7 +185,11 @@ export default function AuthForm({ onLogin }) {
       const credential = await signInWithPopup(auth, googleProvider);
       const user = credential.user;
 
-      await ensureGoogleUserProfile(user);
+      const isNewUser = await ensureGoogleUserProfile(user);
+
+      if (isNewUser) {
+        await createWelcomeNotification(user);
+      }
 
       if (window.fbq && credential?._tokenResponse?.isNewUser) {
         window.fbq("track", "CompleteRegistration");
@@ -206,6 +246,8 @@ export default function AuthForm({ onLogin }) {
           },
           { merge: true }
         );
+
+        await createWelcomeNotification(credential.user);
 
         if (window.fbq) window.fbq("track", "CompleteRegistration");
 
@@ -458,6 +500,7 @@ export default function AuthForm({ onLogin }) {
     </main>
   );
 }
+
 
 
 

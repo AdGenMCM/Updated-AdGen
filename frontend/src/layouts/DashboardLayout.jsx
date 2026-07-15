@@ -1,12 +1,33 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import {
   NavLink,
   Link,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
+
 import { useWorkspace } from "../context/WorkspaceContext";
+
 import { signOut } from "firebase/auth";
-import { auth } from "../firebaseConfig";
+import { auth, db } from "../firebaseConfig";
+
+import {
+  collection,
+  doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
+
 import {
   Sparkles,
   Wand2,
@@ -28,12 +49,32 @@ import {
   PanelLeftOpen,
   X,
   Menu,
+  CheckCheck,
 } from "lucide-react";
+
 import "../styles/dashboard-layout.css";
+
 
 export default function DashboardLayout({ children }) {
   const location = useLocation();
   const accountRef = useRef(null);
+
+  const notificationRef = useRef(null);
+
+  const navigate = useNavigate();
+
+  const [notificationOpen, setNotificationOpen] = useState(false);
+
+  const [notifications, setNotifications] = useState([]);
+
+  const [notificationsLoading, setNotificationsLoading] =
+    useState(true);
+
+  const [notificationBusy, setNotificationBusy] =
+    useState(false);
+
+  const [notificationError, setNotificationError] =
+    useState("");
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -93,6 +134,12 @@ export default function DashboardLayout({ children }) {
     navItems.find((item) => item.to === location.pathname)?.label ||
     (location.pathname === "/account" ? "My Account" : "Workspace");
 
+  const unreadCount = useMemo(
+    () =>
+      notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
   useEffect(() => {
     const handlePointerDown = (event) => {
       if (!accountRef.current?.contains(event.target)) {
@@ -120,6 +167,95 @@ export default function DashboardLayout({ children }) {
     setMobileSidebarOpen(false);
     setAccountOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+  const uid = auth.currentUser?.uid;
+
+  if (!uid) {
+    setNotifications([]);
+    setNotificationsLoading(false);
+    return;
+  }
+
+  const q = query(
+    collection(db, "users", uid, "notifications"),
+    orderBy("createdAt", "desc"),
+    limit(25)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      setNotifications(
+        snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+      );
+
+      setNotificationsLoading(false);
+    },
+    () => {
+      setNotificationError(
+        "Unable to load notifications."
+      );
+
+      setNotificationsLoading(false);
+    }
+  );
+}, []);
+
+const markRead = async (notification) => {
+  if (
+    notification.read ||
+    !auth.currentUser
+  )
+    return;
+
+  await updateDoc(
+    doc(
+      db,
+      "users",
+      auth.currentUser.uid,
+      "notifications",
+      notification.id
+    ),
+    {
+      read: true,
+      readAt: new Date(),
+    }
+  );
+};
+
+const markAllRead = async () => {
+  if (notificationBusy) return;
+
+  setNotificationBusy(true);
+
+  const batch = writeBatch(db);
+
+  notifications
+    .filter((n) => !n.read)
+    .forEach((notification) => {
+      batch.update(
+        doc(
+          db,
+          "users",
+          auth.currentUser.uid,
+          "notifications",
+          notification.id
+        ),
+        {
+          read: true,
+          readAt: new Date(),
+        }
+      );
+    });
+
+  await batch.commit();
+
+  setNotificationBusy(false);
+};
 
   return (
     <div
@@ -317,14 +453,121 @@ export default function DashboardLayout({ children }) {
               Upgrade plan
             </Link>
 
-            <button
-              className="dash-icon-btn"
-              type="button"
-              aria-label="Notifications"
+            <div
+              className="dash-notification-menu"
+              ref={notificationRef}
             >
-              <Bell size={17} />
-              <span className="dash-notification-dot" />
-            </button>
+              <button
+                className="dash-icon-btn"
+                type="button"
+                onClick={() =>
+                  setNotificationOpen(!notificationOpen)
+                }
+              >
+                <Bell size={17} />
+
+                {unreadCount > 0 && (
+                  <span className="dash-notification-count">
+                    {unreadCount > 9
+                      ? "9+"
+                      : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationOpen && (
+                <div className="dash-notification-panel">
+
+                  <div className="dash-notification-head">
+
+                    <strong>Notifications</strong>
+
+                    {unreadCount > 0 && (
+                      <button onClick={markAllRead}>
+                        <CheckCheck size={14}/>
+                        Mark all read
+                      </button>
+                    )}
+
+                  </div>
+
+                  <div className="dash-notification-list">
+
+                  {notificationsLoading && (
+                  <div className="dash-notification-state">
+                  Loading...
+                  </div>
+                  )}
+
+                  {notificationError && (
+                    <div className="dash-notification-state">
+                      {notificationError}
+                    </div>
+                  )}
+
+                  {!notificationsLoading &&
+                    !notificationError &&
+                    notifications.length === 0 && (
+                      <div className="dash-notification-state">
+                        No notifications yet.
+                      </div>
+                  )}
+
+                  {notifications.map((notification)=>(
+
+                  <button
+                  key={notification.id}
+                  className={`dash-notification-item ${
+                  notification.read ? "" : "is-unread"
+                  }`}
+                  onClick={async()=>{
+
+                  await markRead(notification);
+
+                  setNotificationOpen(false);
+
+                  if(notification.link){
+
+                  navigate(notification.link);
+
+                  }
+
+                  }}
+
+                  >
+
+                  <div className="dash-notification-copy">
+
+                  <strong>
+
+                  {notification.title}
+
+                  </strong>
+
+                  <p>
+
+                  {notification.body}
+
+                  </p>
+
+                  </div>
+
+                  </button>
+
+                  ))}
+
+                  </div>
+
+                  {/* header */}
+
+                  {/* notifications */}
+
+                  {/* footer */}
+
+                </div>
+              )}
+
+            </div>
 
             <div className="dash-account-menu" ref={accountRef}>
               <button

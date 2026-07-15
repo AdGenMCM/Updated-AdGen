@@ -12,6 +12,7 @@ import stripe
 
 from firebase_admin import firestore
 from auth_helpers import get_db
+from notification_utils import create_notification
 
 
 stripe_router = APIRouter()
@@ -142,6 +143,75 @@ def extract_subscription_period(subscription: Dict[str, Any]) -> tuple[Optional[
     return period_start, period_end
 
 
+
+
+def _tier_label(tier: Optional[str]) -> str:
+    labels = {
+        "trial_monthly": "Trial",
+        "starter_monthly": "Starter",
+        "pro_monthly": "Pro",
+        "business_monthly": "Business",
+        "early_access": "Early Access",
+    }
+    return labels.get(str(tier or "").strip(), str(tier or "your plan"))
+
+
+def _resolve_uid_for_customer(db, customer_id: Optional[str]) -> Optional[str]:
+    if not customer_id:
+        return None
+
+    mapping = db.collection("stripe_customers").document(customer_id).get()
+
+    if mapping.exists:
+        uid = (mapping.to_dict() or {}).get("uid")
+        if uid:
+            return uid
+
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+        uid = (customer.metadata or {}).get("firebase_uid")
+
+        if uid:
+            db.collection("stripe_customers").document(customer_id).set(
+                {"uid": uid},
+                merge=True,
+            )
+
+        return uid
+    except Exception:
+        return None
+
+
+def _create_billing_notification(
+    db,
+    uid: Optional[str],
+    *,
+    event_key: str,
+    title: str,
+    body: str,
+    notification_type: str,
+    link: str = "/account",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    if not uid:
+        return
+
+    try:
+        create_notification(
+            db,
+            uid,
+            event_key=event_key,
+            title=title,
+            body=body,
+            notification_type=notification_type,
+            link=link,
+            metadata=metadata or {},
+        )
+    except Exception as exc:
+        # Billing state must still update even if a notification write fails.
+        print("STRIPE NOTIFICATION ERROR:", repr(exc))
+
+
 # ---------------- Routes ----------------
 @stripe_router.get("/health")
 def health():
@@ -219,32 +289,42 @@ def create_portal_session(body: PortalPayload):
 @stripe_router.post("/webhook")
 async def stripe_webhook(request: Request):
     """
-    Handles Stripe events and writes users/{uid}.stripe:
-      - status, tier, priceId
-      - subscriptionId
-      - currentPeriodStart/currentPeriodEnd
+    Handles Stripe subscription and invoice events.
+
+    Writes users/{uid}.stripe and creates idempotent billing notifications.
+    Notification failures never block Stripe state synchronization.
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
     try:
         if WEBHOOK_SECRET:
-            event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+            event = stripe.Webhook.construct_event(
+                payload,
+                sig_header,
+                WEBHOOK_SECRET,
+            )
         else:
             event = json.loads(payload.decode("utf-8"))
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": f"Webhook error: {e}"})
+    except Exception as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Webhook error: {exc}"},
+        )
 
     db = get_db()
+    event_id = str(event.get("id") or "")
     event_type = event.get("type")
-    obj = event.get("data", {}).get("object", {})
+    obj = event.get("data", {}).get("object", {}) or {}
 
-    if event_type in {
+    subscription_events = {
         "checkout.session.completed",
         "customer.subscription.created",
         "customer.subscription.updated",
         "customer.subscription.deleted",
-    }:
+    }
+
+    if event_type in subscription_events:
         customer_id = None
         sub_id = None
         status = None
@@ -252,22 +332,29 @@ async def stripe_webhook(request: Request):
         tier = None
         period_start = None
         period_end = None
+        sub_status = None
 
         if event_type == "checkout.session.completed":
             customer_id = obj.get("customer")
             sub_id = obj.get("subscription")
             status = "active"
 
-            # Checkout event may not include expanded subscription.
-            # sync-subscription handles the full repair after return.
-
-        elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
+        elif event_type in {
+            "customer.subscription.created",
+            "customer.subscription.updated",
+        }:
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
             sub_status = obj.get("status") or "inactive"
-            status = "active" if sub_status in {"active", "trialing", "past_due"} else "inactive"
+
+            status = (
+                "active"
+                if sub_status in {"active", "trialing", "past_due"}
+                else "inactive"
+            )
 
             items = obj.get("items", {}).get("data", []) or []
+
             if items and items[0].get("price"):
                 price_id = items[0]["price"].get("id")
                 tier = price_id_to_tier(price_id)
@@ -277,44 +364,186 @@ async def stripe_webhook(request: Request):
         else:
             customer_id = obj.get("customer")
             sub_id = obj.get("id")
+            sub_status = obj.get("status") or "canceled"
             status = "inactive"
 
-        if customer_id:
-            uid = None
+        uid = _resolve_uid_for_customer(db, customer_id)
 
-            m = db.collection("stripe_customers").document(customer_id).get()
-            if m.exists:
-                uid = (m.to_dict() or {}).get("uid")
+        if uid:
+            user_ref = db.collection("users").document(uid)
+            previous_user = user_ref.get().to_dict() or {}
+            previous_stripe = previous_user.get("stripe") or {}
+            previous_tier = previous_stripe.get("tier")
+            previous_status = previous_stripe.get("status")
 
-            if not uid:
-                try:
-                    cust = stripe.Customer.retrieve(customer_id)
-                    uid = (cust.metadata or {}).get("firebase_uid")
-                    if uid:
-                        db.collection("stripe_customers").document(customer_id).set({"uid": uid}, merge=True)
-                except Exception:
-                    uid = None
+            stripe_update: Dict[str, Any] = {
+                "customerId": customer_id,
+                "subscriptionId": sub_id,
+                "status": status,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
 
-            if uid:
-                update: Dict[str, Any] = {
+            if price_id:
+                stripe_update["priceId"] = price_id
+
+            if tier:
+                stripe_update["tier"] = tier
+
+            if period_start:
+                stripe_update["currentPeriodStart"] = int(period_start)
+
+            if period_end:
+                stripe_update["currentPeriodEnd"] = int(period_end)
+
+            user_ref.set({"stripe": stripe_update}, merge=True)
+
+            metadata = {
+                "stripeEventId": event_id,
+                "customerId": customer_id,
+                "subscriptionId": sub_id,
+                "tier": tier,
+                "status": status,
+            }
+
+            if event_type == "customer.subscription.deleted":
+                _create_billing_notification(
+                    db,
+                    uid,
+                    event_key=f"subscription_canceled_{sub_id or event_id}",
+                    title="Subscription canceled",
+                    body=(
+                        "Your subscription has been canceled. "
+                        "You can choose a new plan anytime from My Account."
+                    ),
+                    notification_type="subscription_canceled",
+                    metadata=metadata,
+                )
+
+            elif (
+                event_type == "customer.subscription.updated"
+                and tier
+                and previous_tier
+                and tier != previous_tier
+            ):
+                _create_billing_notification(
+                    db,
+                    uid,
+                    event_key=f"plan_changed_{event_id or sub_id}",
+                    title="Plan updated",
+                    body=(
+                        f"Your workspace is now on the "
+                        f"{_tier_label(tier)} plan."
+                    ),
+                    notification_type="plan_changed",
+                    metadata={
+                        **metadata,
+                        "previousTier": previous_tier,
+                    },
+                )
+
+            elif (
+                status == "active"
+                and previous_status not in {"active", "trialing", "past_due"}
+            ):
+                _create_billing_notification(
+                    db,
+                    uid,
+                    event_key=f"subscription_activated_{sub_id or customer_id}",
+                    title="Subscription activated",
+                    body=(
+                        f"Your {_tier_label(tier)} workspace is active. "
+                        "You can start creating now."
+                    ),
+                    notification_type="subscription_activated",
+                    link="/dashboard",
+                    metadata=metadata,
+                )
+
+    elif event_type == "invoice.payment_failed":
+        customer_id = obj.get("customer")
+        uid = _resolve_uid_for_customer(db, customer_id)
+
+        invoice_id = obj.get("id")
+        subscription_id = obj.get("subscription")
+        amount_due = obj.get("amount_due")
+        currency = str(obj.get("currency") or "usd").upper()
+
+        if uid:
+            db.collection("users").document(uid).set(
+                {
                     "stripe": {
-                        "customerId": customer_id,
-                        "subscriptionId": sub_id,
-                        "status": status,
+                        "status": "past_due",
                         "updatedAt": firestore.SERVER_TIMESTAMP,
                     }
-                }
+                },
+                merge=True,
+            )
 
-                if price_id:
-                    update["stripe"]["priceId"] = price_id
-                if tier:
-                    update["stripe"]["tier"] = tier
-                if period_start:
-                    update["stripe"]["currentPeriodStart"] = int(period_start)
-                if period_end:
-                    update["stripe"]["currentPeriodEnd"] = int(period_end)
+            amount_text = ""
+            try:
+                amount_text = (
+                    f" {currency} {int(amount_due or 0) / 100:,.2f}"
+                )
+            except Exception:
+                amount_text = ""
 
-                db.collection("users").document(uid).set(update, merge=True)
+            _create_billing_notification(
+                db,
+                uid,
+                event_key=f"payment_failed_{invoice_id or event_id}",
+                title="Payment needs attention",
+                body=(
+                    f"We could not process your subscription payment"
+                    f"{amount_text}. Update your billing method to avoid "
+                    "interrupting workspace access."
+                ),
+                notification_type="payment_attention",
+                metadata={
+                    "stripeEventId": event_id,
+                    "invoiceId": invoice_id,
+                    "customerId": customer_id,
+                    "subscriptionId": subscription_id,
+                    "amountDue": amount_due,
+                    "currency": currency,
+                },
+            )
+
+    elif event_type == "invoice.paid":
+        customer_id = obj.get("customer")
+        uid = _resolve_uid_for_customer(db, customer_id)
+
+        if uid:
+            user_ref = db.collection("users").document(uid)
+            current = user_ref.get().to_dict() or {}
+            current_status = (current.get("stripe") or {}).get("status")
+
+            if current_status == "past_due":
+                user_ref.set(
+                    {
+                        "stripe": {
+                            "status": "active",
+                            "updatedAt": firestore.SERVER_TIMESTAMP,
+                        }
+                    },
+                    merge=True,
+                )
+
+                _create_billing_notification(
+                    db,
+                    uid,
+                    event_key=f"payment_recovered_{obj.get('id') or event_id}",
+                    title="Payment received",
+                    body=(
+                        "Your subscription payment was received and "
+                        "your workspace remains active."
+                    ),
+                    notification_type="billing_resolved",
+                    metadata={
+                        "stripeEventId": event_id,
+                        "invoiceId": obj.get("id"),
+                        "customerId": customer_id,
+                    },
+                )
 
     return {"received": True}
 

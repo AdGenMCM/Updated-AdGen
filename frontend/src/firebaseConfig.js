@@ -1,6 +1,11 @@
 // src/firebaseConfig.js
 import { initializeApp } from "firebase/app";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 //Firebase config
 const firebaseConfig = {
@@ -17,6 +22,7 @@ export const app = initializeApp(firebaseConfig);
 
 // Export ONE shared auth instance for the whole app
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // Persist login across tabs/redirects (important when returning from Stripe)
 setPersistence(auth, browserLocalPersistence).catch(() => {});
