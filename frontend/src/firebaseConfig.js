@@ -10,7 +10,7 @@ import { getFirestore } from "firebase/firestore";
 //Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAME45e-85ca3KcylGWNceT2WFd3Yn42ps",
-  authDomain: "adgen-mcm---ad-generator.firebaseapp.com",
+  authDomain: "adgenmcm.com",
   projectId: "adgen-mcm---ad-generator",
   storageBucket: "adgen-mcm---ad-generator.firebasestorage.app",
   messagingSenderId: "340851760898",

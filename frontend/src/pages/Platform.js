@@ -149,6 +149,113 @@ const sections = [
   },
 ];
 
+
+
+const imageExamples = [
+  {
+    src: "/examples/imagegen/image-ex1.png",
+    alt: "BaseBall University PowerBat campaign creative generated with AdGen MCM",
+    title: "Sports equipment",
+    detail: "Bold product campaign • Square format",
+    format: "square",
+  },
+  {
+    src: "/examples/imagegen/image-ex3.png",
+    alt: "Air Fresh household product campaign creative generated with AdGen MCM",
+    title: "Consumer goods",
+    detail: "Clean product campaign • Landscape format",
+    format: "landscape",
+  },
+  {
+    src: "/examples/imagegen/image-ex2.png",
+    alt: "Lumière vitamin C skincare campaign creative generated with AdGen MCM",
+    title: "Skincare",
+    detail: "Premium beauty campaign • Square format",
+    format: "square",
+  },
+];
+
+function GeneratedImageExamples() {
+  return (
+    <section className="platform-output-showcase platform-output-showcase-images">
+      <div className="platform-container platform-output-container">
+        <div className="platform-output-header">
+          <span className="platform-output-badge">Real platform output</span>
+          <h3>See what AdGen MCM creates.</h3>
+          <p>
+            Every creative below was generated inside AdGen MCM using the same
+            image workflow available to customers.
+          </p>
+        </div>
+
+        <div className="platform-output-grid">
+          {imageExamples.map((example) => (
+            <article
+              className={`platform-output-card platform-output-card-${example.format}`}
+              key={example.title}
+            >
+              <div className={`platform-output-media platform-output-media-${example.format}`}>
+                <img
+                  src={example.src}
+                  alt={example.alt}
+                  loading="lazy"
+                  decoding="async"
+                />
+                <span className="platform-output-watermark">Generated with AdGen MCM</span>
+              </div>
+
+              <div className="platform-output-card-copy">
+                <h4>{example.title}</h4>
+                <p>{example.detail}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GeneratedVideoExample() {
+  return (
+    <section className="platform-output-showcase platform-output-showcase-video">
+      <div className="platform-container platform-video-example-grid">
+        <div className="platform-output-header platform-output-header-left">
+          <span className="platform-output-badge">Real platform output</span>
+          <h3>From prompt to polished motion.</h3>
+          <p>
+            A cinematic product video generated inside AdGen MCM from a short
+            creative direction—without a traditional production workflow.
+          </p>
+
+          <div className="platform-video-prompt">
+            <span>Example direction</span>
+            <p>
+              Cinematic energy drink product commercial with dramatic lighting,
+              premium motion, and a high-impact studio atmosphere.
+            </p>
+          </div>
+        </div>
+
+        <div className="platform-video-frame">
+          <div className="platform-video-glow" aria-hidden="true" />
+          <video
+            className="platform-generated-video"
+            src="/examples/videogen/video-ex1.mp4"
+            controls
+            playsInline
+            preload="none"
+            aria-label="Energy drink product video generated with AdGen MCM"
+          >
+            Your browser does not support embedded video.
+          </video>
+          <span className="platform-video-label">Generated with AdGen MCM</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ScreenshotCallouts({ items }) {
   return (
     <div
@@ -315,8 +422,9 @@ export default function Platform() {
 
       <div className="platform-product-story">
         {sections.map((section, index) => (
-          <Reveal key={section.title}>
-            <section
+          <React.Fragment key={section.title}>
+            <Reveal>
+              <section
               className={[
                 "platform-showcase",
                 section.reverse ? "reverse" : "",
@@ -404,8 +512,21 @@ export default function Platform() {
                   </div>
                 </div>
               </div>
-            </section>
-          </Reveal>
+              </section>
+            </Reveal>
+
+            {section.number === "02" && (
+              <Reveal>
+                <GeneratedImageExamples />
+              </Reveal>
+            )}
+
+            {section.number === "03" && (
+              <Reveal>
+                <GeneratedVideoExample />
+              </Reveal>
+            )}
+          </React.Fragment>
         ))}
       </div>
 
