@@ -242,9 +242,10 @@ function GeneratedVideoExample() {
           <video
             className="platform-generated-video"
             src="/examples/videogen/video-ex1.mp4"
+            poster="/examples/imagegen/video-thumbnail-ex1.png"
             controls
             playsInline
-            preload="none"
+            preload="metadata"
             aria-label="Energy drink product video generated with AdGen MCM"
           >
             Your browser does not support embedded video.
