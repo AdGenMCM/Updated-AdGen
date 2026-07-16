@@ -210,7 +210,7 @@ export default function Navbar() {
         </div>
 
         <div className="marketing-nav-actions">
-          {user ? (
+          {user && verified ? (
             <>
               <Link
                 to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
@@ -321,7 +321,7 @@ export default function Navbar() {
           </div>
 
           <div className="marketing-nav-mobile-actions">
-            {user ? (
+            {user && verified ? (
               <>
                 <Link
                   to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
