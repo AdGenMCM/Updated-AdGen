@@ -92,13 +92,31 @@ def verify_firebase_token(id_token: str) -> Dict[str, Any]:
     except fb_auth.RevokedIdTokenError:
         raise HTTPException(status_code=401, detail="Token revoked. Please log in again.")
 
-    except fb_auth.InvalidIdTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token. Please log in again.")
+    except fb_auth.InvalidIdTokenError as error:
+        print(
+            "[FIREBASE AUTH] Invalid token:",
+            type(error).__name__,
+            repr(error),
+            flush=True,
+        )
 
-    except Exception as e:
-        # This covers init/config errors too (bad service account, missing env var, etc.)
-        print("🔥 Unexpected auth error:", str(e))
-        raise HTTPException(status_code=401, detail="Authentication failed.")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token. Please log in again.",
+        )
+
+    except Exception as error:
+        print(
+            "[FIREBASE AUTH] Unexpected error:",
+            type(error).__name__,
+            repr(error),
+            flush=True,
+        )
+
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication failed.",
+        )
 
 
 def require_user(authorization: Optional[str]) -> Tuple[str, Optional[str], Dict[str, Any]]:

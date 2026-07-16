@@ -39,7 +39,7 @@ const TIER_LABELS = {
   starter_monthly: "Starter",
   pro_monthly: "Pro",
   business_monthly: "Business",
-  early_access: "Early Access",
+  free: "Free",
 };
 
 const STATUS_LABELS = {
@@ -772,11 +772,11 @@ export default function AdminUsers() {
             aria-label="Filter by plan"
           >
             <option value="all">All plans</option>
+            <option value="free">Free</option>
             <option value="trial_monthly">Trial</option>
             <option value="starter_monthly">Starter</option>
             <option value="pro_monthly">Pro</option>
             <option value="business_monthly">Business</option>
-            <option value="early_access">Early Access</option>
           </select>
 
           <select

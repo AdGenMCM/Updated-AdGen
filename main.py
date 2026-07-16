@@ -308,11 +308,17 @@ class AdRequest(BaseModel):
     audience: str
     tone: str
     platform: str
-    imageSize: str  # "1024x1024" | "1024x1792" | "1792x1024"
+    imageSize: str
     useBrandKit: bool = True
     brandKitId: Optional[str] = None
 
     offer: Optional[str] = None
+
+    # Optional exact creative copy controls
+    headline: Optional[str] = None
+    primary_text: Optional[str] = None
+    cta: Optional[str] = None
+
     goal: Optional[str] = None
     stylePreset: Optional[str] = None
     productType: Optional[str] = None
@@ -1982,6 +1988,11 @@ async def generate_ad(
     tone = (payload.tone or "confident").strip()[:40]
     platform = (payload.platform or "Instagram").strip()[:40]
     offer = (payload.offer or "").strip()[:80]
+
+    requested_headline = (payload.headline or "").strip()[:35]
+    requested_primary_text = (payload.primary_text or "").strip()[:100]
+    requested_cta = (payload.cta or "").strip()[:20]
+
     goal = (payload.goal or "Sales").strip()[:30]
     style = (payload.stylePreset or "Minimal").strip()[:30]
     product_type = (payload.productType or "").strip()[:40] or None
@@ -2031,10 +2042,17 @@ When generating this creative, follow these priorities in order:
 4. Follow general advertising best practices to maximize performance while
    maintaining originality and visual quality.
     
+COPY PRESERVATION RULES:
+- If supplied_headline is not N/A, use it exactly as the headline.
+- If supplied_primary_text is not N/A, use it exactly as primary_text.
+- If supplied_cta is not N/A, use it exactly as the CTA.
+- Do not rewrite, shorten, paraphrase, or replace supplied copy.
+- Generate only the copy fields that were left blank.
+
 Return one JSON object with:
-- headline: string (<= 40 chars)
-- primary_text: string (<= 125 chars)
-- cta: string (one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now)
+- headline: string (<= 35 chars)
+- primary_text: string (<= 100 chars)
+- cta: string (<= 20 chars)
 - hooks: array of 3 short strings (each <= 8 words)
 - variants: array of 3 objects, each with headline, primary_text, cta
 
@@ -2046,6 +2064,9 @@ tone: {tone}
 platform: {platform}
 goal: {goal}
 offer: {offer or "N/A"}
+supplied_headline: {requested_headline or "N/A"}
+supplied_primary_text: {requested_primary_text or "N/A"}
+supplied_cta: {requested_cta or "N/A"}
 
 {brand_kit_context}
 
@@ -2102,6 +2123,24 @@ Campaign Objective:
 
 Offer:
 {offer or "No promotional offer"}
+
+Exact Creative Copy:
+
+Headline:
+{requested_headline or "Generate one concise headline"}
+
+Body Text:
+{requested_primary_text or "Generate one concise supporting line if useful"}
+
+CTA:
+{requested_cta or "Choose one concise action-oriented CTA"}
+
+When exact creative copy is supplied:
+
+• Reproduce it exactly.
+• Do not paraphrase, rewrite, or replace it.
+• Spell every supplied word exactly as written.
+• Use the supplied headline, body text, and CTA only once each.
 
 Brand Style:
 {style}
@@ -2337,6 +2376,28 @@ It should be visually impressive enough to appear in a professional design portf
             obj.setdefault("cta", "Learn More")
             obj.setdefault("hooks", [])
             obj.setdefault("variants", [])
+
+            if requested_headline:
+                obj["headline"] = requested_headline
+            else:
+                obj["headline"] = str(
+                    obj.get("headline") or product_name or "Ad Headline"
+                ).strip()[:35]
+
+            if requested_primary_text:
+                obj["primary_text"] = requested_primary_text
+            else:
+                obj["primary_text"] = str(
+                    obj.get("primary_text") or ""
+                ).strip()[:100]
+
+            if requested_cta:
+                obj["cta"] = requested_cta
+            else:
+                obj["cta"] = str(
+                    obj.get("cta") or "Learn More"
+                ).strip()[:20]
+
             return obj
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")

@@ -19,6 +19,9 @@ const INITIAL_FORM = {
   platform: "",
   imageSize: "1024x1024",
   offer: "",
+  cta: "",
+  headline: "",
+  primaryText: "",
   goal: "Sales",
   campaignObjective: "Auto",
   stylePreset: "Minimal",
@@ -101,6 +104,7 @@ function AdGenerator() {
       platform,
       imageSize,
       offer: brandKit.offerStyle || "",
+      cta: brandKit.preferredCta || "",
       stylePreset,
     };
   }, [brandKit]);
@@ -113,6 +117,7 @@ function AdGenerator() {
       "platform",
       "imageSize",
       "offer",
+      "cta",
       "stylePreset",
     ];
 
@@ -341,6 +346,8 @@ function AdGenerator() {
 
       const payload = {
         ...form,
+        headline: form.headline.trim() || null,
+        primary_text: form.primaryText.trim() || null,
         useBrandKit,
         brandKitId,
         campaignObjective: form.campaignObjective,
@@ -629,6 +636,66 @@ function AdGenerator() {
 
             <StepSection
               step="2"
+              title="Creative Copy"
+              description="Optionally provide exact copy for the creative, or leave these fields blank and let AdGen write it for you."
+            >
+              <div className="field">
+                <div className="field-label">
+                  Headline <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter a specific headline to preserve it. Leave blank and AdGen will generate one for you." />
+                </div>
+                <input
+                  name="headline"
+                  placeholder="Leave blank to let AdGen generate a headline"
+                  value={form.headline}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={35}
+                />
+                <small className="field-helper">
+                  {form.headline.length}/35 characters · Best results are usually under 30 characters.
+                </small>
+              </div>
+
+              <div className="field">
+                <div className="field-label">
+                  Body Text <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter supporting copy you want preserved in the creative. Leave blank and AdGen will write it for you." />
+                </div>
+                <textarea
+                  name="primaryText"
+                  placeholder="Leave blank to let AdGen write the body text"
+                  value={form.primaryText}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={100}
+                />
+                <small className="field-helper">
+                  {form.primaryText.length}/100 characters · Shorter copy creates cleaner, more readable ads.
+                </small>
+              </div>
+
+              <div className="field">
+                <div className="field-label">
+                  Call to Action {fieldBadge("cta")} <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter the action you want viewers to take such as Learn More, Shop now, Get Offer, ect... Brand Kit can fill this automatically, or AdGen can choose one when left blank." />
+                </div>
+                <input
+                  name="cta"
+                  placeholder="Leave blank to let AdGen choose a CTA"
+                  value={form.cta}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={20}
+                />
+                <small className="field-helper">
+                  {form.cta.length}/20 characters · Keep CTAs concise and action-oriented.
+                </small>
+              </div>
+            </StepSection>
+
+            <StepSection
+              step="3"
               title="Creative Details"
               description="Control the tone, visual style, and campaign format."
             >
@@ -706,7 +773,7 @@ function AdGenerator() {
             </StepSection>
 
             <StepSection
-              step="3"
+              step="4"
               title="Brand & Assets"
               description="Apply your Brand Kit and upload optional reference images."
             >
@@ -800,6 +867,7 @@ function AdGenerator() {
               </div>
             </StepSection>
 
+
             <div className="button-row">
               <button type="submit" disabled={loading || winnersLoading || referenceUploading}>
                 {loading ? "Generating..." : winnersLoading ? "Loading Winners..." : referenceUploading ? "Uploading..." : "✨ Generate Ad"}
@@ -845,15 +913,18 @@ function AdGenerator() {
 
             {result && (
               <>
-                <div className="ad-copy">
-                  <p><strong>Headline:</strong> {result.copy.headline}</p>
-                  <p><strong>Primary Text:</strong> {result.copy.primary_text}</p>
-                  <p><strong>CTA:</strong> {result.copy.cta}</p>
-                </div>
+                {result.imageUrl && (
+                  <img
+                    src={result.imageUrl}
+                    alt="Generated Ad"
+                    className="generated-image"
+                  />
+                )}
 
-                {result.imageUrl && <img src={result.imageUrl} alt="Generated Ad" className="generated-image" />}
-
-                <button className="download-button" onClick={downloadImage}>
+                <button
+                  className="download-button"
+                  onClick={downloadImage}
+                >
                   Download Image
                 </button>
               </>
@@ -875,6 +946,7 @@ function AdGenerator() {
 }
 
 export default AdGenerator;
+
 
 
 
