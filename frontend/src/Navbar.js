@@ -69,7 +69,14 @@ export default function Navbar() {
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        setSubStatus(snapshot.data()?.stripe?.status ?? "inactive");
+        const data = snapshot.data();
+
+        const nextStatus =
+          data?.stripe?.status ||
+          data?.subscriptionStatus ||
+          "inactive";
+
+        setSubStatus(nextStatus);
       },
       () => setSubStatus("inactive")
     );

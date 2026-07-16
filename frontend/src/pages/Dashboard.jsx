@@ -58,6 +58,9 @@ export default function Dashboard() {
     storageUsage,
     recentCreatives,
     brandKitStatus,
+    userDoc,
+    stripe,
+    isAdmin,
   } = useWorkspace() || {};
 
   const imageUsed = usage?.used ?? 0;
@@ -65,10 +68,41 @@ export default function Dashboard() {
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
 
+  const stripeStatus = String(
+    stripe?.status || ""
+  ).toLowerCase();
+
+  const hasConfirmedStripePlan =
+    Boolean(stripe?.tier) &&
+    (
+      stripeStatus === "active" ||
+      stripeStatus === "trialing" ||
+      stripeStatus === "past_due"
+    );
+
+  const effectiveTier =
+    (hasConfirmedStripePlan ? stripe.tier : null) ||
+    userDoc?.tier ||
+    "free";
+
+  const isFreePlan =
+    !isAdmin &&
+    effectiveTier === "free";
+
   const missingBrandItems = brandKitStatus?.missing || [];
 
   const nextStep = (() => {
-    if (missingBrandItems.length) {
+    if (isFreePlan) {
+        return {
+          title: "Unlock the full platform",
+          description:
+            "Upgrade to access Brand Kit, Video Ads, Optimizer, Library and more.",
+          link: "/subscribe?upgrade=1",
+          cta: "Upgrade Plan →",
+        };
+      }
+
+      if (missingBrandItems.length) {
       return {
         title: "Finish your Brand Kit",
         description: `Complete ${missingBrandItems.slice(0, 3).join(", ")} to improve brand consistency across future creatives.`,
@@ -134,7 +168,11 @@ export default function Dashboard() {
         />
 
         <StatCard
-          to="/brand-kit"
+          to={
+            isFreePlan
+              ? "/subscribe?upgrade=1"
+              : "/brand-kit"
+          }
           label="Brand Kit"
           value={brandKitStatus?.label || "Needs Setup"}
           description={
@@ -173,14 +211,22 @@ export default function Dashboard() {
           />
 
           <ActionCard
-            to="/video-ads"
+            to={
+              isFreePlan
+                ? "/subscribe?upgrade=1"
+                : "/video-ads"
+            }
             icon={<Clapperboard size={22} />}
             title="Generate Video"
             description="Turn prompts or images into video ads."
           />
 
           <ActionCard
-            to="/optimizer"
+            to={
+              isFreePlan
+                ? "/subscribe?upgrade=1"
+                : "/optimizer"
+            }
             icon={<BarChart3 size={22} />}
             title="Optimize Creative"
             description="Improve ads using performance data."
@@ -199,7 +245,15 @@ export default function Dashboard() {
           <Card className="dashboard-panel dashboard-recent-card">
             <div className="dashboard-panel-head">
               <h3>Recent Creatives</h3>
-              <a href="/library">View Library →</a>
+              <a
+                href={
+                  isFreePlan
+                    ? "/subscribe?upgrade=1"
+                    : "/library"
+                }
+              >
+                View Library →
+              </a>
             </div>
 
             {recentCreatives?.length ? (
@@ -269,15 +323,33 @@ export default function Dashboard() {
                   ))}
                 </div>
 
-                <a href="/brand-kit" className="brand-health-link">
-                  Complete Brand Kit →
+                <a
+                  href={
+                    isFreePlan
+                      ? "/subscribe?upgrade=1"
+                      : "/brand-kit"
+                  }
+                  className="brand-health-link"
+                >
+                  {isFreePlan
+                    ? "Upgrade to Unlock Brand Kit →"
+                    : "Complete Brand Kit →"}
                 </a>
               </>
             ) : (
               <>
                 <p>Your Brand Kit looks strong and is ready to guide future creatives.</p>
-                <a href="/brand-kit" className="brand-health-link">
-                  Review Brand Kit →
+                <a
+                  href={
+                    isFreePlan
+                      ? "/subscribe?upgrade=1"
+                      : "/brand-kit"
+                  }
+                  className="brand-health-link"
+                >
+                  {isFreePlan
+                    ? "Upgrade to Unlock Brand Kit →"
+                    : "Review Brand Kit →"}
                 </a>
               </>
             )}
