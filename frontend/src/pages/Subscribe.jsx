@@ -1,7 +1,19 @@
 // src/pages/Subscribe.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAuth } from "../AuthProvider";
-import { doc, onSnapshot, getFirestore } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  getFirestore,
+  updateDoc,
+  deleteField
+} from "firebase/firestore";
 import {
   createCheckoutSession,
   createPortalSession,
@@ -20,6 +32,24 @@ import "./Subscribe.css";
 const db = getFirestore();
 
 const PLAN_OPTIONS = [
+  {
+    id: "free",
+    label: "Free",
+    price: 0,
+    eyebrow: "Get started",
+    description:
+      "Try AdGen MCM before upgrading.",
+    images: "2 lifetime images",
+    videos: "No video",
+    optimizer: "No Optimizer",
+    brands: "No Brand Kit",
+    storage: "250 MB storage",
+    features: [
+      "Image generation",
+      "Dashboard",
+      "My Account",
+    ],
+  },
   {
     id: "trial_monthly",
     label: "Trial",
@@ -111,7 +141,7 @@ export default function Subscribe() {
   const [stripeInfo, setStripeInfo] = useState(null);
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [tier, setTier] = useState("pro_monthly");
+  const [tier, setTier] = useState("free");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutAbandoned, setCheckoutAbandoned] = useState(false);
 
@@ -124,6 +154,8 @@ export default function Subscribe() {
 
   const sessionId = params.get("session_id");
   const success = params.get("success") === "1";
+  const upgradeMode = params.get("upgrade") === "1";
+  const canceled = params.get("canceled") === "1";
   const from = location.state?.from?.pathname || "/dashboard";
   const pollRef = useRef(null);
   const purchaseFiredRef = useRef(false);
@@ -199,7 +231,10 @@ export default function Subscribe() {
       ref,
       (snapshot) => {
         const data = snapshot.data();
-        const nextStatus = data?.stripe?.status || "inactive";
+        const nextStatus =
+          data?.stripe?.status ||
+          data?.subscriptionStatus ||
+          "inactive";
 
         setStatus(nextStatus);
         setStripeInfo(data?.stripe || null);
@@ -209,7 +244,7 @@ export default function Subscribe() {
           nextStatus === "trialing" ||
           nextStatus === "past_due";
 
-        if (hasWorkspaceAccess) {
+        if (hasWorkspaceAccess && !upgradeMode) {
           if (!purchaseFiredRef.current && window.fbq) {
             purchaseFiredRef.current = true;
 
@@ -244,7 +279,15 @@ export default function Subscribe() {
     );
 
     return () => unsubscribe && unsubscribe();
-  }, [currentUser, navigate, from, selectedPlan.price, success, sessionId]);
+  }, [
+        currentUser,
+        navigate,
+        from,
+        selectedPlan.price,
+        success,
+        sessionId,
+        upgradeMode,
+      ]);
 
   useEffect(() => {
     if (!currentUser || !sessionId || status !== "pending") {
@@ -284,38 +327,8 @@ export default function Subscribe() {
     };
   }, [currentUser, sessionId, status]);
 
-  useEffect(() => {
-    const handleWindowFocus = () => {
-      if (status !== "pending" || success || sessionId) return;
 
-      window.setTimeout(() => {
-        setCheckoutAbandoned(true);
-        setSyncing(false);
-        localStorage.removeItem("adgen_post_checkout_redirect");
-      }, 500);
-    };
 
-    window.addEventListener("focus", handleWindowFocus);
-
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, [status, success, sessionId]);
-
-  useEffect(() => {
-    if (status !== "pending" || success || sessionId) {
-      setCheckoutAbandoned(false);
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setCheckoutAbandoned(true);
-      setSyncing(false);
-      localStorage.removeItem("adgen_post_checkout_redirect");
-    }, 8000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [status, success, sessionId]);
 
   const openInNewTab = (url) => {
     const anchor = document.createElement("a");
@@ -325,6 +338,76 @@ export default function Subscribe() {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
+  };
+
+  const clearAbandonedCheckout = useCallback(async () => {
+    if (!currentUser) return;
+
+    // Only clean an unfinished checkout.
+    if (stripeInfo?.status !== "pending") return;
+
+    // Do not remove information from a previously confirmed paid plan.
+    if (stripeInfo?.tier) return;
+
+    try {
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        "stripe.status": deleteField(),
+        "stripe.requestedTier": deleteField(),
+      });
+    } catch (cleanupError) {
+      console.error("Failed to clear abandoned checkout:", cleanupError);
+    }
+  }, [currentUser, stripeInfo?.status, stripeInfo?.tier]);
+
+  useEffect(() => {
+  const handleWindowFocus = () => {
+    if (status !== "pending" || success || sessionId) return;
+
+    window.setTimeout(() => {
+      setCheckoutAbandoned(true);
+      setSyncing(false);
+      localStorage.removeItem("adgen_post_checkout_redirect");
+      void clearAbandonedCheckout();
+    }, 500);
+  };
+
+  window.addEventListener("focus", handleWindowFocus);
+
+  return () => {
+    window.removeEventListener("focus", handleWindowFocus);
+  };
+}, [
+  status,
+  success,
+  sessionId,
+  clearAbandonedCheckout,
+]);
+
+    useEffect(() => {
+    if (!canceled) return;
+
+    void clearAbandonedCheckout();
+  }, [canceled, clearAbandonedCheckout]);
+
+  const activateFreePlan = async () => {
+    if (!currentUser) return;
+
+    try {
+      await updateDoc(
+        doc(db, "users", currentUser.uid),
+        {
+          tier: "free",
+          subscriptionStatus: "active",
+        }
+      );
+
+      navigate("/dashboard", {
+        replace: true,
+      });
+    } catch (err) {
+      console.error(err);
+      setError("Failed to activate Free plan.");
+    }
   };
 
   const startSubscription = async () => {
@@ -448,24 +531,23 @@ export default function Subscribe() {
           </h1>
 
           <p>
-            Select a monthly plan, then continue to Stripe’s secure checkout.
-            You can upgrade, downgrade, or manage billing later from your account.
+              Choose the plan that's right for you. Free users can get started instantly, while paid plans continue through Stripe's secure checkout.
           </p>
 
           <div className="subscribe-v2-assurances">
             <span>
               <ShieldCheck size={15} />
-              Secure Stripe checkout
+               No credit card required for Free
             </span>
 
             <span>
               <CreditCard size={15} />
-              Monthly billing
+              Secure Stripe checkout for paid plans
             </span>
 
             <span>
               <Sparkles size={15} />
-              Cancel anytime
+              Upgrade anytime
             </span>
           </div>
         </div>
@@ -544,7 +626,7 @@ export default function Subscribe() {
                     type="button"
                     className="subscribe-v2-card-select"
                     onClick={() => setTier(plan.id)}
-                    disabled={showSpinner || isActive}
+                    disabled={showSpinner || (isActive && !upgradeMode)}
                     aria-pressed={selected}
                     aria-label={`Select ${plan.label}`}
                   >
@@ -608,25 +690,35 @@ export default function Subscribe() {
               <span className="subscribe-v2-summary-label">Selected plan</span>
               <h2>{selectedPlan.label}</h2>
               <p>
-                ${selectedPlan.price.toFixed(2)} per month · billed monthly
+                {selectedPlan.price === 0
+                  ? "No credit card required."
+                  : `$${selectedPlan.price.toFixed(2)} per month · billed monthly`}
               </p>
             </div>
 
             <div className="subscribe-v2-summary-actions">
-              {!isActive ? (
+              {!isActive || upgradeMode ? (
                 <button
                   type="button"
                   className="subscribe-v2-primary"
-                  onClick={startSubscription}
+                  onClick={
+                    tier === "free"
+                      ? activateFreePlan
+                      : startSubscription
+                  }
                   disabled={showSpinner || checkoutLoading}
                 >
                   <span>
-                    {checkoutLoading
+                    {tier === "free"
+                    ? "Continue Free"
+                    : checkoutLoading
                       ? "Opening checkout…"
                       : "Continue to Secure Checkout"}
                   </span>
 
-                  {!checkoutLoading && <ArrowRight size={18} />}
+                  {tier !== "free" && !checkoutLoading && (
+                    <ArrowRight size={18} />
+                  )}
                 </button>
               ) : (
                 <button

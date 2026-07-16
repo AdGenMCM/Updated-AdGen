@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 
 import { useAuth } from "../AuthProvider";
+import { getIdTokenResult } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 
 const db = getFirestore();
@@ -119,7 +120,7 @@ async function safeJson(response, fallback = null) {
 }
 
 export function WorkspaceProvider({ children }) {
-  const { currentUser, stripe } = useAuth();
+  const { currentUser, stripe, userDoc } = useAuth();
 
   const [usage, setUsage] = useState(null);
   const [videoUsage, setVideoUsage] = useState(null);
@@ -130,6 +131,7 @@ export function WorkspaceProvider({ children }) {
   );
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const didFetchRef = useRef(false);
   const lastUserIdRef = useRef(null);
@@ -139,8 +141,56 @@ export function WorkspaceProvider({ children }) {
     process.env.REACT_APP_API_BASE_URL || ""
   ).trim();
 
+    useEffect(() => {
+  let cancelled = false;
+
+  const loadAdminClaim = async () => {
+    if (!currentUser) {
+      if (!cancelled) {
+        setIsAdmin(false);
+      }
+      return;
+    }
+
+    try {
+      const tokenResult = await getIdTokenResult(
+        currentUser,
+        true
+      );
+
+      const adminAccess =
+        tokenResult?.claims?.role === "admin";
+
+      console.log(
+        "[WorkspaceContext] adminAccess:",
+        adminAccess
+      );
+
+      if (!cancelled) {
+        setIsAdmin(adminAccess);
+      }
+    } catch (error) {
+      console.error(
+        "[WorkspaceContext] Failed to read admin claim:",
+        error
+      );
+
+      if (!cancelled) {
+        setIsAdmin(false);
+      }
+    }
+  };
+
+  loadAdminClaim();
+
+  return () => {
+    cancelled = true;
+  };
+}, [currentUser]);
+
   const tierLabels = useMemo(
     () => ({
+      free: "Free",
       trial_monthly: "Trial",
       early_access: "Early Access",
       starter_monthly: "Starter",
@@ -150,10 +200,26 @@ export function WorkspaceProvider({ children }) {
     []
   );
 
-  const planLabel =
-    tierLabels[stripe?.tier] ||
-    stripe?.tier ||
-    "No active plan";
+  const stripeStatus = String(
+    stripe?.status || ""
+  ).toLowerCase();
+
+  const hasConfirmedStripePlan =
+    stripe?.tier &&
+    (
+      stripeStatus === "active" ||
+      stripeStatus === "trialing" ||
+      stripeStatus === "past_due"
+    );
+
+  const effectiveTier =
+    (hasConfirmedStripePlan ? stripe.tier : null) ||
+    userDoc?.tier ||
+    "free";
+
+  const planLabel = isAdmin
+    ? "Admin"
+    : tierLabels[effectiveTier] || effectiveTier;
 
   const fetchWorkspaceData = useCallback(
     async ({ force = false } = {}) => {
@@ -402,6 +468,8 @@ export function WorkspaceProvider({ children }) {
     () => ({
       currentUser,
       stripe,
+      userDoc,
+      isAdmin,
       planLabel,
       usage,
       videoUsage,
@@ -415,6 +483,8 @@ export function WorkspaceProvider({ children }) {
     [
       currentUser,
       stripe,
+      userDoc,
+      isAdmin,
       planLabel,
       usage,
       videoUsage,

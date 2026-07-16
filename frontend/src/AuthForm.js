@@ -108,6 +108,7 @@ export default function AuthForm({ onLogin }) {
         "inactive";
 
       const isAdmin = tokenResult?.claims?.role === "admin";
+
       const hasWorkspaceAccess =
         isAdmin ||
         subscriptionStatus === "active" ||
@@ -166,7 +167,7 @@ export default function AuthForm({ onLogin }) {
     if (isNewUser) {
       Object.assign(profileData, {
         createdAt: serverTimestamp(),
-        tier: "trial",
+        tier: "free",
         subscriptionStatus: "inactive",
         monthlyUsage: 0,
       });
@@ -240,7 +241,7 @@ export default function AuthForm({ onLogin }) {
             lastName: lastName.trim(),
             email: credential.user.email,
             createdAt: serverTimestamp(),
-            tier: "trial",
+            tier: "free",
             subscriptionStatus: "inactive",
             monthlyUsage: 0,
           },

@@ -394,15 +394,18 @@ function AdGenerator() {
         const detail = data?.detail ?? data?.error ?? data?.message;
 
         if (response.status === 429) {
-          const msg = safeDetailMessage(detail) || "You’ve reached your monthly limit.";
+          const cap = detail?.cap;
+          const isFreeLimit = Number(cap) === 2;
+
           setUiError({
             type: "cap",
-            message:
-              detail?.used != null && detail?.cap != null
-                ? `${msg} (${detail.used}/${detail.cap} used this month)`
-                : msg,
-            upgradePath: detail?.upgradePath || "/account",
+            message: isFreeLimit
+              ? "You've used your 2 free image generations. Upgrade to continue creating."
+              : safeDetailMessage(detail) ||
+                "You've reached your image generation limit.",
+            upgradePath: "/subscribe?upgrade=1",
           });
+
           return;
         }
 
@@ -441,8 +444,64 @@ function AdGenerator() {
 
       setResult(data);
     } catch (err) {
-      console.error("[AdGen] Fetch error:", err);
-      alert("Something went wrong. Please try again.");
+      console.error("[AdGen] Generation error:", err);
+
+      const detail = err?.detail;
+      const message =
+        safeDetailMessage(detail) ||
+        err?.message ||
+        "Creative generation failed.";
+
+      const used = detail?.used;
+      const cap = detail?.cap;
+
+      const isLimitError =
+        detail?.status === 429 ||
+        detail?.statusCode === 429 ||
+        detail?.status_code === 429 ||
+        detail?.code === "usage_limit_reached" ||
+        detail?.code === "limit_reached" ||
+        used != null ||
+        cap != null ||
+        /limit|quota|credits|generation cap/i.test(message);
+
+      if (isLimitError) {
+        const isFreeLimit = Number(cap) === 2;
+
+        setUiError({
+          type: "cap",
+          message: isFreeLimit
+            ? `You've used your 2 free image generations. Upgrade to continue creating.`
+            : used != null && cap != null
+              ? `${message} (${used}/${cap} used)`
+              : message,
+          upgradePath: "/subscribe?upgrade=1",
+        });
+
+        setProgress({
+          stage: "failed",
+          message: isFreeLimit
+            ? "Free generation limit reached."
+            : "Generation limit reached.",
+          percent: 100,
+          failed: true,
+        });
+
+        return;
+      }
+
+      setUiError({
+        type: "error",
+        message,
+        upgradePath: null,
+      });
+
+      setProgress({
+        stage: "failed",
+        message,
+        percent: 100,
+        failed: true,
+      });
     } finally {
       setLoading(false);
     }
@@ -765,11 +824,22 @@ function AdGenerator() {
             {!result && !uiError && <p className="side-muted">Your generated ad will appear here after creation.</p>}
 
             {uiError && (
-              <>
+  <>
                 <p>{uiError.message}</p>
-                <button className="download-button" onClick={() => navigate(uiError.upgradePath || "/account")}>
-                  {uiError.type === "auth" ? "Go to Login" : "Go to My Account"}
-                </button>
+
+                {uiError.upgradePath && (
+                  <button
+                    type="button"
+                    className="download-button"
+                    onClick={() => navigate(uiError.upgradePath)}
+                  >
+                    {uiError.type === "auth"
+                      ? "Go to Login"
+                      : uiError.type === "cap"
+                        ? "View Upgrade Options"
+                        : "Go to My Account"}
+                  </button>
+                )}
               </>
             )}
 

@@ -266,6 +266,7 @@
 }
 
 .dash-usage-group + .dash-usage-group {
+  margin-bottom: 14px;
   margin-top: 14px;
 }
 

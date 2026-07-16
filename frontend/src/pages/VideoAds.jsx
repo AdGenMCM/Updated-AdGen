@@ -191,6 +191,8 @@ export default function VideoAds() {
   const [finalVideoUrl, setFinalVideoUrl] = useState(null);
   const [error, setError] = useState(null);
 
+  const [videoLimitReached, setVideoLimitReached] = useState(false);
+
   // scroll target
   const statusRef = useRef(null);
 
@@ -239,6 +241,7 @@ export default function VideoAds() {
     setStatus(null);
     setFinalVideoUrl(null);
     setError(null);
+    setVideoLimitReached(false);
     setProgressStage("queued");
     setProgressMessage("Preparing your video request.");
     setProgressPercent(5);
@@ -443,7 +446,25 @@ export default function VideoAds() {
 
       const data = await safeJson(res);
       if (!res.ok) {
-        throw new Error(data?.detail?.message || safeDetailMessage(data?.detail) || "Failed to start video job");
+        const detail =
+          data?.detail ??
+          data?.error ??
+          data?.message;
+
+        const message =
+          safeDetailMessage(detail) ||
+          `Video generation failed (${res.status})`;
+
+        if (res.status === 429) {
+          setVideoLimitReached(true);
+        }
+
+        throw new Error(
+          res.status === 429
+            ? message ||
+              "You've reached your video credit limit. Upgrade or wait until your next billing cycle."
+            : message
+        );
       }
 
       setJobId(data.jobId);
@@ -516,7 +537,25 @@ export default function VideoAds() {
 
       const data = await safeJson(res);
       if (!res.ok) {
-        throw new Error(data?.detail?.message || safeDetailMessage(data?.detail) || "Failed to start video job");
+        const detail =
+          data?.detail ??
+          data?.error ??
+          data?.message;
+
+        const message =
+          safeDetailMessage(detail) ||
+          `Video generation failed (${res.status})`;
+
+        if (res.status === 429) {
+          setVideoLimitReached(true);
+        }
+
+        throw new Error(
+          res.status === 429
+            ? message ||
+              "You've reached your video credit limit. Upgrade or wait until your next billing cycle."
+            : message
+        );
       }
 
       setJobId(data.jobId);
@@ -610,7 +649,7 @@ export default function VideoAds() {
         <div className="box">
           <h2>🔒 Video Ads require an active plan</h2>
           <p>Choose a paid plan to unlock AI video generation.</p>
-          <button className="primary" onClick={() => navigate("/account")}>Upgrade</button>
+          <button className="primary" onClick={() => navigate("/subscribe?upgrade=1")}>Upgrade</button>
           {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
         </div>
       </div>
@@ -1212,6 +1251,17 @@ return (
           )}
 
           {error && <div className="error">{error}</div>}
+
+          {videoLimitReached && (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => navigate("/subscribe?upgrade=1")}
+              style={{ marginTop: 12 }}
+            >
+              View Upgrade Options
+            </button>
+          )}
 
           {!finalVideoUrl && !error && (
             <div className="videoEmptyState">

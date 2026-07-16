@@ -4,8 +4,29 @@ from copy import deepcopy
 from typing import Any, Dict, Optional
 
 GIB = 1024 ** 3
+MIB = 1024 ** 2
 
 PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
+    "free": {
+        "label": "Free",
+        "monthly_price": 0,
+        "limits": {
+            "images": 2,
+            "video_credits": 0,
+            "optimizer_runs": 0,
+            "brand_kits": 1,
+            "storage_bytes": 250 * MIB,
+        },
+        "features": {
+            "video_generation": False,
+            "optimizer": False,
+            "performance_tracking": False,
+            "winner_analysis": False,
+            "advanced_insights": False,
+            "priority_generation": False,
+        },
+    },
+
     "trial_monthly": {
         "label": "Trial",
         "monthly_price": 9.99,
@@ -25,6 +46,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
             "priority_generation": False,
         },
     },
+
     "starter_monthly": {
         "label": "Starter",
         "monthly_price": 34.99,
@@ -44,6 +66,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
             "priority_generation": False,
         },
     },
+
     "pro_monthly": {
         "label": "Pro",
         "monthly_price": 79.99,
@@ -63,6 +86,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
             "priority_generation": False,
         },
     },
+
     "business_monthly": {
         "label": "Business",
         "monthly_price": 199.99,
@@ -84,9 +108,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Existing Early Access subscriptions remain recognizable, but this tier should
-# not be offered to new customers after the V2 price migration.
-LEGACY_PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
+LEGACY_PLAN_CONFIG = {
     "early_access": {
         "label": "Early Access (Legacy)",
         "monthly_price": 14.99,
@@ -109,39 +131,47 @@ LEGACY_PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
 }
 
 ACTIVE_PLAN_TIERS = frozenset(PLAN_CONFIG.keys())
-RECOGNIZED_PLAN_TIERS = frozenset({*PLAN_CONFIG.keys(), *LEGACY_PLAN_CONFIG.keys()})
+RECOGNIZED_PLAN_TIERS = frozenset(
+    {*PLAN_CONFIG.keys(), *LEGACY_PLAN_CONFIG.keys()}
+)
 
 
 def normalize_tier(tier: Optional[str]) -> str:
     value = (tier or "").strip().lower()
-    return value if value in RECOGNIZED_PLAN_TIERS else "trial_monthly"
+    return value if value in RECOGNIZED_PLAN_TIERS else "free"
 
 
-def get_plan_config(tier: Optional[str], *, include_legacy: bool = True) -> Dict[str, Any]:
+def get_plan_config(tier: Optional[str], *, include_legacy=True):
     normalized = normalize_tier(tier)
+
     source = PLAN_CONFIG.get(normalized)
+
     if source is None and include_legacy:
         source = LEGACY_PLAN_CONFIG.get(normalized)
+
     if source is None:
-        source = PLAN_CONFIG["trial_monthly"]
+        source = PLAN_CONFIG["free"]
+
     return deepcopy(source)
 
 
 def get_limit(tier: Optional[str], resource: str) -> int:
-    plan = get_plan_config(tier)
-    return int((plan.get("limits") or {}).get(resource, 0) or 0)
+    return int(
+        (get_plan_config(tier)["limits"]).get(resource, 0)
+    )
 
 
 def has_feature(tier: Optional[str], feature: str) -> bool:
-    plan = get_plan_config(tier)
-    return bool((plan.get("features") or {}).get(feature, False))
+    return bool(
+        (get_plan_config(tier)["features"]).get(feature, False)
+    )
 
 
 def video_credits_for_duration(duration: int) -> int:
-    seconds = int(duration)
-    if seconds <= 6:
+    if duration <= 6:
         return 1
-    if seconds <= 10:
-        return 2
-    raise ValueError("Unsupported video duration. Maximum supported duration is 10 seconds.")
 
+    if duration <= 10:
+        return 2
+
+    raise ValueError("Unsupported video duration.")

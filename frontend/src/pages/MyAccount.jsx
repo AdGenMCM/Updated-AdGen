@@ -644,17 +644,31 @@ export default function MyAccount() {
               </div>
 
               <div className="acct-v2-actions">
-                <button
-                  type="button"
-                  className="acct-v2-primary"
-                  onClick={openBillingPortal}
-                  disabled={loadingPortal}
-                >
-                  {loadingPortal
-                    ? "Opening billing…"
-                    : "Open secure billing portal"}
-                  {!loadingPortal && <ArrowRight size={17} />}
-                </button>
+                {stripe?.subscriptionId &&
+                  ["active", "trialing", "past_due"].includes(
+                    String(stripe?.status || "").toLowerCase()
+                  ) ? (
+                    <button
+                      type="button"
+                      className="acct-v2-primary"
+                      onClick={openBillingPortal}
+                      disabled={loadingPortal}
+                    >
+                      {loadingPortal
+                        ? "Opening billing…"
+                        : "Open secure billing portal"}
+                      {!loadingPortal && <ArrowRight size={17} />}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="acct-v2-primary"
+                      onClick={() => navigate("/subscribe?upgrade=1")}
+                    >
+                      Upgrade Plan
+                      <ArrowRight size={17} />
+                    </button>
+                  )}
 
                 <button
                   type="button"

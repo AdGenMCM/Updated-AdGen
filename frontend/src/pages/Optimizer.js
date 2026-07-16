@@ -72,6 +72,7 @@ export default function Optimizer() {
   // Optimize state
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [optimizerLimitReached, setOptimizerLimitReached] = useState(false);
   const [result, setResult] = useState(null);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
@@ -80,6 +81,7 @@ export default function Optimizer() {
   const [regenSize, setRegenSize] = useState("1024x1024");
   const [regenLoading, setRegenLoading] = useState(false);
   const [regenErr, setRegenErr] = useState(null);
+  const [regenLimitReached, setRegenLimitReached] = useState(false);
   const [regenResult, setRegenResult] = useState(null); // { copy, imageUrl, usage }
 
 const [progress, setProgress] = useState({
@@ -315,6 +317,7 @@ const [progress, setProgress] = useState({
       failed: false,
     });
     setErr(null);
+    setOptimizerLimitReached(false);
     setResult(null);
     setRegenResult(null);
     setRegenErr(null);
@@ -384,8 +387,26 @@ const [progress, setProgress] = useState({
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const detail = data?.detail ?? data?.error ?? data?.message;
-        setErr(safeDetailMessage(detail) || `Optimization failed (${res.status})`);
+        const detail =
+          data?.detail ??
+          data?.error ??
+          data?.message;
+
+        const message =
+          safeDetailMessage(detail) ||
+          `Optimization failed (${res.status})`;
+
+        if (res.status === 429) {
+          setOptimizerLimitReached(true);
+        }
+
+        setErr(
+          res.status === 429
+            ? message ||
+              "You've reached your Optimizer run limit. Upgrade or wait until your next billing cycle."
+            : message
+        );
+
         return;
       }
 
@@ -402,8 +423,24 @@ const [progress, setProgress] = useState({
       });
 
       setResult(optimizedResult);
-    } catch (error) {
-      setErr(error?.message || "Something went wrong. Please try again.");
+        } catch (error) {
+      const message =
+        safeDetailMessage(error?.detail) ||
+        error?.message ||
+        "Something went wrong. Please try again.";
+
+      const isLimitError =
+        error?.detail?.status === 429 ||
+        error?.detail?.statusCode === 429 ||
+        error?.detail?.code === "usage_limit_reached" ||
+        error?.detail?.code === "limit_reached" ||
+        /limit|quota|optimizer runs/i.test(message);
+
+      if (isLimitError) {
+        setOptimizerLimitReached(true);
+      }
+
+      setErr(message);
     } finally {
       setLoading(false);
     }
@@ -428,6 +465,7 @@ const [progress, setProgress] = useState({
       failed: false,
     });
     setRegenErr(null);
+    setRegenLimitReached(false);
     setRegenResult(null);
 
     try {
@@ -480,8 +518,12 @@ const [progress, setProgress] = useState({
         const detail = data?.detail ?? data?.error ?? data?.message;
 
         if (res.status === 429) {
-          const msg = safeDetailMessage(detail) || "You’ve reached your monthly limit.";
-          setRegenErr(msg);
+          const message =
+            safeDetailMessage(detail) ||
+            "You've reached your image generation limit.";
+
+          setRegenLimitReached(true);
+          setRegenErr(message);
           return;
         }
 
@@ -502,12 +544,25 @@ const [progress, setProgress] = useState({
       });
 
       setRegenResult(generatedResult);
-    } catch (error) {
-      setRegenErr(
-        error?.message ||
-          "Something went wrong generating a new creative. Please try again."
-      );
-    } finally {
+          } catch (error) {
+        const message =
+          safeDetailMessage(error?.detail) ||
+          error?.message ||
+          "Something went wrong generating a new creative. Please try again.";
+
+        const isLimitError =
+          error?.detail?.status === 429 ||
+          error?.detail?.statusCode === 429 ||
+          error?.detail?.code === "usage_limit_reached" ||
+          error?.detail?.code === "limit_reached" ||
+          /limit|quota|credits|generation cap/i.test(message);
+
+        if (isLimitError) {
+          setRegenLimitReached(true);
+        }
+
+        setRegenErr(message);
+      } finally {
       setRegenLoading(false);
     }
   };
@@ -597,11 +652,20 @@ const [progress, setProgress] = useState({
               </div>
             </div>
 
-            <Button type="button" onClick={() => navigate("/account")}>
+            <Button type="button" onClick={() => navigate("/subscribe?upgrade=1")}>
               Upgrade Plan
             </Button>
 
             {err && <p className="opt-error">{err}</p>}
+            {optimizerLimitReached && (
+              <Button
+                type="button"
+                className="opt-secondaryBtn"
+                onClick={() => navigate("/subscribe?upgrade=1")}
+              >
+                View Upgrade Options
+              </Button>
+            )}
           </Card>
         ) : (
           <form className="adgen-form opt-form" onSubmit={handleOptimize}>
@@ -892,6 +956,16 @@ const [progress, setProgress] = useState({
                     </Button>
 
                     {regenErr && <p className="opt-error">{regenErr}</p>}
+
+                    {regenLimitReached && (
+                      <Button
+                        type="button"
+                        className="opt-secondaryBtn"
+                        onClick={() => navigate("/subscribe?upgrade=1")}
+                      >
+                        View Upgrade Options
+                      </Button>
+                    )}
 
                     {regenResult?.imageUrl && (
                       <Card className="opt-updatedCreativeCard">

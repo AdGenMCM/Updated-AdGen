@@ -213,7 +213,6 @@
 
 .pricing-v2-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
   align-items: stretch;
 }
@@ -1008,6 +1007,62 @@
 
   .pricing-v2-card-description {
     min-height: 102px;
+  }
+}
+
+/* Pricing card layout override
+   Add this at the END of src/pages/Pricing.css.
+
+   Desktop: 3 cards on the first row, 2 centered on the second row.
+   Tablet: 2 columns.
+   Mobile: 1 column.
+*/
+
+.pricing-v2-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* Ensure Reveal wrappers and cards fill their grid tracks. */
+.pricing-v2-grid > * {
+  min-width: 0;
+  height: 100%;
+}
+
+.pricing-v2-grid .pricing-v2-card {
+  height: 100%;
+}
+
+@media (min-width: 720px) {
+  .pricing-v2-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Five pricing cards across on large desktop screens */
+@media (min-width: 1400px) {
+  .pricing-v2-plans .pricing-v2-container {
+    max-width: 1760px;
+    width: calc(100% - 64px);
+  }
+
+  .pricing-v2-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .pricing-v2-grid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .pricing-v2-card {
+    width: 100%;
+    height: 100%;
   }
 }
 

@@ -222,7 +222,6 @@
 
 .subscribe-v2-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
   align-items: stretch;
 }
@@ -797,5 +796,44 @@
 @media (prefers-reduced-motion: reduce) {
   .subscribe-v2-checkout-return {
     animation: none;
+  }
+}
+
+/* Five subscribe plan cards across on large desktop screens */
+@media (min-width: 1400px) {
+  .subscribe-v2-plans .subscribe-v2-container {
+    max-width: 1760px;
+    width: calc(100% - 64px);
+  }
+
+  .subscribe-v2-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .subscribe-v2-grid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .subscribe-v2-card {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* Medium desktop and tablet */
+@media (min-width: 760px) and (max-width: 1399px) {
+  .subscribe-v2-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile */
+@media (max-width: 759px) {
+  .subscribe-v2-grid {
+    grid-template-columns: 1fr;
   }
 }

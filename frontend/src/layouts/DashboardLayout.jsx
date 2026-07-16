@@ -84,7 +84,29 @@ export default function DashboardLayout({ children }) {
     usage,
     videoUsage,
     planLabel,
+    stripe,
+    userDoc,
+    isAdmin,
   } = useWorkspace() || {};
+
+  const stripeStatus = String(
+    stripe?.status || ""
+  ).toLowerCase();
+
+  const hasConfirmedStripePlan =
+    stripe?.tier &&
+    (
+      stripeStatus === "active" ||
+      stripeStatus === "trialing" ||
+      stripeStatus === "past_due"
+    );
+
+  const effectiveTier =
+    (hasConfirmedStripePlan ? stripe.tier : null) ||
+    userDoc?.tier ||
+    "free";
+
+  const isFreePlan = !isAdmin && effectiveTier === "free";
 
   const fullName = auth.currentUser?.displayName || "";
   const email = auth.currentUser?.email || "";
@@ -113,22 +135,67 @@ export default function DashboardLayout({ children }) {
     ? Math.min(100, Math.round((videoUsed / videoCap) * 100))
     : 0;
 
-  const navItems = [
-    { to: "/dashboard", label: "Dashboard", icon: Sparkles },
-    { to: "/adgenerator", label: "Image Generator", icon: Wand2 },
-    { to: "/video-ads", label: "Video Generator", icon: Clapperboard },
-    { to: "/creative-studio", label: "Creative Studio", icon: Brush },
-    { to: "/optimizer", label: "Optimizer", icon: BarChart3 },
-    { to: "/library", label: "Library", icon: Library },
-    { to: "/insights", label: "Insights", icon: LineChart },
-    { to: "/brand-kit", label: "Brand Kit", icon: Palette },
-    {
-      to: "/projects",
-      label: "Projects",
-      icon: FolderKanban,
-      disabled: true,
-    },
-  ];
+  const navItems = isFreePlan
+    ? [
+        {
+          to: "/dashboard",
+          label: "Dashboard",
+          icon: Sparkles,
+        },
+        {
+          to: "/adgenerator",
+          label: "Image Generator",
+          icon: Wand2,
+        },
+      ]
+    : [
+        {
+          to: "/dashboard",
+          label: "Dashboard",
+          icon: Sparkles,
+        },
+        {
+          to: "/adgenerator",
+          label: "Image Generator",
+          icon: Wand2,
+        },
+        {
+          to: "/video-ads",
+          label: "Video Generator",
+          icon: Clapperboard,
+        },
+        {
+          to: "/creative-studio",
+          label: "Creative Studio",
+          icon: Brush,
+        },
+        {
+          to: "/optimizer",
+          label: "Optimizer",
+          icon: BarChart3,
+        },
+        {
+          to: "/library",
+          label: "Library",
+          icon: Library,
+        },
+        {
+          to: "/insights",
+          label: "Insights",
+          icon: LineChart,
+        },
+        {
+          to: "/brand-kit",
+          label: "Brand Kit",
+          icon: Palette,
+        },
+        {
+          to: "/projects",
+          label: "Projects",
+          icon: FolderKanban,
+          disabled: true,
+        },
+      ];
 
   const currentPage =
     navItems.find((item) => item.to === location.pathname)?.label ||
@@ -406,6 +473,14 @@ const markAllRead = async () => {
                 <span style={{ width: `${videoPct}%` }} />
               </div>
             </div>
+            {isFreePlan && (
+              <Link
+                to="/subscribe?upgrade=1"
+                className="dash-upgrade-btn"
+              >
+                Upgrade Plan
+              </Link>
+            )}
           </div>
         )}
 
@@ -449,9 +524,11 @@ const markAllRead = async () => {
           </div>
 
           <div className="dash-topbar-actions">
-            <Link to="/pricing" className="dash-upgrade-btn">
-              Upgrade plan
-            </Link>
+            {isFreePlan && (
+              <Link to="/subscribe?upgrade=1" className="dash-upgrade-btn">
+                Upgrade Plan
+              </Link>
+            )}
 
             <div
               className="dash-notification-menu"

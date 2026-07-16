@@ -93,26 +93,27 @@ export default function App() {
           <Route path="/platform" element={<Platform />} />
           <Route path="/design-lab" element={<DesignLab />} />
 
-          {/* Auth-only */}
+
+          {/* Auth-only (Free + Paid) */}
           <Route element={<ProtectedRoute />}>
             <Route path="/subscribe" element={<Subscribe />} />
 
             <Route element={<DashboardRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/account" element={<MyAccount />} />
-              <Route path="/brand-kit" element={<BrandKit />} />
-              <Route path="/optimizer" element={<Optimizer />} />
-              <Route path="/library" element={<Library />} />
-              <Route path="/insights" element={<Insights />} />
+              <Route path="/adgenerator" element={<AdGenerator />} />
             </Route>
           </Route>
 
-          {/* Paid features (require active sub) */}
+          {/* Paid-only features */}
           <Route element={<PaidRoute />}>
             <Route element={<DashboardRoute />}>
-              <Route path="/adgenerator" element={<AdGenerator />} />
+              <Route path="/brand-kit" element={<BrandKit />} />
               <Route path="/creative-studio" element={<CreativeStudio />} />
               <Route path="/video-ads" element={<VideoAds />} />
+              <Route path="/optimizer" element={<Optimizer />} />
+              <Route path="/library" element={<Library />} />
+              <Route path="/insights" element={<Insights />} />
             </Route>
           </Route>
 

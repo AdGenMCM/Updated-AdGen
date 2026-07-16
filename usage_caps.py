@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from google.cloud import firestore as gc_firestore
 
-from plan_config import get_limit
+from plan_config import get_limit, normalize_tier
 
 
 def utc_month_key(dt: Optional[datetime] = None) -> str:
@@ -14,7 +14,19 @@ def utc_month_key(dt: Optional[datetime] = None) -> str:
 
 
 def get_usage_period(user_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    tier = normalize_tier((user_doc or {}).get("tier"))
+
+    if tier == "free":
+        return {
+            "periodKey": "lifetime:free",
+            "periodStart": None,
+            "periodEnd": None,
+            "periodSource": "lifetime",
+            "month": "lifetime:free",
+        }
+
     stripe = (user_doc or {}).get("stripe") or {}
+
     start = stripe.get("currentPeriodStart")
     end = stripe.get("currentPeriodEnd")
 
@@ -44,12 +56,38 @@ def get_usage_period(user_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any
     }
 
 
-def get_tier_and_status(user_doc: Dict[str, Any]) -> Tuple[Optional[str], str]:
-    stripe = (user_doc or {}).get("stripe") or {}
-    tier = stripe.get("tier") or stripe.get("requestedTier")
-    status = (stripe.get("status") or "inactive").lower()
-    return tier, status
+def get_tier_and_status(
+    user_doc: Dict[str, Any],
+) -> Tuple[Optional[str], str]:
+    user_doc = user_doc or {}
+    stripe = user_doc.get("stripe") or {}
 
+    stripe_tier = stripe.get("tier")
+    stripe_status = str(
+        stripe.get("status") or ""
+    ).strip().lower()
+
+    active_statuses = {
+        "active",
+        "trialing",
+        "past_due",
+    }
+
+    # A Stripe tier is authoritative only after Stripe confirms
+    # an active subscription state.
+    if stripe_tier and stripe_status in active_statuses:
+        return stripe_tier, stripe_status
+
+    # Free accounts deliberately bypass Stripe.
+    firestore_tier = user_doc.get("tier")
+    firestore_status = str(
+        user_doc.get("subscriptionStatus") or "inactive"
+    ).strip().lower()
+
+    if firestore_tier == "free":
+        return "free", firestore_status
+
+    return firestore_tier, firestore_status
 
 def _usage_ref(db: gc_firestore.Client, uid: str):
     return db.collection("usage").document(uid)

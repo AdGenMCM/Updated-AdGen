@@ -6,6 +6,29 @@ import MarketingButton from "../components/marketing/actions/MarketingButton";
 
 const TIERS = [
   {
+    id: "free",
+    name: "Free",
+    price: "$0",
+    eyebrow: "Get started",
+    description:
+      "Try AdGen MCM with 2 lifetime image generations. No credit card required.",
+    images: "2 lifetime",
+    videos: "—",
+    optimizer: "—",
+    brands: "—",
+    storage: "250 MB",
+    cta: "Create Free Account",
+    href: "/login",
+    includes: [
+      "2 lifetime image generations",
+      "Ad copy generation",
+      "Dashboard access",
+      "Image Generator",
+      "My Account",
+      "No credit card required",
+    ],
+  },
+  {
     id: "trial_monthly",
     name: "Trial",
     price: "$9.99",
@@ -18,6 +41,7 @@ const TIERS = [
     brands: "1",
     storage: "2 GB",
     cta: "Start Trial",
+    href: "/subscribe?tier=trial_monthly",
     includes: [
       "Image generation",
       "Ad copy generation",
@@ -40,6 +64,7 @@ const TIERS = [
     brands: "1",
     storage: "10 GB",
     cta: "Choose Starter",
+    href: "/subscribe?tier=starter_monthly",
     includes: [
       "Everything in Trial",
       "Higher image generation limits",
@@ -62,6 +87,7 @@ const TIERS = [
     brands: "3",
     storage: "50 GB",
     cta: "Choose Pro",
+    href: "/subscribe?tier=pro_monthly",
     highlighted: true,
     includes: [
       "Everything in Starter",
@@ -85,6 +111,7 @@ const TIERS = [
     brands: "10",
     storage: "200 GB",
     cta: "Choose Business",
+    href: "/subscribe?tier=business_monthly",
     includes: [
       "Everything in Pro",
       "10 Brand Kits",
@@ -97,22 +124,21 @@ const TIERS = [
 ];
 
 const COMPARISON_ROWS = [
-  ["Image generations", "10", "40", "100", "250"],
-  ["Video credits", "2", "5", "12", "30"],
-  ["Optimizer runs", "—", "—", "20", "75"],
-  ["Brand Kits", "1", "1", "3", "10"],
-  ["Creative storage", "2 GB", "10 GB", "50 GB", "200 GB"],
-  ["Image generation", true, true, true, true],
-  ["Video generation", true, true, true, true],
-  ["Ad copy", true, true, true, true],
-  ["Ad copy generation", true, true, true, true],
-  ["Video generation", true, true, true, true],
-  ["Creative Studio", true, true, true, true],
-  ["Creative Library", true, true, true, true],
-  ["Performance tracking", false, false, true, true],
-  ["Winner analysis", false, false, true, true],
-  ["Advanced Insights", false, false, true, true],
-  ["Priority generation", false, false, false, true],
+  ["Image generations", "2 lifetime", "10", "40", "100", "250"],
+  ["Video credits", "—", "2", "5", "12", "30"],
+  ["Optimizer runs", "—", "—", "—", "20", "75"],
+  ["Brand Kits", "—", "1", "1", "3", "10"],
+  ["Creative storage", "250 MB", "2 GB", "10 GB", "50 GB", "200 GB"],
+  ["Image generation", true, true, true, true, true],
+  ["Ad copy generation", true, true, true, true, true],
+  ["Video generation", false, true, true, true, true],
+  ["Creative Studio", false, true, true, true, true],
+  ["Creative Library", false, true, true, true, true],
+  ["Brand Kit", false, true, true, true, true],
+  ["Performance tracking", false, false, false, true, true],
+  ["Winner analysis", false, false, false, true, true],
+  ["Advanced Insights", false, false, false, true, true],
+  ["Priority generation", false, false, false, false, true],
 ];
 
 const FAQS = [
@@ -124,7 +150,7 @@ const FAQS = [
   {
     question: "Do unused generations roll over?",
     answer:
-      "No. Image, video, and Optimizer allowances reset at the beginning of each billing cycle.",
+      "Free includes 2 lifetime image generations that do not reset. Paid image, video, and Optimizer allowances reset at the beginning of each billing cycle.",
   },
   {
     question: "Can I upgrade or downgrade later?",
@@ -134,7 +160,7 @@ const FAQS = [
   {
     question: "What happens when I reach a limit?",
     answer:
-      "Generation pauses for that resource until your next billing cycle or until you move to a higher plan.",
+      "Free image generation stops after the 2 lifetime generations are used. Paid-plan generation pauses until the next billing cycle or until you move to a higher plan.",
   },
   {
     question: "What happens if I reach my storage limit?",
@@ -189,8 +215,8 @@ export default function Pricing() {
           </div>
 
           <div className="pricing-v2-proof" aria-label="Pricing assurances">
-            <span><i /> Cancel anytime</span>
-            <span><i /> Secure Stripe billing</span>
+            <span><i /> No credit card required for Free</span>
+            <span><i /> Secure Stripe billing for paid plans</span>
             <span><i /> Upgrade whenever you grow</span>
           </div>
         </div>
@@ -228,11 +254,11 @@ export default function Pricing() {
 
                   <div className="pricing-v2-price">
                     <strong>{tier.price}</strong>
-                    <span>/ month</span>
+                    <span>{tier.id === "free" ? "forever" : "/ month"}</span>
                   </div>
 
                   <MarketingButton
-                    href={`/subscribe?tier=${tier.id}`}
+                    href={tier.href || `/subscribe?tier=${tier.id}`}
                     size="lg"
                     variant={tier.highlighted ? "primary" : "secondary"}
                     className="pricing-v2-card-cta"
@@ -292,9 +318,9 @@ export default function Pricing() {
               <h2>Pay for a complete creative workflow—not another disconnected tool.</h2>
 
               <p>
-                Every plan combines image generation, video creation, ad copy,
-                brand guidance, editing, asset management, and storage in one
-                connected workspace.
+                Start with image generation for free, then unlock video creation,
+                brand guidance, editing, asset management, optimization, and deeper
+                creative intelligence as your workflow grows.
               </p>
             </div>
           </Reveal>
@@ -404,11 +430,11 @@ export default function Pricing() {
 
             <div className="pricing-v2-final-actions">
               <MarketingButton
-                href="/subscribe?tier=starter_monthly"
+                href="/login"
                 size="lg"
                 className="pricing-v2-final-primary"
               >
-                Start creating
+                Start free
               </MarketingButton>
 
               <MarketingButton
