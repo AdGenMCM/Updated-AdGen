@@ -90,10 +90,18 @@ from collections import Counter
 import smtplib
 from email.message import EmailMessage
 
+#Campaign Manager
+from campaign_backend.routes import router as campaign_router
+from line_items.routes import router as line_items_router
+from campaign_assets.routes import router as campaign_assets_router
+
 
 load_dotenv(override=True)
 
 app = FastAPI()
+app.include_router(campaign_router)
+app.include_router(line_items_router)
+app.include_router(campaign_assets_router)
 
 app.include_router(video_router)
 app.include_router(brand_kits_router)

@@ -189,12 +189,20 @@ export default function DashboardLayout({ children }) {
           label: "Brand Kit",
           icon: Palette,
         },
-        {
-          to: "/projects",
-          label: "Projects",
-          icon: FolderKanban,
-          disabled: true,
-        },
+        ...(isAdmin
+          ? [
+              {
+                to: "/campaigns",
+                label: "Campaign Manager",
+                icon: FolderKanban,
+              },
+              {
+                to: "/admin/users",
+                label: "Admin",
+                icon: Settings,
+              },
+            ]
+          : []),
       ];
 
   const currentPage =

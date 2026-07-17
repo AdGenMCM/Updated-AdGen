@@ -15,6 +15,7 @@ import Insights from "./pages/Insights";
 import BrandKit from "./pages/BrandKit";
 import Dashboard from "./pages/Dashboard";
 import CreativeStudio from "./pages/CreativeStudio";
+import CampaignManager from "./pages/CampaignManager";
 import DesignLab from "./pages/DesignLab";
 import ScrollToTop from "./components/ScrollToTop";
 
@@ -61,6 +62,7 @@ function ConditionalNavbar() {
     "/library",
     "/insights",
     "/brand-kit",
+    "/campaigns",
     "/account",
     "/admin/users",
   ];
@@ -117,9 +119,12 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* Admin */}
+          {/* Admin-only dashboard pages */}
           <Route element={<AdminRoute />}>
-            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route element={<DashboardRoute />}>
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/campaigns" element={<CampaignManager />} />
+            </Route>
           </Route>
 
 
