@@ -40,14 +40,14 @@ export default function Hero() {
 
         <div className="adgen-marketing-hero-actions">
           <MarketingButton href="/subscribe" size="lg">
-            Start creating
+            Start Free
           </MarketingButton>
 
           <MarketingButton href="/platform" size="lg" variant="secondary">
             Explore the platform
           </MarketingButton>
         </div>
-
+        <p className="adgen-marketing-hero-description">✓ 2 free generations, ✓ No credit card required, ✓ Takes less than 2 minutes</p>
         <div
           className="adgen-marketing-hero-proof"
           aria-label="AdGen platform benefits"

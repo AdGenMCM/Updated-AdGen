@@ -1444,3 +1444,7 @@
     transform: none;
   }
 }
+
+#generated-examples {
+  scroll-margin-top: 100px;
+}

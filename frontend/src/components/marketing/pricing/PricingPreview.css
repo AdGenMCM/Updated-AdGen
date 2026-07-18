@@ -154,3 +154,11 @@
     transform: none;
   }
 }
+
+.adgen-pricing-card.featured .adgen-plan-price {
+  color: #4f46e5;
+}
+
+.adgen-pricing-card.featured h3 {
+  color: #312e81;
+}

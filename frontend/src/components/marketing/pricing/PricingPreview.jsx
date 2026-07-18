@@ -9,19 +9,23 @@ import TiltCard from "../../motion/TiltCard";
 
 const plans = [
   {
-    name: "Starter",
-    price: "$34.99",
+    name: "Free",
+    price: "$0",
+    suffix: "",
     text:
-      "For creators and small businesses producing consistent creative content.",
+      "Start creating with no credit card required. Just create an account.",
     features: [
-      "40 image generations",
-      "6 video credits",
-      "Brand Kit",
+      "2 image generations",
+      "Creative Library",
+      "No credit card required",
     ],
+    featured: true,
+    badge: "Start free",
   },
   {
     name: "Pro",
     price: "$79.99",
+    suffix: "/mo",
     text:
       "For growing brands creating and optimizing campaigns every week.",
     features: [
@@ -29,11 +33,12 @@ const plans = [
       "15 video credits",
       "30 Optimizer runs",
     ],
-    featured: true,
+    badge: "Most popular",
   },
   {
     name: "Business",
     price: "$199.99",
+    suffix: "/mo",
     text:
       "For teams managing high-volume creative production across campaigns.",
     features: [
@@ -53,9 +58,9 @@ export default function PricingPreview() {
     >
       <SectionHeader
         align="center"
-        eyebrow="Simple plans"
-        title="Choose the creative plan that fits your workflow."
-        description="Start with the creative volume you need today and upgrade as your campaigns and production needs grow."
+        eyebrow="Start free"
+        title="Try AdGen MCM for free. Upgrade when you need more creative power."
+        description="Generate your first ads with 2 free image generations and no credit card required. Upgrade only when you are ready for more images, videos, and optimization tools."
       />
 
       <Stagger
@@ -74,9 +79,9 @@ export default function PricingPreview() {
                 plan.featured ? "featured" : ""
               }`}
             >
-              {plan.featured && (
+              {plan.badge && (
                 <div className="adgen-plan-badge">
-                  Recommended
+                  {plan.badge}
                 </div>
               )}
 
@@ -84,7 +89,7 @@ export default function PricingPreview() {
 
               <div className="adgen-plan-price">
                 {plan.price}
-                <span>/mo</span>
+                {plan.suffix && <span>{plan.suffix}</span>}
               </div>
 
               <p>{plan.text}</p>
@@ -100,16 +105,16 @@ export default function PricingPreview() {
       </Stagger>
 
       <div className="adgen-pricing-actions">
-        <MarketingButton href="/pricing" size="lg">
-          Compare all plans
+        <MarketingButton href="/subscribe" size="lg">
+          Start free
         </MarketingButton>
 
         <MarketingButton
-          href="/subscribe"
+          href="/pricing"
           size="lg"
           variant="secondary"
         >
-          Start creating
+          View all plans
         </MarketingButton>
       </div>
     </Section>

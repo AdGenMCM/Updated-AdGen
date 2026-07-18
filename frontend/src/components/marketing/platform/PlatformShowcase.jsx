@@ -96,14 +96,21 @@ export default function PlatformShowcase() {
         </div>
       </div>
 
+
       <div className="adgen-platform-action">
-        <MarketingButton href="/platform" size="lg">
-          Explore the complete platform
+        <MarketingButton
+          href="/platform#generated-examples"
+          size="lg"
+        >
+          See what AdGen MCM creates
         </MarketingButton>
 
-        <p>
-          See how every major AdGen workflow works together.
-        </p>
+        <a
+          href="/platform"
+          className="adgen-platform-secondary-link"
+        >
+          Explore the complete platform →
+        </a>
       </div>
     </Section>
   );

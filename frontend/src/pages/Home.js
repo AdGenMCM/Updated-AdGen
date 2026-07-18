@@ -10,6 +10,7 @@ import PricingPreview from "../components/marketing/pricing/PricingPreview";
 import FinalCTA from "../components/marketing/cta/FinalCTA";
 import Reveal from "../components/motion/Reveal";
 
+
 export default function Home() {
   return (
     <main className="home-page home-v2">
@@ -29,11 +30,11 @@ export default function Home() {
       </Reveal>
 
       <Reveal delay={100}>
-        <TrustFoundation />
+        <PricingPreview />
       </Reveal>
 
       <Reveal delay={100}>
-        <PricingPreview />
+        <TrustFoundation />
       </Reveal>
 
       <Reveal delay={100}>

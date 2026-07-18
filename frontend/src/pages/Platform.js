@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./Platform.css";
 
 import Section from "../components/marketing/layout/Section";
@@ -7,6 +7,7 @@ import ProductCanvas from "../components/marketing/ProductCanvas";
 import ProductMomentCard from "../components/marketing/ProductMomentCard";
 import ParallaxCard from "../components/motion/ParallaxCard";
 import Reveal from "../components/motion/Reveal";
+
 
 const sections = [
   {
@@ -177,7 +178,7 @@ const imageExamples = [
 
 function GeneratedImageExamples() {
   return (
-    <section className="platform-output-showcase platform-output-showcase-images">
+    <section id="generated-examples" className="platform-output-showcase platform-output-showcase-images">
       <div className="platform-container platform-output-container">
         <div className="platform-output-header">
           <span className="platform-output-badge">Real platform output</span>
@@ -277,6 +278,28 @@ function ScreenshotCallouts({ items }) {
 }
 
 export default function Platform() {
+    useEffect(() => {
+      if (!window.location.hash) return;
+
+      const id = window.location.hash.replace("#", "");
+
+      const scrollToSection = () => {
+        const element = document.getElementById(id);
+
+        if (element) {
+          element.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      };
+
+      // Allows the page and Reveal components time to render.
+      const timeout = window.setTimeout(scrollToSection, 300);
+
+      return () => window.clearTimeout(timeout);
+    }, []);
+
   return (
     <main className="platform-page platform-v2">
       <Section

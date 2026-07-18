@@ -37,11 +37,20 @@ import AdminUsers from "./pages/AdminUsers";
 import DashboardRoute from "./components/DashboardRoute";
 import "./styles/animations.css";
 
-// Meta Pixel tracking component
-function MetaPixelPageView() {
+//Analytics 
+import {
+    initAnalytics,
+    pageView,
+    initClarity
+} from "./analytics/tracking";
+
+// Google tracking component
+function AnalyticsPageView() {
   const location = useLocation();
 
   useEffect(() => {
+    pageView(location.pathname + location.search);
+
     if (window.fbq) {
       window.fbq("track", "PageView");
     }
@@ -75,12 +84,16 @@ function ConditionalNavbar() {
 }
 
 export default function App() {
+  useEffect(() => {
+    initAnalytics();
+    initClarity();
+}, []);
   return (
     <>
     <ScrollToTop />
     <ConditionalNavbar />
     <div className="container">
-        <MetaPixelPageView />
+        <AnalyticsPageView />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />
