@@ -13,9 +13,9 @@ const TIERS = [
     price: "$0",
     eyebrow: "Get started",
     description:
-      "Try AdGen MCM with 2 lifetime image generations. No credit card required.",
+      "Try AdGen MCM with 2 image generations and 1 video credit lifetime. No credit card required.",
     images: "2 lifetime",
-    videos: "—",
+    videos: "1 lifetime",
     optimizer: "—",
     brands: "—",
     storage: "250 MB",
@@ -23,6 +23,7 @@ const TIERS = [
     href: "/login",
     includes: [
       "2 lifetime image generations",
+      "1 lifetime video credit",
       "Ad copy generation",
       "Dashboard access",
       "Image Generator",
@@ -38,7 +39,7 @@ const TIERS = [
     description:
       "A low-friction way to experience AdGen's full creative workflow with real image and video generation.",
     images: "10",
-    videos: "2",
+    videos: "3",
     optimizer: "—",
     brands: "1",
     storage: "2 GB",
@@ -61,7 +62,7 @@ const TIERS = [
     description:
       "For freelancers, small businesses, and operators who need a dependable monthly creative workflow.",
     images: "40",
-    videos: "5",
+    videos: "6",
     optimizer: "—",
     brands: "1",
     storage: "10 GB",
@@ -84,7 +85,7 @@ const TIERS = [
     description:
       "For active advertisers who want to create, optimize, measure, and improve campaigns from one workspace.",
     images: "100",
-    videos: "12",
+    videos: "14",
     optimizer: "20",
     brands: "3",
     storage: "50 GB",
@@ -108,7 +109,7 @@ const TIERS = [
     description:
       "Higher limits, more brands, and deeper creative intelligence for multi-brand and high-volume workflows.",
     images: "250",
-    videos: "30",
+    videos: "32",
     optimizer: "75",
     brands: "10",
     storage: "200 GB",
@@ -127,7 +128,7 @@ const TIERS = [
 
 const COMPARISON_ROWS = [
   ["Image generations", "2 lifetime", "10", "40", "100", "250"],
-  ["Video credits", "—", "2", "5", "12", "30"],
+  ["Video credits", "1 lifetime", "3", "6", "14", "32"],
   ["Optimizer runs", "—", "—", "—", "20", "75"],
   ["Brand Kits", "—", "1", "1", "3", "10"],
   ["Creative storage", "250 MB", "2 GB", "10 GB", "50 GB", "200 GB"],

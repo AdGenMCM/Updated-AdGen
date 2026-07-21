@@ -57,7 +57,7 @@ export default function Hero() {
             Explore the platform
           </MarketingButton>
         </div>
-        <p className="adgen-marketing-hero-description">✓ 2 free generations, ✓ No credit card required, ✓ Takes less than 2 minutes</p>
+        <p className="adgen-marketing-hero-description">✓ 2 free image generations, 1 free video credit, ✓ No credit card required, ✓ Takes less than 2 minutes</p>
         <div
           className="adgen-marketing-hero-proof"
           aria-label="AdGen platform benefits"

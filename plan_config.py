@@ -12,13 +12,13 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "monthly_price": 0,
         "limits": {
             "images": 2,
-            "video_credits": 0,
+            "video_credits": 1,
             "optimizer_runs": 0,
-            "brand_kits": 1,
+            "brand_kits": 0,
             "storage_bytes": 250 * MIB,
         },
         "features": {
-            "video_generation": False,
+            "video_generation": True,
             "optimizer": False,
             "performance_tracking": False,
             "winner_analysis": False,
@@ -32,7 +32,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "monthly_price": 9.99,
         "limits": {
             "images": 10,
-            "video_credits": 2,
+            "video_credits": 3,
             "optimizer_runs": 0,
             "brand_kits": 1,
             "storage_bytes": 2 * GIB,
@@ -52,7 +52,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "monthly_price": 34.99,
         "limits": {
             "images": 40,
-            "video_credits": 5,
+            "video_credits": 6,
             "optimizer_runs": 0,
             "brand_kits": 1,
             "storage_bytes": 10 * GIB,
@@ -72,7 +72,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "monthly_price": 79.99,
         "limits": {
             "images": 100,
-            "video_credits": 12,
+            "video_credits": 14,
             "optimizer_runs": 20,
             "brand_kits": 3,
             "storage_bytes": 50 * GIB,
@@ -92,7 +92,7 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "monthly_price": 199.99,
         "limits": {
             "images": 250,
-            "video_credits": 30,
+            "video_credits": 32,
             "optimizer_runs": 75,
             "brand_kits": 10,
             "storage_bytes": 200 * GIB,

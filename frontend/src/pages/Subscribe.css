@@ -837,3 +837,371 @@
     grid-template-columns: 1fr;
   }
 }
+/* ======================================================
+   SUBSCRIBE V3 — CONVERSION-FOCUSED PLAN SELECTION
+====================================================== */
+
+.subscribe-v3-summary {
+  position: sticky;
+  top: 18px;
+  z-index: 40;
+  margin: 0 0 30px;
+  border-color: rgba(79, 70, 229, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 242, 255, 0.96));
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.09),
+    0 30px 80px rgba(79, 70, 229, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.subscribe-v3-summary::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    rgba(99, 102, 241, 0.28),
+    transparent 34%,
+    rgba(14, 165, 233, 0.14)
+  );
+  opacity: 0.55;
+}
+
+.subscribe-v3-summary-copy {
+  animation: subscribeV3SummarySwap 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes subscribeV3SummarySwap {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.subscribe-v3-summary .subscribe-v2-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.subscribe-v3-summary .subscribe-v2-summary h2,
+.subscribe-v3-summary h2 {
+  font-size: 30px;
+}
+
+.subscribe-v3-summary .subscribe-v2-primary {
+  min-width: 238px;
+  min-height: 56px;
+  background: linear-gradient(135deg, #111827, #312e81);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.18),
+    0 10px 28px rgba(79, 70, 229, 0.18);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.subscribe-v3-summary .subscribe-v2-primary:hover:not(:disabled) {
+  transform: translateY(-3px);
+  background: linear-gradient(135deg, #1e293b, #4338ca);
+  box-shadow:
+    0 16px 34px rgba(15, 23, 42, 0.2),
+    0 14px 34px rgba(79, 70, 229, 0.24);
+}
+
+.subscribe-v3-plan-heading {
+  display: flex;
+  justify-content: center;
+  margin: 2px 0 22px;
+  text-align: center;
+}
+
+.subscribe-v3-plan-heading > div {
+  width: 100%;
+  max-width: 700px;
+}
+
+.subscribe-v3-plan-heading span {
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.subscribe-v3-plan-heading h2 {
+  margin: 7px 0 0;
+  color: #0f172a;
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  text-align: center;
+}
+
+.subscribe-v3-plan-heading p {
+  max-width: 620px;
+  margin: 10px auto 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* Larger, clearer plan selection buttons */
+.subscribe-v2-card-select {
+  width: 100%;
+  min-height: 46px;
+  justify-content: center;
+  padding: 0 15px;
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 13px;
+  color: #3730a3;
+  background: rgba(238, 242, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.015em;
+  transition:
+    transform 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.subscribe-v2-card-select:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(79, 70, 229, 0.42);
+  color: #312e81;
+  background: #eef2ff;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.12);
+}
+
+.subscribe-v2-card-select:focus-visible {
+  outline: 3px solid rgba(99, 102, 241, 0.22);
+  outline-offset: 3px;
+}
+
+.subscribe-v2-card-select:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.subscribe-v2-card.selected .subscribe-v2-card-select {
+  border-color: transparent;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6366f1, #4338ca);
+  box-shadow:
+    0 11px 26px rgba(79, 70, 229, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.subscribe-v2-card.selected .subscribe-v2-radio {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.subscribe-v2-card.selected .subscribe-v2-radio i {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  background: #ffffff;
+}
+
+.subscribe-v2-card.selected {
+  transform: translateY(-5px) scale(1.012);
+  border-width: 2px;
+  border-color: rgba(79, 70, 229, 0.52);
+}
+
+.subscribe-v2-card.selected:hover {
+  transform: translateY(-9px) scale(1.012);
+}
+
+.subscribe-v2-card-eyebrow {
+  margin-top: 20px;
+}
+
+@media (min-width: 1400px) {
+  .subscribe-v3-summary {
+    top: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  .subscribe-v3-plan-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .subscribe-v3-plan-heading p {
+    max-width: 680px;
+    text-align: left;
+  }
+}
+
+@media (max-width: 759px) {
+  .subscribe-v3-summary {
+    top: 10px;
+    align-items: stretch;
+    margin-bottom: 24px;
+    padding: 20px;
+  }
+
+  .subscribe-v3-summary .subscribe-v2-summary-actions {
+    width: 100%;
+  }
+
+  .subscribe-v3-summary .subscribe-v2-primary,
+  .subscribe-v3-summary .subscribe-v2-secondary {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .subscribe-v3-summary .subscribe-v2-primary {
+    min-height: 56px;
+  }
+
+  .subscribe-v2-card.selected {
+    transform: none;
+  }
+
+  .subscribe-v2-card.selected:hover {
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscribe-v3-summary-copy {
+    animation: none;
+  }
+
+  .subscribe-v2-card-select,
+  .subscribe-v3-summary .subscribe-v2-primary {
+    transition: none;
+  }
+}
+
+
+/* ======================================================
+   SUBSCRIBE V3.1 — SPACING + STICKY REFINEMENT
+====================================================== */
+
+/* Pull the conversion action closer to the hero. */
+.subscribe-v2-hero {
+  padding-bottom: 48px;
+}
+
+.subscribe-v2-plans {
+  padding-top: 20px;
+}
+
+/* Compact normal state with a navbar-safe sticky position. */
+.subscribe-v3-summary {
+  top: 76px;
+  min-height: 88px;
+  margin-bottom: 20px;
+  padding: 18px 22px;
+  transition:
+    padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    min-height 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 220ms ease,
+    box-shadow 220ms ease,
+    background 220ms ease;
+}
+
+/* The card subtly docks beneath the fixed public navbar. */
+.subscribe-v3-summary.is-docked {
+  min-height: 76px;
+  padding: 12px 18px;
+  border-radius: 17px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.94),
+      rgba(238, 242, 255, 0.93)
+    );
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.12),
+    0 22px 54px rgba(79, 70, 229, 0.14);
+  backdrop-filter: blur(22px);
+}
+
+.subscribe-v3-summary.is-docked h2 {
+  margin-top: 3px;
+  font-size: 24px;
+}
+
+.subscribe-v3-summary.is-docked p {
+  margin-top: 3px;
+}
+
+.subscribe-v3-summary.is-docked .subscribe-v2-primary,
+.subscribe-v3-summary.is-docked .subscribe-v2-secondary {
+  min-height: 48px;
+}
+
+.subscribe-v3-plan-heading {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+/* Make plan selection even more prominent. */
+.subscribe-v2-card-select {
+  min-height: 52px;
+}
+
+.subscribe-v2-card.selected {
+  transform: translateY(-6px) scale(1.018);
+  border-color: rgba(79, 70, 229, 0.62);
+  box-shadow:
+    0 22px 46px rgba(15, 23, 42, 0.1),
+    0 52px 118px rgba(79, 70, 229, 0.25);
+}
+
+.subscribe-v2-card.selected:hover {
+  transform: translateY(-10px) scale(1.018);
+}
+
+@media (max-width: 759px) {
+  .subscribe-v2-hero {
+    padding-bottom: 42px;
+  }
+
+  .subscribe-v2-plans {
+    padding-top: 16px;
+  }
+
+  .subscribe-v3-summary,
+  .subscribe-v3-summary.is-docked {
+    top: 10px;
+    min-height: 0;
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .subscribe-v3-summary.is-docked h2 {
+    font-size: 25px;
+  }
+
+  .subscribe-v2-card.selected,
+  .subscribe-v2-card.selected:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscribe-v3-summary {
+    transition: none;
+  }
+}

@@ -40,14 +40,15 @@ const PLAN_OPTIONS = [
     price: 0,
     eyebrow: "Get started",
     description:
-      "Try AdGen MCM before upgrading.",
+      "Try image generation and create one complimentary short video before upgrading.",
     images: "2 lifetime images",
-    videos: "No video",
+    videos: "1 bonus video credit",
     optimizer: "No Optimizer",
     brands: "No Brand Kit",
     storage: "250 MB storage",
     features: [
       "Image generation",
+      "One 6-second AI video",
       "Dashboard",
       "My Account",
     ],
@@ -146,6 +147,7 @@ export default function Subscribe() {
   const [tier, setTier] = useState("free");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutAbandoned, setCheckoutAbandoned] = useState(false);
+  const [summaryDocked, setSummaryDocked] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -161,6 +163,7 @@ export default function Subscribe() {
   const from = location.state?.from?.pathname || "/dashboard";
   const pollRef = useRef(null);
   const purchaseFiredRef = useRef(false);
+  const summaryRef = useRef(null);
   const notice = location.state?.notice || params.get("notice") || "";
   const activationMessage =
     notice === "choose_plan"
@@ -352,6 +355,42 @@ export default function Subscribe() {
 
 
 
+  useEffect(() => {
+    let frameId = null;
+
+    const updateDockedState = () => {
+      if (frameId) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+
+        const summary = summaryRef.current;
+        if (!summary) return;
+
+        const stickyTop = window.matchMedia("(max-width: 759px)").matches
+          ? 10
+          : 76;
+
+        setSummaryDocked(
+          summary.getBoundingClientRect().top <= stickyTop + 1
+        );
+      });
+    };
+
+    updateDockedState();
+    window.addEventListener("scroll", updateDockedState, { passive: true });
+    window.addEventListener("resize", updateDockedState);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener("scroll", updateDockedState);
+      window.removeEventListener("resize", updateDockedState);
+    };
+  }, []);
+
   const openInNewTab = (url) => {
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -410,6 +449,22 @@ export default function Subscribe() {
 
     void clearAbandonedCheckout();
   }, [canceled, clearAbandonedCheckout]);
+
+  const handlePlanSelect = (planId) => {
+    setTier(planId);
+
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 759px)").matches
+    ) {
+      window.requestAnimationFrame(() => {
+        summaryRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+  };
 
   const activateFreePlan = async () => {
     if (!currentUser) return;
@@ -630,6 +685,75 @@ export default function Subscribe() {
             </div>
           )}
 
+
+          <div
+            ref={summaryRef}
+            className={`subscribe-v2-summary subscribe-v3-summary ${
+              summaryDocked ? "is-docked" : ""
+            }`}
+          >
+            <div key={tier} className="subscribe-v3-summary-copy">
+              <span className="subscribe-v2-summary-label">
+                <Check size={13} />
+                Selected plan
+              </span>
+              <h2>{selectedPlan.label}</h2>
+              <p>
+                {selectedPlan.price === 0
+                  ? "No credit card required."
+                  : `$${selectedPlan.price.toFixed(2)} per month · billed monthly`}
+              </p>
+            </div>
+
+            <div className="subscribe-v2-summary-actions">
+              {!isActive || upgradeMode ? (
+                <button
+                  type="button"
+                  className="subscribe-v2-primary"
+                  onClick={
+                    tier === "free"
+                      ? activateFreePlan
+                      : startSubscription
+                  }
+                  disabled={showSpinner || checkoutLoading}
+                >
+                  <span>
+                    {tier === "free"
+                    ? "Start Free"
+                    : checkoutLoading
+                      ? "Opening checkout…"
+                      : "Continue to Secure Checkout"}
+                  </span>
+
+                  {!checkoutLoading && <ArrowRight size={18} />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="subscribe-v2-primary"
+                  onClick={openBilling}
+                >
+                  Manage billing
+                  <ArrowRight size={18} />
+                </button>
+              )}
+
+              <Link to="/pricing" className="subscribe-v2-secondary">
+                Compare full plan details
+              </Link>
+            </div>
+          </div>
+
+          <div className="subscribe-v3-plan-heading">
+            <div>
+              <span>Compare plans</span>
+              <h2>Choose the workflow that matches your goals.</h2>
+              <p>
+                Select any plan below. Your action button stays visible while you compare.
+              </p>
+            </div>
+          </div>
+
           <div className="subscribe-v2-grid">
             {PLAN_OPTIONS.map((plan, index) => {
               const selected = plan.id === tier;
@@ -651,7 +775,7 @@ export default function Subscribe() {
                   <button
                     type="button"
                     className="subscribe-v2-card-select"
-                    onClick={() => setTier(plan.id)}
+                    onClick={() => handlePlanSelect(plan.id)}
                     disabled={showSpinner || (isActive && !upgradeMode)}
                     aria-pressed={selected}
                     aria-label={`Select ${plan.label}`}
@@ -660,7 +784,7 @@ export default function Subscribe() {
                       <i />
                     </span>
 
-                    <span>{selected ? "Selected" : "Select plan"}</span>
+                    <span>{selected ? "Selected plan" : `Choose ${plan.label}`}</span>
                   </button>
 
                   <span className="subscribe-v2-card-eyebrow">
@@ -711,57 +835,6 @@ export default function Subscribe() {
             })}
           </div>
 
-          <div className="subscribe-v2-summary">
-            <div>
-              <span className="subscribe-v2-summary-label">Selected plan</span>
-              <h2>{selectedPlan.label}</h2>
-              <p>
-                {selectedPlan.price === 0
-                  ? "No credit card required."
-                  : `$${selectedPlan.price.toFixed(2)} per month · billed monthly`}
-              </p>
-            </div>
-
-            <div className="subscribe-v2-summary-actions">
-              {!isActive || upgradeMode ? (
-                <button
-                  type="button"
-                  className="subscribe-v2-primary"
-                  onClick={
-                    tier === "free"
-                      ? activateFreePlan
-                      : startSubscription
-                  }
-                  disabled={showSpinner || checkoutLoading}
-                >
-                  <span>
-                    {tier === "free"
-                    ? "Continue Free"
-                    : checkoutLoading
-                      ? "Opening checkout…"
-                      : "Continue to Secure Checkout"}
-                  </span>
-
-                  {tier !== "free" && !checkoutLoading && (
-                    <ArrowRight size={18} />
-                  )}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="subscribe-v2-primary"
-                  onClick={openBilling}
-                >
-                  Manage billing
-                  <ArrowRight size={18} />
-                </button>
-              )}
-
-              <Link to="/pricing" className="subscribe-v2-secondary">
-                Compare full plan details
-              </Link>
-            </div>
-          </div>
 
           <div className="subscribe-v2-account-note">
             <span>Signed in as</span>

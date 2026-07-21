@@ -80,7 +80,26 @@ function AdGenerator() {
   const brandKitAppliedFieldsRef = useRef({});
 
   const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
+  const [isFreePlan, setIsFreePlan] = useState(false);
   const hasReferenceImages = referenceImages.length > 0;
+
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user || !apiBase) return;
+        const token = await user.getIdToken();
+        const res = await fetch(`${apiBase}/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const me = await res.json();
+        setIsFreePlan(String(me.tier || "").toLowerCase() === "free");
+      } catch {}
+    };
+    loadPlan();
+  }, [apiBase]);
 
 
 
@@ -348,8 +367,8 @@ function AdGenerator() {
         ...form,
         headline: form.headline.trim() || null,
         primary_text: form.primaryText.trim() || null,
-        useBrandKit,
-        brandKitId,
+        useBrandKit: isFreePlan ? false : useBrandKit,
+        brandKitId: isFreePlan ? null : brandKitId,
         campaignObjective: form.campaignObjective,
         referenceImageUrls: referenceImages.map((img) => img.url).filter(Boolean),
         referenceImageMode,
@@ -577,6 +596,7 @@ function AdGenerator() {
             </div>
           </div>
 
+          {!isFreePlan && (
           <BrandKitSelector
             value={brandKitId}
             onChange={setBrandKitId}
@@ -586,6 +606,7 @@ function AdGenerator() {
             }}
             disabled={loading || !useBrandKit}
           />
+          )}
 
           <form className="adgen-form" onSubmit={handleSubmit}>
             <StepSection
@@ -797,6 +818,12 @@ function AdGenerator() {
 
               <div className="enhancement-grid">
                 <div className="option-card enhancement-card">
+                  {isFreePlan ? (
+                    <div>
+                      <strong>🔒 Brand Kit</strong>
+                      <small>  Available on paid plans.</small>
+                    </div>
+                  ) : (
                   <label className="option-toggle">
                     <input type="checkbox" checked={useBrandKit} onChange={(e) => setUseBrandKit(e.target.checked)} disabled={loading} />
                     <span>
@@ -806,18 +833,32 @@ function AdGenerator() {
                       <small>{brandKitLoading ? "Checking saved Brand Kit..." : useBrandKit ? "Brand guidance enabled" : "Brand guidance disabled"}</small>
                     </span>
                   </label>
+                  )}
                 </div>
 
                 <div className="option-card enhancement-card">
-                  <label className="option-toggle">
-                    <input type="checkbox" checked={useWinners} onChange={(e) => setUseWinners(e.target.checked)} disabled={loading} />
-                    <span>
-                      <strong>
-                        Apply Winner Profile <InfoTip text="Uses patterns from your best-performing creatives, such as winning styles, hooks, platforms, and performance metrics. Available on Pro and Business." />
-                      </strong>
-                      <small>Pro/Business</small>
-                    </span>
-                  </label>
+                  {isFreePlan ? (
+                    <div>
+                      <strong>🔒 Winner Profile</strong>
+                      <small>  Available on Pro &amp; Business plans.</small>
+                    </div>
+                  ) : (
+                    <label className="option-toggle">
+                      <input
+                        type="checkbox"
+                        checked={useWinners}
+                        onChange={(e) => setUseWinners(e.target.checked)}
+                        disabled={loading}
+                      />
+                      <span>
+                        <strong>
+                          Apply Winner Profile{" "}
+                          <InfoTip text="Uses patterns from your best-performing creatives, such as winning styles, hooks, platforms, and performance metrics. Available on Pro and Business." />
+                        </strong>
+                        <small>Pro/Business</small>
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
 

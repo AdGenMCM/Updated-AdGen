@@ -119,15 +119,15 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/account" element={<MyAccount />} />
               <Route path="/adgenerator" element={<AdGenerator />} />
+              <Route path="/video-ads" element={<VideoAds />} />
             </Route>
           </Route>
 
-          {/* Paid-only features */}
+          {/* Paid Users */}
           <Route element={<PaidRoute />}>
             <Route element={<DashboardRoute />}>
               <Route path="/brand-kit" element={<BrandKit />} />
               <Route path="/creative-studio" element={<CreativeStudio />} />
-              <Route path="/video-ads" element={<VideoAds />} />
               <Route path="/optimizer" element={<Optimizer />} />
               <Route path="/library" element={<Library />} />
               <Route path="/insights" element={<Insights />} />

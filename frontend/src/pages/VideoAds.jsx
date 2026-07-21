@@ -200,6 +200,7 @@ export default function VideoAds() {
     if (me.isAdmin) return true;
     const t = String(me.tier || "").toLowerCase();
     return [
+      "free",
       "trial_monthly",
       "starter_monthly",
       "pro_monthly",
@@ -207,6 +208,27 @@ export default function VideoAds() {
       "early_access",
     ].includes(t);
   }, [me]);
+
+  const isFreePlan = useMemo(() => {
+    return (
+      !me.isAdmin &&
+      String(me.tier || "").toLowerCase() === "free"
+    );
+  }, [me]);
+
+  useEffect(() => {
+    if (isFreePlan && duration !== 6) {
+      setDuration(6);
+    }
+  }, [isFreePlan, duration]);
+
+  useEffect(() => {
+    if (isFreePlan) {
+      setUseBrandKit(false);
+      setBrandKitId(null);
+      setBrandKit(null);
+    }
+  }, [isFreePlan]);
 
   // ✅ winners guidance should be Pro/Business only (admin allowed)
 
@@ -648,7 +670,7 @@ export default function VideoAds() {
 
         <div className="box">
           <h2>🔒 Video Ads require an active plan</h2>
-          <p>Choose a paid plan to unlock AI video generation.</p>
+          <p>Activate Free or choose a paid plan to unlock video generation.</p>
           <button className="primary" onClick={() => navigate("/subscribe?upgrade=1")}>Upgrade</button>
           {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
         </div>
@@ -674,15 +696,22 @@ return (
       </p>
     </div>
 
-    <BrandKitSelector
-      value={brandKitId}
-      onChange={setBrandKitId}
-      onKitChange={setBrandKit}
-      disabled={isGenerating || !useBrandKit}
-    />
+    {!isFreePlan ? (
+      <BrandKitSelector
+        value={brandKitId}
+        onChange={setBrandKitId}
+        onKitChange={setBrandKit}
+        disabled={isGenerating || !useBrandKit}
+      />
+    ) : (
+      <div className="hint" style={{ marginBottom: 16 }}>
+        Brand Kit is available on paid plans. Your complimentary video can still be created without it.
+      </div>
+    )}
 
     <div className="videoAdsLayout">
       <main className="videoAdsMain">
+        <div className="videoAdsForm">
         <StepSection
           step="1"
           title="Creation Mode"
@@ -761,7 +790,9 @@ return (
                 disabled={isGenerating}
               >
                 <option value={6}>6 seconds (1 Credit)</option>
-                <option value={10}>10 second (2 Credits)</option>
+                {!isFreePlan && (
+                  <option value={10}>10 seconds (2 Credits)</option>
+                )}
               </select>
             </div>
 
@@ -786,7 +817,15 @@ return (
 
 
           <div className="videoEnhancementGrid">
-            <div className="videoEnhancementCard">
+           <div className="videoEnhancementCard">
+            {isFreePlan ? (
+              <div className="videoToggleCopy">
+                <span className="videoToggleTitle">
+                  <span>🔒 Brand Kit</span>
+                </span>
+                <small>  Available on paid plans.</small>
+              </div>
+            ) : (
               <label className="videoToggle">
                 <input
                   type="checkbox"
@@ -803,32 +842,37 @@ return (
                   <small>Recommended</small>
                 </span>
               </label>
-            </div>
+            )}
+          </div>
 
             <div className="videoEnhancementCard">
-              <label className="videoToggle">
-                <input
-                  type="checkbox"
-                  checked={useWinners}
-                  onChange={(e) => setUseWinners(e.target.checked)}
-                  disabled={!canUseWinners || isGenerating || winnersLoading}
-                />
-
-                <span className="videoToggleCopy">
+              {isFreePlan ? (
+                <div className="videoToggleCopy">
                   <span className="videoToggleTitle">
-                    <span>Apply Winner Profile</span>
-                    <InfoTip text="Uses your highest-performing videos to guide pacing, scene direction, and creative style." />
+                    <span>🔒 Winner Profile</span>
                   </span>
-                  <small>Pro/Business</small>
-                </span>
-              </label>
+                  <small>  Available on Pro &amp; Business plans.</small>
+                </div>
+              ) : (
+                <label className="videoToggle">
+                  <input
+                    type="checkbox"
+                    checked={useWinners}
+                    onChange={(e) => setUseWinners(e.target.checked)}
+                    disabled={!canUseWinners || isGenerating || winnersLoading}
+                  />
+
+                  <span className="videoToggleCopy">
+                    <span className="videoToggleTitle">
+                      <span>Apply Winner Profile</span>
+                      <InfoTip text="Uses your highest-performing videos to guide pacing, scene direction, and creative style." />
+                    </span>
+                    <small>Pro/Business</small>
+                  </span>
+                </label>
+              )}
             </div>
           </div>
-          {!canUseWinners && (
-            <div className="hint" style={{ marginTop: 10 }}>
-              Winner Profile is available on <strong>Pro &amp; Business</strong>.
-            </div>
-          )}
 
           {useWinners && winnersLoading && (
             <div className="hint" style={{ marginTop: 10 }}>
@@ -848,13 +892,19 @@ return (
 
               <button
                 className="secondary miniBtn"
-                disabled={!voiceEnabled || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
+                disabled={isFreePlan || !voiceEnabled || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
                 onClick={() => previewVoice()}
                 type="button"
               >
                 {previewLoading ? "Previewing..." : "Preview Voice"}
               </button>
             </div>
+
+            {isFreePlan && (
+              <div className="hint" style={{ marginTop: 8 }}>
+                Voice preview is available on paid plans. Voiceover can still be included in your complimentary video.
+              </div>
+            )}
 
             <textarea
               value={voiceoverScript}
@@ -1227,6 +1277,7 @@ return (
             </>
           )}
         </StepSection>
+        </div>
       </main>
 
       <aside className="videoAdsSide">

@@ -95,11 +95,19 @@
   margin-bottom: 30px;
 }
 
-.videoAds .grid2,
-.videoAds .videoEnhancementGrid {
+.videoAds .grid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+  margin-bottom: 28px;
+}
+
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+  margin-top: 6px;
   margin-bottom: 28px;
 }
 
@@ -164,7 +172,7 @@
   border: 1px solid var(--ag-border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.045);
-  padding: 24px;
+  padding: 18px 20px;
 }
 
 .videoAds .checkbox {
@@ -713,4 +721,15 @@
   margin-left: 0 !important;
   display: inline-grid !important;
   flex: 0 0 auto !important;
+}
+
+.videoAds .videoEnhancementCard {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+}
+
+.videoAdsForm {
+    display: grid;
+    gap: 40px;
 }

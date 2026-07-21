@@ -93,21 +93,22 @@ export default function Dashboard() {
 
   const nextStep = (() => {
     if (isFreePlan) {
+      if (videoCap > 0 && videoUsed < videoCap) {
         return {
-          title: "Unlock the full platform",
+          title: "Create your complimentary video",
           description:
-            "Upgrade to access Brand Kit, Video Ads, Optimizer, Library and more.",
-          link: "/subscribe?upgrade=1",
-          cta: "Upgrade Plan →",
+            "Your Free plan includes one 6-second video credit. Turn an image or prompt into your first video ad.",
+          link: "/video-ads",
+          cta: "Generate Free Video →",
         };
       }
 
-      if (missingBrandItems.length) {
       return {
-        title: "Finish your Brand Kit",
-        description: `Complete ${missingBrandItems.slice(0, 3).join(", ")} to improve brand consistency across future creatives.`,
-        link: "/brand-kit",
-        cta: "Complete Brand Kit →",
+        title: "Unlock the full platform",
+        description:
+          "Upgrade for additional video credits, Brand Kit, Optimizer, Library and more.",
+        link: "/subscribe?upgrade=1",
+        cta: "Upgrade Plan →",
       };
     }
 
@@ -163,7 +164,15 @@ export default function Dashboard() {
           to="/account"
           label="Video Usage"
           value={videoCap > 0 ? `${videoUsed} / ${videoCap}` : "Not included"}
-          description={videoCap > 0 ? "Monthly video credits used" : "Upgrade to unlock video"}
+          description={
+            videoCap > 0
+              ? (
+                  isFreePlan
+                    ? "Complimentary lifetime video credit"
+                    : "Monthly video credits used"
+                )
+              : "Upgrade to unlock video"
+          }
           icon={<Video size={20} />}
         />
 
@@ -211,11 +220,7 @@ export default function Dashboard() {
           />
 
           <ActionCard
-            to={
-              isFreePlan
-                ? "/subscribe?upgrade=1"
-                : "/video-ads"
-            }
+            to="/video-ads"
             icon={<Clapperboard size={22} />}
             title="Generate Video"
             description="Turn prompts or images into video ads."

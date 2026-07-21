@@ -1001,6 +1001,14 @@ def infer_visual_subject(
         return f"{pn} ({attrs})"
     return pn
 
+BRAND_KIT_TIERS = {
+    "trial_monthly",
+    "starter_monthly",
+    "pro_monthly",
+    "business_monthly",
+    "early_access",
+}
+
 
 def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     if not brand_kit:
@@ -2047,7 +2055,7 @@ async def upload_video_image(
 
     tier, status = get_tier_and_status(user_doc)
 
-    # Trial, Starter, Pro, and Business may upload images for Video Ads.
+    # Free, Trial, Starter, Pro, and Business may upload images for Video Ads.
     # Admin bypasses plan checks.
     if not admin:
         allowed_statuses = {"active", "trialing"}
@@ -2059,6 +2067,7 @@ async def upload_video_image(
             )
 
         allowed_video_tiers = {
+            "free",
             "trial_monthly",
             "starter_monthly",
             "pro_monthly",
@@ -2417,14 +2426,34 @@ async def generate_ad(
     set_generation_progress(db, "image", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    set_generation_progress(db, "image", progress_job_id, "loading_brand_kit")
+
+    tier, status = get_tier_and_status(user_doc)
+
+    effective_use_brand_kit = bool(payload.useBrandKit) and (
+        admin or tier in BRAND_KIT_TIERS
+    )
+
+    set_generation_progress(
+        db,
+        "image",
+        progress_job_id,
+        "loading_brand_kit",
+    )
+
     brand_kit = (
-        resolve_brand_kit(db, uid, payload.brandKitId, user_doc)
-        if payload.useBrandKit
+        resolve_brand_kit(
+            db,
+            uid,
+            payload.brandKitId,
+            user_doc,
+        )
+        if effective_use_brand_kit
         else {}
     )
-    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
-    tier, status = get_tier_and_status(user_doc)
+
+    brand_kit_context = build_brand_kit_prompt_context(
+        brand_kit
+    )
 
     winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
     winner_profile = getattr(payload, "winnerProfile", None)
@@ -2959,8 +2988,12 @@ It should be visually impressive enough to appear in a professional design portf
                 "referenceImageUrls": reference_image_urls,
                 "referenceImageMode": reference_image_mode,
                 "referenceImageCount": len(reference_image_urls),
-                "useBrandKit": payload.useBrandKit,
-                "brandKitId": getattr(payload, "brandKitId", None),
+                "useBrandKit": effective_use_brand_kit,
+                "brandKitId": (
+                    getattr(payload, "brandKitId", None)
+                    if effective_use_brand_kit
+                    else None
+                ),
                 "brandKitUsed": bool(brand_kit_context),
                 "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
                 "useMyWinners": bool(winner_profile),

@@ -7,7 +7,6 @@ import uuid
 import tempfile
 import subprocess
 from typing import Optional, Literal, Dict, Any, List
-
 import httpx
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -99,6 +98,14 @@ TTS_PREVIEW_CAPS = {
     "starter_monthly": 75,
     "pro_monthly": 250,
     "business_monthly": 600,
+}
+
+BRAND_KIT_TIERS = {
+    "trial_monthly",
+    "starter_monthly",
+    "pro_monthly",
+    "business_monthly",
+    "early_access",
 }
 
 # -----------------------------
@@ -861,10 +868,35 @@ async def start_image_video(
         .to_dict()
         or {}
     )
-
-    brand_kit = resolve_brand_kit(db, uid, req.brandKitId, user_doc) if req.useBrandKit else {}
-
+    
     # Compact visual Brand Kit direction for Runway.
+    tier = None
+    status = None
+
+    if not admin:
+        tier, status = get_tier_and_status(user_doc)
+
+        if tier == "free" and int(req.duration) != 6:
+            raise HTTPException(
+                status_code=403,
+                detail="The complimentary Free plan video is limited to 6 seconds.",
+            )
+
+    effective_use_brand_kit = bool(req.useBrandKit) and (
+        admin or tier in BRAND_KIT_TIERS
+    )
+
+    brand_kit = (
+        resolve_brand_kit(
+            db,
+            uid,
+            req.brandKitId,
+            user_doc,
+        )
+        if effective_use_brand_kit
+        else {}
+    )
+
     brand_direction = compile_video_brand_direction(
         brand_kit
     )
@@ -872,7 +904,6 @@ async def start_image_video(
     usage_reservation = None
 
     if not admin:
-        tier, status = get_tier_and_status(user_doc)
 
         # Validate premium Winner Profile access before reserving usage.
         if (
@@ -899,7 +930,7 @@ async def start_image_video(
                 usage_reservation.get("periodKey")
                 or usage_reservation.get("month")
             ),
-            link="/videoads",
+            link="/video-ads",
         )
 
     job_id = str(uuid.uuid4())
@@ -931,8 +962,8 @@ async def start_image_video(
         # Original user inputs.
         "promptText": req.promptText,
         "promptImageUrl": req.promptImageUrl,
-        "useBrandKit": req.useBrandKit,
-        "brandKitId": req.brandKitId,
+        "useBrandKit": effective_use_brand_kit,
+        "brandKitId": req.brandKitId if effective_use_brand_kit else None,
 
         # Runway task fields.
         "runwayVideoTaskId": None,
@@ -1194,9 +1225,33 @@ async def start_prompt_video(
         or {}
     )
 
-    brand_kit = resolve_brand_kit(db, uid, req.brandKitId, user_doc) if req.useBrandKit else {}
+    tier = None
+    status = None
 
-    # Compact visual Brand Kit direction for Runway.
+    if not admin:
+        tier, status = get_tier_and_status(user_doc)
+
+        if tier == "free" and int(req.duration) != 6:
+            raise HTTPException(
+                status_code=403,
+                detail="The complimentary Free plan video is limited to 6 seconds.",
+            )
+
+    effective_use_brand_kit = bool(req.useBrandKit) and (
+        admin or tier in BRAND_KIT_TIERS
+    )
+
+    brand_kit = (
+        resolve_brand_kit(
+            db,
+            uid,
+            req.brandKitId,
+            user_doc,
+        )
+        if effective_use_brand_kit
+        else {}
+    )
+
     brand_direction = compile_video_brand_direction(
         brand_kit
     )
@@ -1204,7 +1259,6 @@ async def start_prompt_video(
     usage_reservation = None
 
     if not admin:
-        tier, status = get_tier_and_status(user_doc)
 
         # Validate premium Winner Profile access before reserving usage.
         if (
@@ -1231,7 +1285,7 @@ async def start_prompt_video(
                 usage_reservation.get("periodKey")
                 or usage_reservation.get("month")
             ),
-            link="/videoads",
+            link="/video-ads",
         )
 
     # Build concise prompt-to-video creative direction.
@@ -1329,8 +1383,8 @@ async def start_prompt_video(
         "userPrompt": req.userPrompt or None,
 
         # Brand configuration.
-        "useBrandKit": req.useBrandKit,
-        "brandKitId": req.brandKitId,
+        "useBrandKit": effective_use_brand_kit,
+        "brandKitId": req.brandKitId if effective_use_brand_kit else None,
         "brandDirection": brand_direction or None,
 
         # Exact prompt sent to Runway.
@@ -1686,7 +1740,7 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 "Your video could not be completed. Review the request and try again."
             ),
             notification_type="generation_failed",
-            link="/videoads",
+            link="/video-ads",
             metadata={
                 "jobId": job_id,
                 "error": str(exc)[:300],
@@ -1764,7 +1818,7 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                 "Review the creative direction and try again."
             ),
             notification_type="generation_failed",
-            link="/videoads",
+            link="/video-ads",
             metadata={
                 "jobId": job_id,
                 "error": error_message[:300],
@@ -1827,7 +1881,7 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
                 "Review the creative direction and try again."
             ),
             notification_type="generation_failed",
-            link="/videoads",
+            link="/video-ads",
             metadata={
                 "jobId": job_id,
                 "error": str(err)[:300],

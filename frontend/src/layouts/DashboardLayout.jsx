@@ -148,6 +148,11 @@ export default function DashboardLayout({ children }) {
           label: "Image Generator",
           icon: Wand2,
         },
+        {
+          to: "/video-ads",
+          label: "Video Generator",
+          icon: Clapperboard,
+        },
       ]
     : [
         {
