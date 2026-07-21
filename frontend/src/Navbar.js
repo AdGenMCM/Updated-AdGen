@@ -212,13 +212,13 @@ export default function Navbar() {
         </div>
 
         <div className="marketing-nav-actions">
-          {user && verified ? (
+          {user && verified && canAccessWorkspace ? (
             <>
               <Link
-                to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
+                to="/dashboard"
                 className="marketing-nav-workspace"
               >
-                {canAccessWorkspace ? "Open workspace" : "Choose a plan"}
+                Open workspace
               </Link>
 
               <div className="marketing-nav-account" ref={accountRef}>
@@ -280,6 +280,26 @@ export default function Navbar() {
                 )}
               </div>
             </>
+          ) : user && verified ? (
+            <>
+              <Link
+                to="/subscribe"
+                className="marketing-nav-workspace"
+              >
+                Choose a plan
+              </Link>
+
+              <button
+                type="button"
+                className="marketing-nav-login"
+                onClick={() => {
+                  closeAll();
+                  signOut(auth);
+                }}
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <>
               <Link to="/login" className="marketing-nav-login">
@@ -331,18 +351,38 @@ export default function Navbar() {
           </div>
 
           <div className="marketing-nav-mobile-actions">
-            {user && verified ? (
+            {user && verified && canAccessWorkspace ? (
               <>
                 <Link
-                  to={canAccessWorkspace ? "/dashboard" : "/subscribe"}
+                  to="/dashboard"
                   onClick={closeAll}
                   className="is-primary"
                 >
-                  {canAccessWorkspace ? "Open workspace" : "Choose a plan"}
+                  Open workspace
                 </Link>
 
                 <Link to="/account" onClick={closeAll}>
                   My Account
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeAll();
+                    signOut(auth);
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            ) : user && verified ? (
+              <>
+                <Link
+                  to="/subscribe"
+                  onClick={closeAll}
+                  className="is-primary"
+                >
+                  Choose a plan
                 </Link>
 
                 <button
@@ -365,7 +405,7 @@ export default function Navbar() {
                   className="marketing-nav-primary"
                   onClick={() =>
                     trackEvent("start_free_click", {
-                      location: "navbar_desktop",
+                      location: "navbar_mobile",
                     })
                   }
                 >

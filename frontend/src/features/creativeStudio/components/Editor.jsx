@@ -126,10 +126,6 @@ export default function Editor({
   return (
     <main className="csv4">
       <header className="csv4__header">
-        <div>
-          <span className="csv4__eyebrow">Creative Studio</span>
-          <h1>Creative Studio V4</h1>
-        </div>
 
         <div className="csv4__header-actions">
           <input
