@@ -94,3 +94,4 @@ def delete_firebase_storage_object(storage_path: str) -> bool:
         if "404" in str(exc) or "NotFound" in exc.__class__.__name__:
             return False
         raise
+

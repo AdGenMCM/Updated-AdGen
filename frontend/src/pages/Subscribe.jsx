@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import "./Subscribe.css";
 
+import { trackEvent } from "../analytics/tracking";
+
 const db = getFirestore();
 
 const PLAN_OPTIONS = [
@@ -244,16 +246,7 @@ export default function Subscribe() {
           nextStatus === "trialing" ||
           nextStatus === "past_due";
 
-        if (hasWorkspaceAccess && !upgradeMode) {
-          if (!purchaseFiredRef.current && window.fbq) {
-            purchaseFiredRef.current = true;
-
-            window.fbq("track", "Purchase", {
-              currency: "USD",
-              value: selectedPlan.price,
-            });
-          }
-
+        if (hasWorkspaceAccess) {
           const storedTarget = localStorage.getItem(
             "adgen_post_checkout_redirect"
           );
@@ -262,13 +255,43 @@ export default function Subscribe() {
             Boolean(success && sessionId) ||
             Boolean(storedTarget);
 
-          const destination = completedCheckout
-            ? storedTarget || "/brand-kit"
-            : from || "/dashboard";
+          const confirmedTier =
+            data?.stripe?.tier ||
+            data?.tier ||
+            null;
 
-          localStorage.removeItem("adgen_post_checkout_redirect");
+          const confirmedPlan = confirmedTier
+            ? PLAN_OPTIONS.find((plan) => plan.id === confirmedTier)
+            : null;
 
-          navigate(destination, { replace: true });
+          const paidCheckoutConfirmed =
+            completedCheckout &&
+            confirmedPlan &&
+            confirmedPlan.id !== "free";
+
+          if (!purchaseFiredRef.current && paidCheckoutConfirmed) {
+            purchaseFiredRef.current = true;
+
+            trackEvent("subscription_started", {
+              plan: confirmedPlan.id,
+              plan_name: confirmedPlan.label,
+              value: confirmedPlan.price,
+              currency: "USD",
+            });
+          }
+
+          if (paidCheckoutConfirmed) {
+            const destination = storedTarget || "/brand-kit";
+
+            localStorage.removeItem("adgen_post_checkout_redirect");
+
+            navigate(destination, { replace: true });
+            return;
+          }
+
+          if (!upgradeMode && !completedCheckout) {
+            navigate(from || "/dashboard", { replace: true });
+          }
         }
       },
       (snapshotError) => {
@@ -280,14 +303,13 @@ export default function Subscribe() {
 
     return () => unsubscribe && unsubscribe();
   }, [
-        currentUser,
-        navigate,
-        from,
-        selectedPlan.price,
-        success,
-        sessionId,
-        upgradeMode,
-      ]);
+    currentUser,
+    navigate,
+    from,
+    success,
+    sessionId,
+    upgradeMode,
+  ]);
 
   useEffect(() => {
     if (!currentUser || !sessionId || status !== "pending") {
@@ -400,6 +422,10 @@ export default function Subscribe() {
           subscriptionStatus: "active",
         }
       );
+
+      trackEvent("free_plan_activated", {
+        plan: "free",
+      });
 
       navigate("/dashboard", {
         replace: true,
@@ -746,6 +772,7 @@ export default function Subscribe() {
     </main>
   );
 }
+
 
 
 

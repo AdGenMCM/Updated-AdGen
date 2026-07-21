@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./Pricing.css";
 
 import Reveal from "../components/motion/Reveal";
 import MarketingButton from "../components/marketing/actions/MarketingButton";
+
+import { trackEvent } from "../analytics/tracking";
 
 const TIERS = [
   {
@@ -187,6 +189,10 @@ function CheckCell({ value }) {
 }
 
 export default function Pricing() {
+  useEffect(() => {
+    trackEvent("view_pricing");
+  }, []);
+
   return (
     <main className="pricing-page pricing-v2">
       <section className="pricing-v2-hero">

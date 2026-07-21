@@ -24,6 +24,8 @@ import { auth } from "./firebaseConfig";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import "./Navbar.css";
 
+import { trackEvent } from "./analytics/tracking";
+
 const db = getFirestore();
 
 export default function Navbar() {
@@ -283,7 +285,15 @@ export default function Navbar() {
               <Link to="/login" className="marketing-nav-login">
                 Sign in
               </Link>
-              <Link to="/login" className="marketing-nav-primary">
+              <Link
+                to="/login"
+                className="marketing-nav-primary"
+                onClick={() =>
+                  trackEvent("start_free_click", {
+                    location: "navbar_desktop",
+                  })
+                }
+              >
                 Start creating
               </Link>
             </>
@@ -352,8 +362,12 @@ export default function Navbar() {
                 </Link>
                 <Link
                   to="/login"
-                  onClick={closeAll}
-                  className="is-primary"
+                  className="marketing-nav-primary"
+                  onClick={() =>
+                    trackEvent("start_free_click", {
+                      location: "navbar_desktop",
+                    })
+                  }
                 >
                   Start creating
                 </Link>

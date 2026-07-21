@@ -4,6 +4,8 @@ import "./FinalCTA.css";
 import Section from "../layout/Section";
 import MarketingButton from "../actions/MarketingButton";
 
+import { trackEvent } from "../../../analytics/tracking";
+
 export default function FinalCTA() {
   return (
     <Section
@@ -41,7 +43,15 @@ export default function FinalCTA() {
       </div>
 
       <div className="adgen-final-actions">
-        <MarketingButton href="/subscribe" size="lg">
+        <MarketingButton
+          href="/subscribe"
+          size="lg"
+          onClick={() =>
+            trackEvent("start_free_click", {
+              location: "home_final_cta",
+            })
+          }
+        >
           Start creating
         </MarketingButton>
 

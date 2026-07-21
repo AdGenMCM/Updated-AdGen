@@ -514,6 +514,22 @@ function AdGenerator() {
     }
   };
 
+  const editInCreativeStudio = () => {
+    if (!result?.imageUrl) return;
+
+    navigate("/texteditor", {
+      state: {
+        creativeStudio: {
+          sourceType: "ad_generator",
+          sourceImageJobId: result.imageJobId || null,
+          imageUrl: result.imageUrl,
+          title: form.product_name || "Generated creative",
+          copy: result.copy || {},
+        },
+      },
+    });
+  };
+
   const downloadImage = async () => {
     try {
       const user = auth.currentUser;
@@ -923,6 +939,13 @@ function AdGenerator() {
 
                 <button
                   className="download-button"
+                  onClick={editInCreativeStudio}
+                >
+                  Edit in Creative Studio
+                </button>
+
+                <button
+                  className="download-button"
                   onClick={downloadImage}
                 >
                   Download Image
@@ -946,6 +969,7 @@ function AdGenerator() {
 }
 
 export default AdGenerator;
+
 
 
 

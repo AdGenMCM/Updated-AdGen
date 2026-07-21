@@ -1,5 +1,5 @@
 # main.py
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import os
 import re
 import json
@@ -10,7 +10,16 @@ import time
 from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Header,
+    Depends,
+    UploadFile,
+    File,
+    Form,
+    BackgroundTasks,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -35,7 +44,7 @@ from usage_caps import (
 # admin dependency
 from admin_guard import admin_required
 
-#Amdin Page Imports
+# Amdin Page Imports
 from fastapi import Header, HTTPException, Query
 from typing import Any, Optional
 from datetime import datetime, timezone
@@ -52,14 +61,12 @@ from pydantic import BaseModel
 from google.cloud import firestore as gc_firestore
 from usage_caps import peek_usage, get_tier_and_status
 
-
-
 # feature gating + optimizer schemas
 from entitlements import require_pro_or_business, build_entitlements_payload
 from plan_config import get_plan_config
 from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 
-#Runway
+# Runway
 from video_jobs import router as video_router
 from storage_utils import (
     upload_bytes_to_firebase_storage,
@@ -79,22 +86,21 @@ from notification_utils import (
     create_usage_notifications,
 )
 
-#Library Performace Schemas
+# Library Performace Schemas
 from typing import Optional
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Query
 from collections import Counter
 
-#Google SMTP 
+# Google SMTP
 import smtplib
 from email.message import EmailMessage
 
-#Campaign Manager
+# Campaign Manager
 from campaign_backend.routes import router as campaign_router
 from line_items.routes import router as line_items_router
 from campaign_assets.routes import router as campaign_assets_router
-
 
 load_dotenv(override=True)
 
@@ -106,8 +112,10 @@ app.include_router(campaign_assets_router)
 app.include_router(video_router)
 app.include_router(brand_kits_router)
 
+
 class AdminRequestTierBody(BaseModel):
     requestedTier: str  # e.g. "starter_monthly", "pro_monthly", etc.
+
 
 class AdminGrantCreditsBody(BaseModel):
     credits: int
@@ -115,6 +123,14 @@ class AdminGrantCreditsBody(BaseModel):
 
 class AdminClearTierRequestBody(BaseModel):
     confirm: bool = True
+
+
+class CreativeStudioRewriteBody(BaseModel):
+    text: str
+    tone: str = "shorter"
+    role: str = "text"
+    brandKitId: Optional[str] = None
+
 
 # -------------- visual prompt for image generation -----------------
 def build_visual_prompt(
@@ -140,7 +156,6 @@ def build_visual_prompt(
     subject = (subject or "").strip()
     extra = (extra_instructions or "").strip()
 
-
     base = (
         f"{style_hint}. "
         f"Ultra-realistic commercial product photography. "
@@ -153,7 +168,6 @@ def build_visual_prompt(
         f"If multiple items are shown, they must be identical variations of the same product model only. "
         f"Do NOT substitute with other product categories. "
         f"{(extra + ' ') if extra else ''}"
-
         # ✅ Composition that does NOT invite text
         f"Plain seamless studio backdrop, clean and minimal. "
         f"Single hero product shot, centered, with empty BLANK background space. "
@@ -161,7 +175,6 @@ def build_visual_prompt(
         f"Professional commercial lighting, realistic proportions, natural shadows. "
         f"Create an ad-ready social media image in a {tone.lower()} tone. "
         f"Goal: {goal}. "
-
         # Background variety
         f"Background must be a solid seamless backdrop with a SINGLE smooth color (no gradients, no textures). "
         f"Vary the backdrop color across generations and choose a color that complements the product. "
@@ -169,7 +182,6 @@ def build_visual_prompt(
         f"cool white, soft light gray, slate gray, charcoal, pale blue, muted navy, sage green, "
         f"forest green, blush pink, muted terracotta, lavender, sand-white."
         f"AVOID beige/tan unless explicitly requested. "
-
         # ✅ Hard “no text” + hard ban on props that usually contain text
         f"Brand-neutral and unbranded. "
         f"ABSOLUTELY NO TEXT OR WRITING ANYWHERE: "
@@ -182,14 +194,12 @@ def build_visual_prompt(
         f"Background must be smooth and blank: no embossing, no engraving, no debossing, "
         f"no letter-shaped or symbol-shaped geometry, no patterns that resemble writing. "
         f"NO textures or materials that resemble writing surfaces (e.g. paper, cardboard). "
-
         # ✅ General avoid list (keep shorter + focused)
         f"AVOID: distorted products, warped shapes, melted surfaces, extra random objects, "
         f"surreal elements, cartoon/illustration style, heavy CGI look, faces, hands, fingers."
     )
 
     return " ".join(base.split())
-
 
 
 # ---------------- CORS ----------------
@@ -213,30 +223,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ---------------- Basic health ----------------
 @app.get("/")
 def root():
     return {"status": "ok", "service": "AdGen backend"}
 
+
 @app.get("/admin/health", dependencies=[Depends(admin_required)])
 def admin_health():
     return {"ok": True, "admin": True}
 
+
 # ---------------- OpenAI ----------------
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
-OPENAI_TEXT_MODEL = (
-    os.getenv("OPENAI_TEXT_MODEL")
-    or "gpt-5.5"
-).strip()
-OPENAI_IMAGE_MODEL = (
-    os.getenv("OPENAI_IMAGE_MODEL")
-    or "gpt-image-2"
-).strip()
+OPENAI_TEXT_MODEL = (os.getenv("OPENAI_TEXT_MODEL") or "gpt-5.5").strip()
+OPENAI_IMAGE_MODEL = (os.getenv("OPENAI_IMAGE_MODEL") or "gpt-image-2").strip()
 
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing.")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
+
 
 def generate_gpt_image_bytes(
     prompt: str,
@@ -254,10 +262,9 @@ def generate_gpt_image_bytes(
         image_urls.append(input_image_url)
 
     if input_image_urls:
-        image_urls.extend([
-            u for u in input_image_urls
-            if isinstance(u, str) and u.startswith("http")
-        ])
+        image_urls.extend(
+            [u for u in input_image_urls if isinstance(u, str) and u.startswith("http")]
+        )
 
     image_urls = image_urls[:4]  # logo + max 3 references
 
@@ -265,7 +272,9 @@ def generate_gpt_image_bytes(
         r = requests.get(url, timeout=30)
         r.raise_for_status()
 
-        content_type = (r.headers.get("content-type") or "image/png").split(";")[0].lower()
+        content_type = (
+            (r.headers.get("content-type") or "image/png").split(";")[0].lower()
+        )
 
         if content_type == "image/jpg":
             content_type = "image/jpeg"
@@ -283,8 +292,7 @@ def generate_gpt_image_bytes(
 
     if image_urls:
         image_files = [
-            download_image_tuple(url, idx)
-            for idx, url in enumerate(image_urls)
+            download_image_tuple(url, idx) for idx, url in enumerate(image_urls)
         ]
 
         result = client.images.edit(
@@ -307,6 +315,7 @@ def generate_gpt_image_bytes(
         raise RuntimeError("GPT Image returned no image data.")
 
     return base64.b64decode(image_b64)
+
 
 # ---------------- Models ----------------
 class AdRequest(BaseModel):
@@ -343,13 +352,16 @@ class AdRequest(BaseModel):
     winnersApply: Optional[List[str]] = None
     winnersInfluence: Optional[float] = 0.5
 
+
 class ContactForm(BaseModel):
     name: str
     email: str
     message: str
 
+
 class UploadCreativesResponse(BaseModel):
     urls: List[str]
+
 
 class GenerateFromOptimizerRequest(BaseModel):
     improved_headline: str
@@ -370,14 +382,15 @@ class GenerateFromOptimizerRequest(BaseModel):
     goal: Optional[str] = None
     platform: Optional[str] = None
 
+
 class PerformanceUpdate(BaseModel):
     ctr: Optional[float] = None
     cpc: Optional[float] = None
     cpa: Optional[float] = None
     cpm: Optional[float] = None
 
-    spend: Optional[float] = None      # $
-    revenue: Optional[float] = None    # $  (used to compute ROAS)
+    spend: Optional[float] = None  # $
+    revenue: Optional[float] = None  # $  (used to compute ROAS)
 
     thumb_stop_rate: Optional[float] = None
     view_3s: Optional[float] = None
@@ -389,11 +402,11 @@ class PerformanceUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-
 # ---------------- Generation progress jobs ----------------
 class ProgressStartResponse(BaseModel):
     jobId: str
     status: str = "queued"
+
 
 IMAGE_PROGRESS = {
     "queued": (5, "Preparing your creative request."),
@@ -431,8 +444,10 @@ OPTIMIZER_GENERATION_PROGRESS = {
     "failed": (100, "Creative generation stopped."),
 }
 
+
 def _progress_collection(kind: str) -> str:
     return "image_generation_jobs" if kind == "image" else "optimizer_jobs"
+
 
 def set_generation_progress(
     db,
@@ -449,11 +464,15 @@ def set_generation_progress(
     table = (
         IMAGE_PROGRESS
         if kind == "image"
-        else OPTIMIZER_GENERATION_PROGRESS
-        if kind == "optimizer_generation"
-        else OPTIMIZER_PROGRESS
+        else (
+            OPTIMIZER_GENERATION_PROGRESS
+            if kind == "optimizer_generation"
+            else OPTIMIZER_PROGRESS
+        )
     )
-    default_percent, default_message = table.get(stage, (0, stage.replace("_", " ").title()))
+    default_percent, default_message = table.get(
+        stage, (0, stage.replace("_", " ").title())
+    )
     payload = {
         "progressStage": stage,
         "progressMessage": message or default_message,
@@ -464,12 +483,18 @@ def set_generation_progress(
         payload.update(extra)
     db.collection(_progress_collection(kind)).document(job_id).set(payload, merge=True)
 
-async def _run_image_generation_job(job_id: str, payload: AdRequest, authorization: str):
+
+async def _run_image_generation_job(
+    job_id: str, payload: AdRequest, authorization: str
+):
     db = get_db()
     try:
         result = await generate_ad(payload, authorization, progress_job_id=job_id)
         set_generation_progress(
-            db, "image", job_id, "succeeded",
+            db,
+            "image",
+            job_id,
+            "succeeded",
             extra={"status": "succeeded", "result": result, "error": None},
         )
     except HTTPException as exc:
@@ -491,10 +516,7 @@ async def _run_image_generation_job(job_id: str, payload: AdRequest, authorizati
         create_notification(
             db,
             uid=(
-                db.collection("image_generation_jobs")
-                .document(job_id)
-                .get()
-                .to_dict()
+                db.collection("image_generation_jobs").document(job_id).get().to_dict()
                 or {}
             ).get("uid"),
             event_key=f"image_failed_{job_id}",
@@ -515,10 +537,7 @@ async def _run_image_generation_job(job_id: str, payload: AdRequest, authorizati
         )
 
         job_data = (
-            db.collection("image_generation_jobs")
-            .document(job_id)
-            .get()
-            .to_dict()
+            db.collection("image_generation_jobs").document(job_id).get().to_dict()
             or {}
         )
 
@@ -533,217 +552,202 @@ async def _run_image_generation_job(job_id: str, payload: AdRequest, authorizati
             metadata={"jobId": job_id},
         )
 
+
 async def _run_optimizer_job(
-        job_id: str,
-        payload: OptimizeAdRequest,
-        authorization: str,
-    ):
-        db = get_db()
+    job_id: str,
+    payload: OptimizeAdRequest,
+    authorization: str,
+):
+    db = get_db()
 
-        try:
-            result = await optimize_ad(
-                payload,
-                authorization,
-                progress_job_id=job_id,
-            )
+    try:
+        result = await optimize_ad(
+            payload,
+            authorization,
+            progress_job_id=job_id,
+        )
 
-            result_data = (
-                result.model_dump()
-                if hasattr(result, "model_dump")
-                else dict(result)
-            )
+        result_data = (
+            result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        )
 
-            set_generation_progress(
-                db,
-                "optimizer",
-                job_id,
-                "succeeded",
-                extra={
-                    "status": "succeeded",
-                    "result": result_data,
-                    "error": None,
-                },
-            )
+        set_generation_progress(
+            db,
+            "optimizer",
+            job_id,
+            "succeeded",
+            extra={
+                "status": "succeeded",
+                "result": result_data,
+                "error": None,
+            },
+        )
 
-        except HTTPException as exc:
-            set_generation_progress(
-                db,
-                "optimizer",
-                job_id,
-                "failed",
-                message=(
-                    str(exc.detail)
-                    if isinstance(exc.detail, str)
-                    else "Optimization failed."
-                ),
-                extra={
-                    "status": "failed",
-                    "error": exc.detail,
-                },
-            )
+    except HTTPException as exc:
+        set_generation_progress(
+            db,
+            "optimizer",
+            job_id,
+            "failed",
+            message=(
+                str(exc.detail)
+                if isinstance(exc.detail, str)
+                else "Optimization failed."
+            ),
+            extra={
+                "status": "failed",
+                "error": exc.detail,
+            },
+        )
 
-            job_data = (
-                db.collection("optimizer_jobs")
-                .document(job_id)
-                .get()
-                .to_dict()
-                or {}
-            )
+        job_data = (
+            db.collection("optimizer_jobs").document(job_id).get().to_dict() or {}
+        )
 
-            create_notification(
-                db,
-                uid=job_data.get("uid"),
-                event_key=f"optimizer_failed_{job_id}",
-                title="Optimization could not be completed",
-                body=(
-                    "Your campaign analysis stopped before completion. "
-                    "Review the inputs and try again."
-                ),
-                notification_type="generation_failed",
-                link="/optimizer",
-                metadata={"jobId": job_id},
-            )
+        create_notification(
+            db,
+            uid=job_data.get("uid"),
+            event_key=f"optimizer_failed_{job_id}",
+            title="Optimization could not be completed",
+            body=(
+                "Your campaign analysis stopped before completion. "
+                "Review the inputs and try again."
+            ),
+            notification_type="generation_failed",
+            link="/optimizer",
+            metadata={"jobId": job_id},
+        )
 
-        except Exception as exc:
-            set_generation_progress(
-                db,
-                "optimizer",
-                job_id,
-                "failed",
-                message="Optimization failed.",
-                extra={
-                    "status": "failed",
-                    "error": str(exc),
-                },
-            )
+    except Exception as exc:
+        set_generation_progress(
+            db,
+            "optimizer",
+            job_id,
+            "failed",
+            message="Optimization failed.",
+            extra={
+                "status": "failed",
+                "error": str(exc),
+            },
+        )
 
-            job_data = (
-                db.collection("optimizer_jobs")
-                .document(job_id)
-                .get()
-                .to_dict()
-                or {}
-            )
+        job_data = (
+            db.collection("optimizer_jobs").document(job_id).get().to_dict() or {}
+        )
 
-            create_notification(
-                db,
-                uid=job_data.get("uid"),
-                event_key=f"optimizer_failed_{job_id}",
-                title="Optimization could not be completed",
-                body=(
-                    "Your campaign analysis stopped before completion. "
-                    "Review the inputs and try again."
-                ),
-                notification_type="generation_failed",
-                link="/optimizer",
-                metadata={
-                    "jobId": job_id,
-                    "error": str(exc)[:300],
-                },
-            )
+        create_notification(
+            db,
+            uid=job_data.get("uid"),
+            event_key=f"optimizer_failed_{job_id}",
+            title="Optimization could not be completed",
+            body=(
+                "Your campaign analysis stopped before completion. "
+                "Review the inputs and try again."
+            ),
+            notification_type="generation_failed",
+            link="/optimizer",
+            metadata={
+                "jobId": job_id,
+                "error": str(exc)[:300],
+            },
+        )
+
 
 async def _run_optimizer_generation_job(
-        job_id: str,
-        payload: GenerateFromOptimizerRequest,
-        authorization: str,
-    ):
-        db = get_db()
+    job_id: str,
+    payload: GenerateFromOptimizerRequest,
+    authorization: str,
+):
+    db = get_db()
 
-        try:
-            result = await generate_from_optimizer(
-                payload,
-                authorization,
-                progress_job_id=job_id,
-            )
+    try:
+        result = await generate_from_optimizer(
+            payload,
+            authorization,
+            progress_job_id=job_id,
+        )
 
-            set_generation_progress(
-                db,
-                "optimizer_generation",
-                job_id,
-                "succeeded",
-                extra={
-                    "status": "succeeded",
-                    "result": result,
-                    "error": None,
-                },
-            )
+        set_generation_progress(
+            db,
+            "optimizer_generation",
+            job_id,
+            "succeeded",
+            extra={
+                "status": "succeeded",
+                "result": result,
+                "error": None,
+            },
+        )
 
-        except HTTPException as exc:
-            set_generation_progress(
-                db,
-                "optimizer_generation",
-                job_id,
-                "failed",
-                message=(
-                    str(exc.detail)
-                    if isinstance(exc.detail, str)
-                    else "Creative generation failed."
-                ),
-                extra={
-                    "status": "failed",
-                    "error": exc.detail,
-                },
-            )
+    except HTTPException as exc:
+        set_generation_progress(
+            db,
+            "optimizer_generation",
+            job_id,
+            "failed",
+            message=(
+                str(exc.detail)
+                if isinstance(exc.detail, str)
+                else "Creative generation failed."
+            ),
+            extra={
+                "status": "failed",
+                "error": exc.detail,
+            },
+        )
 
-            job_data = (
-                db.collection("optimizer_jobs")
-                .document(job_id)
-                .get()
-                .to_dict()
-                or {}
-            )
+        job_data = (
+            db.collection("optimizer_jobs").document(job_id).get().to_dict() or {}
+        )
 
-            create_notification(
-                db,
-                uid=job_data.get("uid"),
-                event_key=f"optimizer_creative_failed_{job_id}",
-                title="Optimized creative failed",
-                body=(
-                    "The optimized image could not be completed. "
-                    "Your analysis results are still available."
-                ),
-                notification_type="generation_failed",
-                link="/optimizer",
-                metadata={"jobId": job_id},
-            )
+        create_notification(
+            db,
+            uid=job_data.get("uid"),
+            event_key=f"optimizer_creative_failed_{job_id}",
+            title="Optimized creative failed",
+            body=(
+                "The optimized image could not be completed. "
+                "Your analysis results are still available."
+            ),
+            notification_type="generation_failed",
+            link="/optimizer",
+            metadata={"jobId": job_id},
+        )
 
-        except Exception as exc:
-            set_generation_progress(
-                db,
-                "optimizer_generation",
-                job_id,
-                "failed",
-                message="Creative generation failed.",
-                extra={
-                    "status": "failed",
-                    "error": str(exc),
-                },
-            )
+    except Exception as exc:
+        set_generation_progress(
+            db,
+            "optimizer_generation",
+            job_id,
+            "failed",
+            message="Creative generation failed.",
+            extra={
+                "status": "failed",
+                "error": str(exc),
+            },
+        )
 
-            job_data = (
-                db.collection("optimizer_jobs")
-                .document(job_id)
-                .get()
-                .to_dict()
-                or {}
-            )
+        job_data = (
+            db.collection("optimizer_jobs").document(job_id).get().to_dict() or {}
+        )
 
-            create_notification(
-                db,
-                uid=job_data.get("uid"),
-                event_key=f"optimizer_creative_failed_{job_id}",
-                title="Optimized creative failed",
-                body=(
-                    "The optimized image could not be completed. "
-                    "Your analysis results are still available."
-                ),
-                notification_type="generation_failed",
-                link="/optimizer",
-                metadata={
-                    "jobId": job_id,
-                    "error": str(exc)[:300],
-                },
-            )
+        create_notification(
+            db,
+            uid=job_data.get("uid"),
+            event_key=f"optimizer_creative_failed_{job_id}",
+            title="Optimized creative failed",
+            body=(
+                "The optimized image could not be completed. "
+                "Your analysis results are still available."
+            ),
+            notification_type="generation_failed",
+            link="/optimizer",
+            metadata={
+                "jobId": job_id,
+                "error": str(exc)[:300],
+            },
+        )
+
 
 def _read_progress_job(db, collection: str, job_id: str, uid: str, admin: bool):
     snap = db.collection(collection).document(job_id).get()
@@ -753,6 +757,7 @@ def _read_progress_job(db, collection: str, job_id: str, uid: str, admin: bool):
     if not admin and data.get("uid") != uid:
         raise HTTPException(status_code=403, detail="Forbidden.")
     return {"jobId": job_id, **data}
+
 
 # ---------------- Helpers ----------------
 def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> dict:
@@ -764,6 +769,7 @@ def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> dict:
         folder="generated_ads",
         filename_hint="creative.png",
     )
+
 
 async def analyze_uploaded_creatives(urls: List[str]) -> str:
     """
@@ -792,7 +798,10 @@ async def analyze_uploaded_creatives(urls: List[str]) -> str:
         vision_model = (os.getenv("OPENAI_VISION_MODEL") or "gpt-4o-mini").strip()
 
         messages = [
-            {"role": "system", "content": "You are a direct-response creative strategist."},
+            {
+                "role": "system",
+                "content": "You are a direct-response creative strategist.",
+            },
             {
                 "role": "user",
                 "content": (
@@ -818,6 +827,7 @@ async def analyze_uploaded_creatives(urls: List[str]) -> str:
             "to the offer/goal, keep clean hierarchy, avoid text-heavy designs."
         )
 
+
 def _extract_json_object(text: str) -> dict:
     """Best-effort extraction of a JSON object from model output."""
     text = (text or "").strip()
@@ -837,6 +847,7 @@ def _extract_json_object(text: str) -> dict:
             pass
     return {}
 
+
 def size_to_aspect_ratio(size: str) -> str:
     s = (size or "").lower().replace(" ", "")
     if s in ("1024x1792", "720x1280", "1080x1920"):
@@ -845,13 +856,17 @@ def size_to_aspect_ratio(size: str) -> str:
         return "16x9"
     return "1x1"
 
+
 def is_admin(claims: dict) -> bool:
     return claims.get("role") == "admin"
+
 
 def require_user(authorization: str | None):
     token = get_bearer_token(authorization)
     if not token:
-        raise HTTPException(status_code=401, detail="Missing Authorization Bearer token.")
+        raise HTTPException(
+            status_code=401, detail="Missing Authorization Bearer token."
+        )
     try:
         claims = verify_firebase_token(token)
         uid = claims.get("uid")
@@ -863,7 +878,8 @@ def require_user(authorization: str | None):
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired auth token.")
-    
+
+
 def require_pro_or_business_for_performance(db, uid: str, claims: dict):
     """
     Performance tracking is Pro & Business only.
@@ -878,12 +894,16 @@ def require_pro_or_business_for_performance(db, uid: str, claims: dict):
 
     allowed_statuses = {"active", "trialing"}
     if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-        raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+        raise HTTPException(
+            status_code=402,
+            detail="Subscription inactive. Please subscribe to continue.",
+        )
 
     # ✅ Pro & Business only
     require_pro_or_business(tier)
 
     return {"tier": tier, "status": status, "admin": False}
+
 
 STYLE_HINTS = {
     "Minimal": "studio product hero shot, clean background, minimal props, crisp soft lighting",
@@ -897,7 +917,10 @@ STYLE_HINTS = {
 # ✅ UPDATED: keyword-first + many more categories + productType normalized
 import re
 
-def infer_visual_subject(product_name: str, description: str, product_type: str | None = None) -> str:
+
+def infer_visual_subject(
+    product_name: str, description: str, product_type: str | None = None
+) -> str:
     """
     Generic subject builder:
     - NEVER swaps the user's product for something else
@@ -911,19 +934,53 @@ def infer_visual_subject(product_name: str, description: str, product_type: str 
 
     # common materials/colors/finishes to help the model stay on target
     materials = []
-    for m in ["leather", "faux leather", "mesh", "fabric", "wood", "metal", "plastic", "glass", "ceramic", "steel", "aluminum"]:
+    for m in [
+        "leather",
+        "faux leather",
+        "mesh",
+        "fabric",
+        "wood",
+        "metal",
+        "plastic",
+        "glass",
+        "ceramic",
+        "steel",
+        "aluminum",
+    ]:
         if m in text:
             materials.append(m)
 
     colors = []
-    for c in ["black", "white", "gray", "grey", "beige", "tan", "brown", "silver", "gold", "blue", "green", "red"]:
+    for c in [
+        "black",
+        "white",
+        "gray",
+        "grey",
+        "beige",
+        "tan",
+        "brown",
+        "silver",
+        "gold",
+        "blue",
+        "green",
+        "red",
+    ]:
         if re.search(rf"\b{c}\b", text):
             colors.append(c)
 
     features = []
     for f in [
-        "adjustable", "ergonomic", "wireless", "portable", "waterproof", "rechargeable",
-        "lightweight", "compact", "premium", "minimal", "modern"
+        "adjustable",
+        "ergonomic",
+        "wireless",
+        "portable",
+        "waterproof",
+        "rechargeable",
+        "lightweight",
+        "compact",
+        "premium",
+        "minimal",
+        "modern",
     ]:
         if f in text:
             features.append(f)
@@ -943,6 +1000,7 @@ def infer_visual_subject(product_name: str, description: str, product_type: str 
     if attrs:
         return f"{pn} ({attrs})"
     return pn
+
 
 def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     if not brand_kit:
@@ -1022,6 +1080,7 @@ Brand Kit Usage Rules:
 • Preserve brand voice, personality, audience, compliance rules, and creative restrictions when provided.
 """.strip()
 
+
 def ensure_stripe_period_for_user(db, uid: str, user_doc: dict) -> dict:
     stripe_obj = (user_doc or {}).get("stripe") or {}
 
@@ -1047,7 +1106,9 @@ def ensure_stripe_period_for_user(db, uid: str, user_doc: dict) -> dict:
 
         sub_id = latest.get("id")
         sub_status = latest.get("status")
-        status = "active" if sub_status in {"active", "trialing", "past_due"} else "pending"
+        status = (
+            "active" if sub_status in {"active", "trialing", "past_due"} else "pending"
+        )
 
         price_id = None
         tier = None
@@ -1088,6 +1149,7 @@ def ensure_stripe_period_for_user(db, uid: str, user_doc: dict) -> dict:
         print("STRIPE PERIOD SELF-HEAL ERROR:", repr(e))
         return user_doc
 
+
 # ---------------- Library Performance ----------------
 def _safe_num(x):
     try:
@@ -1100,6 +1162,7 @@ def _safe_num(x):
     except Exception:
         return None
 
+
 def _pick(doc: dict, keys: List[str], default=None):
     for k in keys:
         v = doc.get(k)
@@ -1107,9 +1170,11 @@ def _pick(doc: dict, keys: List[str], default=None):
             return v
     return default
 
+
 def _get_perf(doc: dict) -> dict:
     p = doc.get("performance") or {}
     return p if isinstance(p, dict) else {}
+
 
 def _has_perf(doc: dict) -> bool:
     p = _get_perf(doc)
@@ -1119,12 +1184,17 @@ def _has_perf(doc: dict) -> bool:
             return True
     return False
 
+
 def _creative_snapshot(kind: str, doc_id: str, doc: dict) -> dict:
     p = _get_perf(doc)
 
     # For display fields, try multiple likely locations safely
     product_name = _pick(doc, ["productName", "product_name"], default=None)
-    title = f"{kind.capitalize()} Ad" if not product_name else f"{kind.capitalize()}: {product_name}"
+    title = (
+        f"{kind.capitalize()} Ad"
+        if not product_name
+        else f"{kind.capitalize()}: {product_name}"
+    )
 
     # URLs
     if kind == "video":
@@ -1156,7 +1226,11 @@ def _creative_snapshot(kind: str, doc_id: str, doc: dict) -> dict:
             "spend": _safe_num(p.get("spend")),
             "revenue": _safe_num(p.get("revenue")),
             "roas": _safe_num(p.get("roas")),
-            "marked_successful": p.get("marked_successful") if isinstance(p.get("marked_successful"), bool) else None,
+            "marked_successful": (
+                p.get("marked_successful")
+                if isinstance(p.get("marked_successful"), bool)
+                else None
+            ),
         },
         # helpful context for “best averages”
         "meta": {
@@ -1167,9 +1241,11 @@ def _creative_snapshot(kind: str, doc_id: str, doc: dict) -> dict:
         },
     }
 
+
 def _avg(nums: List[float]) -> Optional[float]:
     vals = [x for x in nums if isinstance(x, (int, float))]
     return round(sum(vals) / len(vals), 4) if vals else None
+
 
 def _weighted_roas(items: List[dict]) -> Optional[float]:
     # weighted by spend when available: sum(revenue)/sum(spend)
@@ -1187,18 +1263,23 @@ def _weighted_roas(items: List[dict]) -> Optional[float]:
         return None
     return round(total_revenue / total_spend, 4)
 
+
 def _rank(items: List[dict], key: str, desc: bool = True) -> List[dict]:
     def k(it):
         v = _safe_num((it.get("performance") or {}).get(key))
         return v if v is not None else (-1e18 if desc else 1e18)
+
     return sorted(items, key=k, reverse=desc)
+
 
 def _rank_low(items: List[dict], key: str) -> List[dict]:
     # lowest first
     def k(it):
         v = _safe_num((it.get("performance") or {}).get(key))
         return v if v is not None else 1e18
+
     return sorted(items, key=k)
+
 
 def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str, Any]:
     groups = defaultdict(list)
@@ -1222,24 +1303,31 @@ def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str
         spends = [_safe_num((x.get("performance") or {}).get("spend")) for x in arr]
         cpms = [_safe_num((x.get("performance") or {}).get("cpm")) for x in arr]
 
-        out.append({
-            "value": g,
-            "count": len(arr),
-            "avg_ctr": _avg([x for x in ctrs if x is not None]),
-            "avg_cpa": _avg([x for x in cpas if x is not None]),
-            "avg_cpm": _avg([x for x in cpms if x is not None]),
-            "total_spend": round(sum([x for x in spends if x is not None]), 4),
-            "weighted_roas": roas,
-        })
+        out.append(
+            {
+                "value": g,
+                "count": len(arr),
+                "avg_ctr": _avg([x for x in ctrs if x is not None]),
+                "avg_cpa": _avg([x for x in cpas if x is not None]),
+                "avg_cpm": _avg([x for x in cpms if x is not None]),
+                "total_spend": round(sum([x for x in spends if x is not None]), 4),
+                "weighted_roas": roas,
+            }
+        )
 
     # sort by weighted_roas desc, fallback to avg_ctr
-    out.sort(key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18,
-                           r["avg_ctr"] if r["avg_ctr"] is not None else -1e18),
-             reverse=True)
+    out.sort(
+        key=lambda r: (
+            r["weighted_roas"] if r["weighted_roas"] is not None else -1e18,
+            r["avg_ctr"] if r["avg_ctr"] is not None else -1e18,
+        ),
+        reverse=True,
+    )
     return {
         "best": out[0] if out else None,
         "rows": out[:10],
     }
+
 
 def inject_winners_structured_image(
     base_text: str,
@@ -1255,7 +1343,7 @@ def inject_winners_structured_image(
         return base_text
 
     apply_set = set()
-    for x in (winners_apply or []):
+    for x in winners_apply or []:
         if isinstance(x, str) and x.strip():
             apply_set.add(x.strip().lower())
 
@@ -1298,7 +1386,10 @@ def inject_winners_structured_image(
     if not constraints:
         return base_text
 
-    return f"{base_text}\nWinners-based constraints (weight {w}): " + " ".join(constraints)
+    return f"{base_text}\nWinners-based constraints (weight {w}): " + " ".join(
+        constraints
+    )
+
 
 # ---------------- Usage ----------------
 @app.get("/usage")
@@ -1315,6 +1406,7 @@ def get_usage(authorization: str | None = Header(default=None)):
 
     return peek_usage(db, uid, tier, user_doc)
 
+
 @app.get("/sync-my-subscription")
 def sync_my_subscription(authorization: str | None = Header(default=None)):
     uid, _email, _claims = require_user(authorization)
@@ -1326,7 +1418,9 @@ def sync_my_subscription(authorization: str | None = Header(default=None)):
     customer_id = stripe_obj.get("customerId")
 
     if not customer_id:
-        raise HTTPException(status_code=400, detail="No Stripe customerId found for this user.")
+        raise HTTPException(
+            status_code=400, detail="No Stripe customerId found for this user."
+        )
 
     subs = stripe.Subscription.list(
         customer=customer_id,
@@ -1336,7 +1430,9 @@ def sync_my_subscription(authorization: str | None = Header(default=None)):
     )
 
     if not subs.data:
-        raise HTTPException(status_code=404, detail="No Stripe subscription found for this customer.")
+        raise HTTPException(
+            status_code=404, detail="No Stripe subscription found for this customer."
+        )
 
     latest = subs.data[0]
 
@@ -1390,6 +1486,7 @@ def sync_my_subscription(authorization: str | None = Header(default=None)):
         "saved_stripe": saved.get("stripe"),
     }
 
+
 @app.get("/me")
 def me(authorization: str | None = Header(default=None)):
     uid, email, claims = require_user(authorization)
@@ -1407,6 +1504,7 @@ def me(authorization: str | None = Header(default=None)):
         "isAdmin": is_admin(claims),
     }
 
+
 @app.get("/me/entitlements")
 def me_entitlements(authorization: str | None = Header(default=None)):
     uid, email, claims = require_user(authorization)
@@ -1418,20 +1516,25 @@ def me_entitlements(authorization: str | None = Header(default=None)):
     tier, status = get_tier_and_status(user_doc)
 
     payload = build_entitlements_payload(tier)
-    payload.update({
-        "uid": uid,
-        "email": email,
-        "status": status,
-        "isAdmin": is_admin(claims),
-        "usage": {
-            "images": peek_resource(db, uid, tier, "images", user_doc),
-            "videoCredits": peek_resource(db, uid, tier, "video_credits", user_doc),
-            "optimizerRuns": peek_resource(db, uid, tier, "optimizer_runs", user_doc),
-            "storage": get_storage_summary(db, uid, tier),
-        },
-        "period": get_usage_period(user_doc),
-    })
+    payload.update(
+        {
+            "uid": uid,
+            "email": email,
+            "status": status,
+            "isAdmin": is_admin(claims),
+            "usage": {
+                "images": peek_resource(db, uid, tier, "images", user_doc),
+                "videoCredits": peek_resource(db, uid, tier, "video_credits", user_doc),
+                "optimizerRuns": peek_resource(
+                    db, uid, tier, "optimizer_runs", user_doc
+                ),
+                "storage": get_storage_summary(db, uid, tier),
+            },
+            "period": get_usage_period(user_doc),
+        }
+    )
     return payload
+
 
 @app.get("/storage/usage")
 def storage_usage(authorization: str | None = Header(default=None)):
@@ -1440,6 +1543,7 @@ def storage_usage(authorization: str | None = Header(default=None)):
     user_doc = db.collection("users").document(uid).get().to_dict() or {}
     tier, _status = get_tier_and_status(user_doc)
     return get_storage_summary(db, uid, tier)
+
 
 # ---------------- Contact ----------------
 @app.post("/contact")
@@ -1453,10 +1557,7 @@ def send_contact_email(payload: ContactForm):
     to_email = os.getenv("SMTP_CONTACT_TO_EMAIL", from_email)
 
     if not all([smtp_host, smtp_user, smtp_password]):
-        raise HTTPException(
-            status_code=500,
-            detail="SMTP configuration is incomplete."
-        )
+        raise HTTPException(status_code=500, detail="SMTP configuration is incomplete.")
 
     subject = f"New Contact Form Message from {payload.name}"
 
@@ -1497,10 +1598,8 @@ Message:
 
     except Exception as e:
         print("SMTP CONTACT ERROR:", repr(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send email: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
 
 # ---------------- Upload creatives ----------------
 @app.post("/upload-creatives", response_model=UploadCreativesResponse)
@@ -1520,7 +1619,10 @@ async def upload_creatives(
 
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
         require_pro_or_business(tier)
 
     if not files:
@@ -1534,13 +1636,17 @@ async def upload_creatives(
     for f in files[:6]:
         ct = (f.content_type or "").lower().strip()
         if ct not in allowed_types:
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}")
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}"
+            )
 
         data = await f.read()
         if not data:
             continue
         if len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="File too large. Max 8MB per image.")
+            raise HTTPException(
+                status_code=413, detail="File too large. Max 8MB per image."
+            )
 
         db = get_db()
         user_doc = db.collection("users").document(uid).get().to_dict() or {}
@@ -1548,15 +1654,384 @@ async def upload_creatives(
         if not admin:
             ensure_storage_available(db, uid, tier, len(data))
         stored = upload_bytes_to_firebase_storage_with_metadata(
-            data, uid, content_type=ct, folder="uploaded_creatives", filename_hint=f.filename or None
+            data,
+            uid,
+            content_type=ct,
+            folder="uploaded_creatives",
+            filename_hint=f.filename or None,
         )
-        register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+        register_storage_asset(
+            db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
+        )
         urls.append(stored["url"])
 
     if not urls:
         raise HTTPException(status_code=400, detail="No valid files uploaded.")
 
     return {"urls": urls}
+
+
+@app.post("/creative-studio/upload-image")
+async def upload_creative_studio_image(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+):
+    """Persist a user-supplied Creative Studio source image as a Library asset."""
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+
+    # Creative Studio access is controlled by the app's existing feature gating.
+    # This endpoint only requires authentication and enforces the user's storage limit.
+
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    content_type = (file.content_type or "").lower().strip()
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Use PNG, JPG, JPEG, or WEBP.",
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail="Image too large. Maximum file size is 8MB."
+        )
+
+    if not admin:
+        ensure_storage_available(db, uid, tier, len(data))
+
+    stored = None
+    registered = False
+    try:
+        stored = upload_bytes_to_firebase_storage_with_metadata(
+            data,
+            uid,
+            content_type=content_type,
+            folder="creative_studio_uploads",
+            filename_hint=file.filename or "creative-studio-upload",
+        )
+
+        register_storage_asset(
+            db,
+            uid,
+            size_bytes=stored["fileSizeBytes"],
+            asset_type="image",
+        )
+        registered = True
+
+        job_id = uuid.uuid4().hex
+        filename = (file.filename or "Uploaded creative").strip()
+        product_name = re.sub(r"\.[^.]+$", "", filename).strip() or "Uploaded creative"
+
+        item = {
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "status": "succeeded",
+            "source": "creative_studio_upload",
+            "sourceType": "user_upload",
+            "productName": product_name[:120],
+            "originalFilename": filename[:255],
+            "imageUrl": stored["url"],
+            "storagePath": stored.get("storagePath"),
+            "fileSizeBytes": stored.get("fileSizeBytes"),
+            "contentType": stored.get("contentType"),
+            "storageState": "active",
+            "copy": {"headline": "", "primary_text": "", "cta": ""},
+            "error": None,
+        }
+        db.collection("image_jobs").document(job_id).set(item)
+
+        return {
+            "ok": True,
+            "item": {"id": job_id, **item},
+            "storage": get_storage_summary(db, uid, tier),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        if stored and stored.get("storagePath"):
+            try:
+                delete_firebase_storage_object(stored["storagePath"])
+            except Exception:
+                pass
+        if registered and stored:
+            try:
+                release_storage_asset(
+                    db,
+                    uid,
+                    size_bytes=int(stored.get("fileSizeBytes") or 0),
+                    asset_type="image",
+                )
+            except Exception:
+                pass
+        print("CREATIVE STUDIO UPLOAD ERROR:", repr(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="The image could not be added to Creative Studio. Please try again.",
+        )
+
+
+@app.get("/creative-studio/image/{job_id}")
+async def get_creative_studio_image(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    """Stream a user's Library image through the API so canvas rendering is not blocked by CORS."""
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+
+    snap = db.collection("image_jobs").document(job_id).get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Image not found.")
+
+    item = snap.to_dict() or {}
+    if not admin and item.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    image_url = item.get("imageUrl")
+    if not image_url:
+        raise HTTPException(
+            status_code=404, detail="This Library item has no image URL."
+        )
+
+    try:
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not retrieve image: {exc}")
+
+    content_type = (
+        response.headers.get("content-type") or item.get("contentType") or "image/png"
+    )
+    return StreamingResponse(io.BytesIO(response.content), media_type=content_type)
+
+
+@app.get("/creative-studio/proxy-image")
+async def proxy_creative_studio_image(
+    url: str = Query(...),
+    authorization: str | None = Header(default=None),
+):
+    """Proxy trusted Firebase/Google Storage images used as Studio logo and image layers."""
+    require_user(authorization)
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    allowed_hosts = {
+        "firebasestorage.googleapis.com",
+        "storage.googleapis.com",
+    }
+    if parsed.scheme not in {"https", "http"} or host not in allowed_hosts:
+        raise HTTPException(
+            status_code=400, detail="Only trusted storage image URLs can be loaded."
+        )
+
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not retrieve image: {exc}")
+
+    content_type = response.headers.get("content-type") or "image/png"
+    if not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400, detail="The requested URL is not an image."
+        )
+    return StreamingResponse(io.BytesIO(response.content), media_type=content_type)
+
+
+@app.post("/creative-studio/rewrite")
+async def rewrite_creative_studio_text(
+    payload: CreativeStudioRewriteBody,
+    authorization: str | None = Header(default=None),
+):
+    """Rewrite only the selected editable Studio layer. Existing generator prompts are untouched."""
+    uid, _email, _claims = require_user(authorization)
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=400, detail="Select a text layer with copy before rewriting."
+        )
+    if len(text) > 800:
+        raise HTTPException(
+            status_code=400, detail="Selected text is too long to rewrite."
+        )
+
+    tone_map = {
+        "shorter": "Make it shorter and clearer while preserving the exact meaning.",
+        "premium": "Make it feel more premium, polished, and credible.",
+        "urgent": "Add tasteful urgency without fake scarcity or unsupported claims.",
+        "luxury": "Use refined luxury-brand language that remains concise.",
+        "gen_z": "Use current, natural Gen Z language without forced slang.",
+        "professional": "Make it professional, direct, and trustworthy.",
+    }
+    instruction = tone_map.get(payload.tone, tone_map["shorter"])
+
+    brand_context = ""
+    if payload.brandKitId:
+        try:
+            db = get_db()
+            user_doc = db.collection("users").document(uid).get().to_dict() or {}
+            kit = resolve_brand_kit(db, uid, payload.brandKitId, user_doc) or {}
+            brand_context = "\nBrand voice/context: " + json.dumps(
+                {
+                    "brandName": kit.get("brandName") or kit.get("name"),
+                    "voice": kit.get("voice"),
+                    "brandPersonality": kit.get("brandPersonality"),
+                    "doList": kit.get("doList"),
+                    "dontList": kit.get("dontList"),
+                    "complianceRules": kit.get("complianceRules"),
+                },
+                ensure_ascii=False,
+            )
+        except Exception:
+            brand_context = ""
+
+    system_prompt = (
+        "You rewrite one editable advertising design layer. Return only the revised text, with no quotes, labels, or commentary. "
+        "Do not invent prices, guarantees, statistics, testimonials, or product claims. Preserve the user's core meaning and factual details."
+    )
+    user_prompt = f"Layer role: {payload.role}\nInstruction: {instruction}{brand_context}\nOriginal text:\n{text}"
+
+    try:
+        response = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=OPENAI_TEXT_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.6,
+                max_tokens=220,
+            )
+        )
+        rewritten = (response.choices[0].message.content or "").strip().strip('"')
+        if not rewritten:
+            raise ValueError("Empty rewrite")
+        return {"text": rewritten[:800]}
+    except Exception as exc:
+        print("CREATIVE STUDIO REWRITE ERROR:", repr(exc))
+        raise HTTPException(
+            status_code=502,
+            detail="The selected copy could not be rewritten. Please try again.",
+        )
+
+
+@app.post("/creative-studio/save")
+async def save_creative_studio_image(
+    file: UploadFile = File(...),
+    project: str = Form(...),
+    title: str = Form("Creative Studio design"),
+    source_image_job_id: str = Form(""),
+    authorization: str | None = Header(default=None),
+):
+    """Save a flattened Studio export and its editable project as a new Library image."""
+    uid, _email, claims = require_user(authorization)
+    admin = is_admin(claims)
+    db = get_db()
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+
+    content_type = (file.content_type or "image/png").lower().strip()
+    if content_type not in {"image/png", "image/jpeg", "image/jpg", "image/webp"}:
+        raise HTTPException(
+            status_code=400, detail="Creative Studio can save PNG, JPG, or WEBP images."
+        )
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The rendered image is empty.")
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The rendered image is too large.")
+
+    try:
+        project_data = json.loads(project)
+    except Exception:
+        raise HTTPException(
+            status_code=400, detail="The editable Studio project is invalid."
+        )
+    if not isinstance(project_data, dict) or not isinstance(
+        project_data.get("layers", []), list
+    ):
+        raise HTTPException(
+            status_code=400, detail="The editable Studio project is invalid."
+        )
+    if len(project_data.get("layers", [])) > 150:
+        raise HTTPException(
+            status_code=400, detail="This project contains too many layers."
+        )
+
+    if not admin:
+        ensure_storage_available(db, uid, tier, len(data))
+
+    stored = None
+    registered = False
+    try:
+        stored = upload_bytes_to_firebase_storage_with_metadata(
+            data,
+            uid,
+            content_type=content_type,
+            folder="creative_studio_exports",
+            filename_hint=file.filename or "creative-studio-export",
+        )
+        register_storage_asset(
+            db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
+        )
+        registered = True
+
+        job_id = uuid.uuid4().hex
+        clean_title = (title or "Creative Studio design").strip()[:120]
+        item = {
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "status": "succeeded",
+            "source": "creative_studio",
+            "sourceType": "creative_studio",
+            "sourceImageJobId": source_image_job_id or None,
+            "productName": clean_title,
+            "imageUrl": stored["url"],
+            "storagePath": stored.get("storagePath"),
+            "fileSizeBytes": stored.get("fileSizeBytes"),
+            "contentType": stored.get("contentType"),
+            "storageState": "active",
+            "creativeProject": project_data,
+            "copy": {"headline": "", "primary_text": "", "cta": ""},
+            "error": None,
+        }
+        db.collection("image_jobs").document(job_id).set(item)
+        return {
+            "ok": True,
+            "item": {"id": job_id, **item},
+            "storage": get_storage_summary(db, uid, tier),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        if stored and stored.get("storagePath"):
+            try:
+                delete_firebase_storage_object(stored["storagePath"])
+            except Exception:
+                pass
+        if registered and stored:
+            try:
+                release_storage_asset(
+                    db,
+                    uid,
+                    size_bytes=int(stored.get("fileSizeBytes") or 0),
+                    asset_type="image",
+                )
+            except Exception:
+                pass
+        print("CREATIVE STUDIO SAVE ERROR:", repr(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="The finished creative could not be saved. Please try again.",
+        )
+
 
 @app.post("/video/upload-image", response_model=UploadCreativesResponse)
 async def upload_video_image(
@@ -1568,13 +2043,7 @@ async def upload_video_image(
 
     db = get_db()
 
-    user_doc = (
-        db.collection("users")
-        .document(uid)
-        .get()
-        .to_dict()
-        or {}
-    )
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
 
     tier, status = get_tier_and_status(user_doc)
 
@@ -1623,17 +2092,12 @@ async def upload_video_image(
 
     uploaded_file = files[0]
 
-    content_type = (
-        uploaded_file.content_type or ""
-    ).lower().strip()
+    content_type = (uploaded_file.content_type or "").lower().strip()
 
     if content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Unsupported file type. "
-                "Use PNG, JPG, JPEG, or WEBP."
-            ),
+            detail=("Unsupported file type. " "Use PNG, JPG, JPEG, or WEBP."),
         )
 
     data = await uploaded_file.read()
@@ -1668,10 +2132,7 @@ async def upload_video_image(
             uid,
             content_type=content_type,
             folder="video_source_images",
-            filename_hint=(
-                uploaded_file.filename
-                or "video-source-image"
-            ),
+            filename_hint=(uploaded_file.filename or "video-source-image"),
         )
 
         register_storage_asset(
@@ -1706,6 +2167,7 @@ async def upload_video_image(
     return {
         "urls": [image_url],
     }
+
 
 @app.post("/upload-brand-logo")
 async def upload_brand_logo(
@@ -1743,9 +2205,15 @@ async def upload_brand_logo(
     tier, _status = get_tier_and_status(user_doc)
     ensure_storage_available(db, uid, tier, len(data))
     stored = upload_bytes_to_firebase_storage_with_metadata(
-        data, uid, content_type=ct, folder="brand_logos", filename_hint=file.filename or "logo"
+        data,
+        uid,
+        content_type=ct,
+        folder="brand_logos",
+        filename_hint=file.filename or "logo",
     )
-    register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="other")
+    register_storage_asset(
+        db, uid, size_bytes=stored["fileSizeBytes"], asset_type="other"
+    )
     logo_url = stored["url"]
 
     db = get_db()
@@ -1761,6 +2229,7 @@ async def upload_brand_logo(
 
     return {"logoUrl": logo_url}
 
+
 @app.post("/upload-reference-images")
 async def upload_reference_images(
     files: List[UploadFile] = File(...),
@@ -1772,7 +2241,9 @@ async def upload_reference_images(
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
     if len(files) > 3:
-        raise HTTPException(status_code=400, detail="Maximum 3 reference images allowed.")
+        raise HTTPException(
+            status_code=400, detail="Maximum 3 reference images allowed."
+        )
 
     allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
     urls: List[str] = []
@@ -1781,7 +2252,9 @@ async def upload_reference_images(
         ct = (f.content_type or "").lower().strip()
 
         if ct not in allowed_types:
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}")
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported file type: {ct or 'unknown'}"
+            )
 
         data = await f.read()
 
@@ -1789,16 +2262,24 @@ async def upload_reference_images(
             continue
 
         if len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="Reference image too large. Max 8MB per image.")
+            raise HTTPException(
+                status_code=413, detail="Reference image too large. Max 8MB per image."
+            )
 
         db = get_db()
         user_doc = db.collection("users").document(uid).get().to_dict() or {}
         tier, _status = get_tier_and_status(user_doc)
         ensure_storage_available(db, uid, tier, len(data))
         stored = upload_bytes_to_firebase_storage_with_metadata(
-            data, uid, content_type=ct, folder="reference_images", filename_hint=f.filename or "reference-image"
+            data,
+            uid,
+            content_type=ct,
+            folder="reference_images",
+            filename_hint=f.filename or "reference-image",
         )
-        register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+        register_storage_asset(
+            db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
+        )
         urls.append(stored["url"])
 
     if not urls:
@@ -1817,20 +2298,25 @@ async def start_image_generation(
     uid, _email, claims = require_user(authorization)
     db = get_db()
     job_id = uuid.uuid4().hex
-    db.collection("image_generation_jobs").document(job_id).set({
-        "uid": uid,
-        "createdAt": int(time.time()),
-        "updatedAt": int(time.time()),
-        "status": "queued",
-        "jobType": "image",
-        "progressStage": "queued",
-        "progressMessage": IMAGE_PROGRESS["queued"][1],
-        "progressPercent": IMAGE_PROGRESS["queued"][0],
-        "result": None,
-        "error": None,
-    })
-    background_tasks.add_task(_run_image_generation_job, job_id, payload, authorization or "")
+    db.collection("image_generation_jobs").document(job_id).set(
+        {
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "updatedAt": int(time.time()),
+            "status": "queued",
+            "jobType": "image",
+            "progressStage": "queued",
+            "progressMessage": IMAGE_PROGRESS["queued"][1],
+            "progressPercent": IMAGE_PROGRESS["queued"][0],
+            "result": None,
+            "error": None,
+        }
+    )
+    background_tasks.add_task(
+        _run_image_generation_job, job_id, payload, authorization or ""
+    )
     return ProgressStartResponse(jobId=job_id, status="queued")
+
 
 @app.get("/image/status/{job_id}")
 async def image_generation_status(
@@ -1842,6 +2328,7 @@ async def image_generation_status(
         get_db(), "image_generation_jobs", job_id, uid, is_admin(claims)
     )
 
+
 @app.post("/optimizer/start", response_model=ProgressStartResponse)
 async def start_optimizer_analysis(
     payload: OptimizeAdRequest,
@@ -1851,20 +2338,23 @@ async def start_optimizer_analysis(
     uid, _email, claims = require_user(authorization)
     db = get_db()
     job_id = uuid.uuid4().hex
-    db.collection("optimizer_jobs").document(job_id).set({
-        "uid": uid,
-        "createdAt": int(time.time()),
-        "updatedAt": int(time.time()),
-        "status": "queued",
-        "jobType": "optimizer",
-        "progressStage": "queued",
-        "progressMessage": OPTIMIZER_PROGRESS["queued"][1],
-        "progressPercent": OPTIMIZER_PROGRESS["queued"][0],
-        "result": None,
-        "error": None,
-    })
+    db.collection("optimizer_jobs").document(job_id).set(
+        {
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "updatedAt": int(time.time()),
+            "status": "queued",
+            "jobType": "optimizer",
+            "progressStage": "queued",
+            "progressMessage": OPTIMIZER_PROGRESS["queued"][1],
+            "progressPercent": OPTIMIZER_PROGRESS["queued"][0],
+            "result": None,
+            "error": None,
+        }
+    )
     background_tasks.add_task(_run_optimizer_job, job_id, payload, authorization or "")
     return ProgressStartResponse(jobId=job_id, status="queued")
+
 
 @app.get("/optimizer/status/{job_id}")
 async def optimizer_status(
@@ -1872,9 +2362,8 @@ async def optimizer_status(
     authorization: str | None = Header(default=None),
 ):
     uid, _email, claims = require_user(authorization)
-    return _read_progress_job(
-        get_db(), "optimizer_jobs", job_id, uid, is_admin(claims)
-    )
+    return _read_progress_job(get_db(), "optimizer_jobs", job_id, uid, is_admin(claims))
+
 
 @app.post("/optimizer/generate/start", response_model=ProgressStartResponse)
 async def start_optimizer_generation(
@@ -1885,22 +2374,25 @@ async def start_optimizer_generation(
     uid, _email, claims = require_user(authorization)
     db = get_db()
     job_id = uuid.uuid4().hex
-    db.collection("optimizer_jobs").document(job_id).set({
-        "uid": uid,
-        "createdAt": int(time.time()),
-        "updatedAt": int(time.time()),
-        "status": "queued",
-        "jobType": "optimizer_generation",
-        "progressStage": "queued",
-        "progressMessage": OPTIMIZER_GENERATION_PROGRESS["queued"][1],
-        "progressPercent": OPTIMIZER_GENERATION_PROGRESS["queued"][0],
-        "result": None,
-        "error": None,
-    })
+    db.collection("optimizer_jobs").document(job_id).set(
+        {
+            "uid": uid,
+            "createdAt": int(time.time()),
+            "updatedAt": int(time.time()),
+            "status": "queued",
+            "jobType": "optimizer_generation",
+            "progressStage": "queued",
+            "progressMessage": OPTIMIZER_GENERATION_PROGRESS["queued"][1],
+            "progressPercent": OPTIMIZER_GENERATION_PROGRESS["queued"][0],
+            "result": None,
+            "error": None,
+        }
+    )
     background_tasks.add_task(
         _run_optimizer_generation_job, job_id, payload, authorization or ""
     )
     return ProgressStartResponse(jobId=job_id, status="queued")
+
 
 @app.get("/optimizer/generate/status/{job_id}")
 async def optimizer_generation_status(
@@ -1908,9 +2400,8 @@ async def optimizer_generation_status(
     authorization: str | None = Header(default=None),
 ):
     uid, _email, claims = require_user(authorization)
-    return _read_progress_job(
-        get_db(), "optimizer_jobs", job_id, uid, is_admin(claims)
-    )
+    return _read_progress_job(get_db(), "optimizer_jobs", job_id, uid, is_admin(claims))
+
 
 # ---------------- Generate Ad ----------------
 @app.post("/generate-ad")
@@ -1927,7 +2418,11 @@ async def generate_ad(
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
     set_generation_progress(db, "image", progress_job_id, "loading_brand_kit")
-    brand_kit = resolve_brand_kit(db, uid, payload.brandKitId, user_doc) if payload.useBrandKit else {}
+    brand_kit = (
+        resolve_brand_kit(db, uid, payload.brandKitId, user_doc)
+        if payload.useBrandKit
+        else {}
+    )
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -1942,7 +2437,10 @@ async def generate_ad(
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
 
         cap_result = check_and_increment_usage(db, uid, tier)
 
@@ -1953,10 +2451,7 @@ async def generate_ad(
                 resource="images",
                 used=int(cap_result.get("used") or 0),
                 cap=int(cap_result.get("cap") or 0),
-                period_key=(
-                    cap_result.get("periodKey")
-                    or cap_result.get("month")
-                ),
+                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
                 link="/account",
             )
 
@@ -1973,7 +2468,7 @@ async def generate_ad(
                     "upgradePath": "/account",
                 },
             )
-        
+
         create_usage_notifications(
             db,
             uid,
@@ -2006,7 +2501,9 @@ async def generate_ad(
     product_type = (payload.productType or "").strip()[:40] or None
     campaign_objective = (payload.campaignObjective or "Auto").strip()[:80]
     reference_image_urls = (payload.referenceImageUrls or [])[:3]
-    reference_image_mode = (payload.referenceImageMode or "product_reference").strip()[:40]
+    reference_image_mode = (payload.referenceImageMode or "product_reference").strip()[
+        :40
+    ]
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
@@ -2081,7 +2578,8 @@ supplied_cta: {requested_cta or "N/A"}
 {winners_line}
 """
 
-    winners_section = f"""
+    winners_section = (
+        f"""
         ==================================================
         PAST WINNING CREATIVE INSIGHTS
         ==================================================
@@ -2095,7 +2593,10 @@ supplied_cta: {requested_cta or "N/A"}
         Do not copy previous advertisements directly. Instead, naturally apply the successful design principles while creating a new, original advertisement.
 
         {winners_line}
-        """ if winners_line else ""
+        """
+        if winners_line
+        else ""
+    )
 
     visual_prompt = f"""
 You are the Creative Director at a world-class advertising agency.
@@ -2395,20 +2896,18 @@ It should be visually impressive enough to appear in a professional design portf
             if requested_primary_text:
                 obj["primary_text"] = requested_primary_text
             else:
-                obj["primary_text"] = str(
-                    obj.get("primary_text") or ""
-                ).strip()[:100]
+                obj["primary_text"] = str(obj.get("primary_text") or "").strip()[:100]
 
             if requested_cta:
                 obj["cta"] = requested_cta
             else:
-                obj["cta"] = str(
-                    obj.get("cta") or "Learn More"
-                ).strip()[:20]
+                obj["cta"] = str(obj.get("cta") or "Learn More").strip()[:20]
 
             return obj
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"OpenAI text generation failed: {e}")
+            raise HTTPException(
+                status_code=502, detail=f"OpenAI text generation failed: {e}"
+            )
 
     async def _gen_image_and_upload():
         try:
@@ -2424,10 +2923,14 @@ It should be visually impressive enough to appear in a professional design portf
                 ensure_storage_available(db, uid, tier, len(img_bytes))
             set_generation_progress(db, "image", progress_job_id, "uploading_creative")
             stored = upload_png_to_firebase_storage(img_bytes, uid)
-            register_storage_asset(db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image")
+            register_storage_asset(
+                db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
+            )
             return stored
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"GPT Image generation failed: {e}")
+            raise HTTPException(
+                status_code=502, detail=f"GPT Image generation failed: {e}"
+            )
 
     set_generation_progress(db, "image", progress_job_id, "generating_creative")
     copy_obj, image_asset = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
@@ -2436,50 +2939,56 @@ It should be visually impressive enough to appear in a professional design portf
     set_generation_progress(db, "image", progress_job_id, "saving_library")
     image_job_id = uuid.uuid4().hex
     try:
-        db.collection("image_jobs").document(image_job_id).set({
-            "uid": uid,
-            "createdAt": int(time.time()),
-            "status": "succeeded",
-            "source": "ad_generator",
-            "productName": product_name,
-            "description": description,
-            "audience": audience,
-            "tone": tone,
-            "platform": platform,
-            "goal": goal,
-            "offer": offer,
-            "stylePreset": style,
-            "productType": product_type,
-            "aspectRatio": aspect_ratio,
-            "campaignObjective": campaign_objective,
-            "referenceImageUrls": reference_image_urls,
-            "referenceImageMode": reference_image_mode,
-            "referenceImageCount": len(reference_image_urls),
-            "useBrandKit": payload.useBrandKit,
-            "brandKitId": getattr(payload, "brandKitId", None),
-            "brandKitUsed": bool(brand_kit_context),
-            "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
-            "useMyWinners": bool(winner_profile),
-            "visualPrompt": visual_prompt,
-            "imageUrl": image_url,
-            "storagePath": image_asset.get("storagePath"),
-            "fileSizeBytes": image_asset.get("fileSizeBytes"),
-            "contentType": image_asset.get("contentType"),
-            "storageState": "active",
-            "copy": copy_obj,
-            "error": None,
-            "usage": {
-                "used": cap_result.get("used"),
-                "cap": cap_result.get("cap"),
-                "month": cap_result.get("month"),
-                "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
-            },
-            "winnerProfile": winner_profile or None,
-            "winnersApply": winners_apply or None,
-            "winnersInfluence": winners_influence if winners_influence is not None else None,
-            "winnerGuidance": winner_guidance or None,
-            "model": OPENAI_IMAGE_MODEL,
-        })
+        db.collection("image_jobs").document(image_job_id).set(
+            {
+                "uid": uid,
+                "createdAt": int(time.time()),
+                "status": "succeeded",
+                "source": "ad_generator",
+                "productName": product_name,
+                "description": description,
+                "audience": audience,
+                "tone": tone,
+                "platform": platform,
+                "goal": goal,
+                "offer": offer,
+                "stylePreset": style,
+                "productType": product_type,
+                "aspectRatio": aspect_ratio,
+                "campaignObjective": campaign_objective,
+                "referenceImageUrls": reference_image_urls,
+                "referenceImageMode": reference_image_mode,
+                "referenceImageCount": len(reference_image_urls),
+                "useBrandKit": payload.useBrandKit,
+                "brandKitId": getattr(payload, "brandKitId", None),
+                "brandKitUsed": bool(brand_kit_context),
+                "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+                "useMyWinners": bool(winner_profile),
+                "visualPrompt": visual_prompt,
+                "imageUrl": image_url,
+                "storagePath": image_asset.get("storagePath"),
+                "fileSizeBytes": image_asset.get("fileSizeBytes"),
+                "contentType": image_asset.get("contentType"),
+                "storageState": "active",
+                "copy": copy_obj,
+                "error": None,
+                "usage": {
+                    "used": cap_result.get("used"),
+                    "cap": cap_result.get("cap"),
+                    "month": cap_result.get("month"),
+                    "remaining": max(
+                        0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
+                    ),
+                },
+                "winnerProfile": winner_profile or None,
+                "winnersApply": winners_apply or None,
+                "winnersInfluence": (
+                    winners_influence if winners_influence is not None else None
+                ),
+                "winnerGuidance": winner_guidance or None,
+                "model": OPENAI_IMAGE_MODEL,
+            }
+        )
     except Exception:
         pass
 
@@ -2494,12 +3003,19 @@ It should be visually impressive enough to appear in a professional design portf
         "copy": copy_obj,
         "imageUrl": image_url,
         "imageJobId": image_job_id,
-        "meta": {"goal": goal, "stylePreset": style, "offer": offer, "productType": product_type},
+        "meta": {
+            "goal": goal,
+            "stylePreset": style,
+            "offer": offer,
+            "productType": product_type,
+        },
         "usage": {
             "used": cap_result.get("used"),
             "cap": cap_result.get("cap"),
             "month": cap_result.get("month"),
-            "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
+            "remaining": max(
+                0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
+            ),
         },
     }
 
@@ -2521,7 +3037,11 @@ async def optimize_ad(
     user_doc = user_snap.to_dict() or {}
 
     set_generation_progress(db, "optimizer", progress_job_id, "loading_brand_kit")
-    brand_kit = resolve_brand_kit(db, uid, getattr(payload, "brandKitId", None), user_doc) if getattr(payload, "useBrandKit", True) else {}
+    brand_kit = (
+        resolve_brand_kit(db, uid, getattr(payload, "brandKitId", None), user_doc)
+        if getattr(payload, "useBrandKit", True)
+        else {}
+    )
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
 
     tier, status = get_tier_and_status(user_doc)
@@ -2529,7 +3049,10 @@ async def optimize_ad(
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
         require_pro_or_business(tier)
 
     optimizer_usage_reservation = None
@@ -2548,12 +3071,8 @@ async def optimize_ad(
                 db,
                 uid,
                 resource="optimizer",
-                used=int(
-                    optimizer_usage_reservation.get("used") or 0
-                ),
-                cap=int(
-                    optimizer_usage_reservation.get("cap") or 0
-                ),
+                used=int(optimizer_usage_reservation.get("used") or 0),
+                cap=int(optimizer_usage_reservation.get("cap") or 0),
                 period_key=(
                     optimizer_usage_reservation.get("periodKey")
                     or optimizer_usage_reservation.get("month")
@@ -2577,12 +3096,8 @@ async def optimize_ad(
             db,
             uid,
             resource="optimizer",
-            used=int(
-                optimizer_usage_reservation.get("used") or 0
-            ),
-            cap=int(
-                optimizer_usage_reservation.get("cap") or 0
-            ),
+            used=int(optimizer_usage_reservation.get("used") or 0),
+            cap=int(optimizer_usage_reservation.get("cap") or 0),
             period_key=(
                 optimizer_usage_reservation.get("periodKey")
                 or optimizer_usage_reservation.get("month")
@@ -2602,7 +3117,9 @@ async def optimize_ad(
 
     creative_urls = payload.creative_image_urls or []
     set_generation_progress(db, "optimizer", progress_job_id, "analyzing_creative")
-    creative_analysis = await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
+    creative_analysis = (
+        await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
+    )
 
     extra = {
         "flight_start": payload.flight_start,
@@ -2734,7 +3251,9 @@ confidence
 """.strip()
 
     try:
-        set_generation_progress(db, "optimizer", progress_job_id, "building_recommendations")
+        set_generation_progress(
+            db, "optimizer", progress_job_id, "building_recommendations"
+        )
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
                 model=OPENAI_TEXT_MODEL,
@@ -2761,11 +3280,13 @@ confidence
         obj = _extract_json_object(raw)
 
         if not obj or "improved_headline" not in obj:
-            raise HTTPException(status_code=502, detail="Optimizer returned invalid JSON.")
+            raise HTTPException(
+                status_code=502, detail="Optimizer returned invalid JSON."
+            )
 
         obj.setdefault(
             "summary",
-            "Here are recommended improvements based on the metrics provided."
+            "Here are recommended improvements based on the metrics provided.",
         )
 
         # Normalize likely_issues
@@ -2793,16 +3314,20 @@ confidence
         obj["recommended_changes"] = [str(x).strip() for x in changes if str(x).strip()]
 
         # Normalize headline
-        obj["improved_headline"] = str(obj.get("improved_headline") or product_name or "Better Results").strip()[:80]
+        obj["improved_headline"] = str(
+            obj.get("improved_headline") or product_name or "Better Results"
+        ).strip()[:80]
 
         # Normalize primary text
         obj["improved_primary_text"] = str(
-            obj.get("improved_primary_text") or "Discover a clearer, stronger offer designed to drive action."
+            obj.get("improved_primary_text")
+            or "Discover a clearer, stronger offer designed to drive action."
         ).strip()[:250]
 
         # Normalize image prompt
         obj["improved_image_prompt"] = str(
-            obj.get("improved_image_prompt") or "Create a premium, professional paid social advertisement with strong product focus, clean typography, clear CTA, balanced spacing, and modern commercial design."
+            obj.get("improved_image_prompt")
+            or "Create a premium, professional paid social advertisement with strong product focus, clean typography, clear CTA, balanced spacing, and modern commercial design."
         ).strip()
 
         # Normalize CTA
@@ -2855,6 +3380,7 @@ confidence
             )
         raise HTTPException(status_code=502, detail=f"Optimization failed: {e}")
 
+
 # ---------------- Generate New Creative from Optimizer (Pro/Business only, CONSUMES usage) ----------------
 @app.post("/generate-from-optimizer")
 async def generate_from_optimizer(
@@ -2869,8 +3395,14 @@ async def generate_from_optimizer(
     set_generation_progress(db, "optimizer_generation", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-    set_generation_progress(db, "optimizer_generation", progress_job_id, "loading_brand_kit")
-    brand_kit = resolve_brand_kit(db, uid, payload.brandKitId, user_doc) if payload.useBrandKit else {}
+    set_generation_progress(
+        db, "optimizer_generation", progress_job_id, "loading_brand_kit"
+    )
+    brand_kit = (
+        resolve_brand_kit(db, uid, payload.brandKitId, user_doc)
+        if payload.useBrandKit
+        else {}
+    )
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
@@ -2894,10 +3426,7 @@ async def generate_from_optimizer(
                 resource="images",
                 used=int(cap_result.get("used") or 0),
                 cap=int(cap_result.get("cap") or 0),
-                period_key=(
-                    cap_result.get("periodKey")
-                    or cap_result.get("month")
-                ),
+                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
                 link="/account",
             )
 
@@ -2918,10 +3447,7 @@ async def generate_from_optimizer(
             resource="images",
             used=int(cap_result.get("used") or 0),
             cap=int(cap_result.get("cap") or 0),
-            period_key=(
-                cap_result.get("periodKey")
-                or cap_result.get("month")
-            ),
+            period_key=(cap_result.get("periodKey") or cap_result.get("month")),
             link="/account",
         )
 
@@ -2935,7 +3461,11 @@ async def generate_from_optimizer(
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
-    product_name = (getattr(payload, "product_name", None) or getattr(payload, "productName", None) or "").strip()[:80]
+    product_name = (
+        getattr(payload, "product_name", None)
+        or getattr(payload, "productName", None)
+        or ""
+    ).strip()[:80]
     description = (getattr(payload, "description", None) or "").strip()[:800]
     product_type = (getattr(payload, "productType", None) or "").strip()[:40] or None
     style = (getattr(payload, "stylePreset", None) or "Minimal").strip()[:30]
@@ -2946,7 +3476,9 @@ async def generate_from_optimizer(
     if not product_name:
         product_name = "the same product as the reference creative"
 
-    set_generation_progress(db, "optimizer_generation", progress_job_id, "building_prompt")
+    set_generation_progress(
+        db, "optimizer_generation", progress_job_id, "building_prompt"
+    )
 
     visual_prompt = f"""
 You are the Lead Creative Director at a world-class advertising agency.
@@ -3151,63 +3683,77 @@ Improve it.
     try:
         reference_image_urls = (payload.creative_image_urls or [])[:3]
 
-        set_generation_progress(db, "optimizer_generation", progress_job_id, "generating_creative")
+        set_generation_progress(
+            db, "optimizer_generation", progress_job_id, "generating_creative"
+        )
         img_bytes = await asyncio.to_thread(
             lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
                 size=payload.imageSize or "1024x1024",
                 input_image_url=brand_kit.get("logoUrl"),
                 input_image_urls=reference_image_urls,
+            )
         )
-    )
 
         if not admin:
             ensure_storage_available(db, uid, tier, len(img_bytes))
-        set_generation_progress(db, "optimizer_generation", progress_job_id, "uploading_creative")
+        set_generation_progress(
+            db, "optimizer_generation", progress_job_id, "uploading_creative"
+        )
         image_asset = upload_png_to_firebase_storage(img_bytes, uid)
-        register_storage_asset(db, uid, size_bytes=image_asset["fileSizeBytes"], asset_type="image")
+        register_storage_asset(
+            db, uid, size_bytes=image_asset["fileSizeBytes"], asset_type="image"
+        )
         image_url = image_asset["url"]
 
-        set_generation_progress(db, "optimizer_generation", progress_job_id, "saving_library")
+        set_generation_progress(
+            db, "optimizer_generation", progress_job_id, "saving_library"
+        )
         image_job_id = uuid.uuid4().hex
         try:
-            db.collection("image_jobs").document(image_job_id).set({
-                "uid": uid,
-                "createdAt": int(time.time()),
-                "status": "succeeded",
-                "source": "optimizer_generate",
-                "productName": product_name,
-                "description": description,
-                "tone": tone,
-                "goal": goal,
-                "stylePreset": style,
-                "productType": product_type,
-                "aspectRatio": aspect_ratio,
-                "referenceImageUrls": reference_image_urls,
-                "referenceImageCount": len(reference_image_urls),
-                "useBrandKit": payload.useBrandKit,
-                "brandKitUsed": bool(brand_kit_context),
-                "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
-                "visualPrompt": visual_prompt,
-                "imageUrl": image_url,
-                "storagePath": image_asset.get("storagePath"),
-                "fileSizeBytes": image_asset.get("fileSizeBytes"),
-                "contentType": image_asset.get("contentType"),
-                "storageState": "active",
-                "copy": {
-                    "headline": payload.improved_headline,
-                    "primary_text": payload.improved_primary_text,
-                    "cta": payload.improved_cta,
-                },
-                "error": None,
-                "usage": {
-                    "used": cap_result.get("used"),
-                    "cap": cap_result.get("cap"),
-                    "month": cap_result.get("month"),
-                    "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
-                },
-                "model": OPENAI_IMAGE_MODEL,
-            })
+            db.collection("image_jobs").document(image_job_id).set(
+                {
+                    "uid": uid,
+                    "createdAt": int(time.time()),
+                    "status": "succeeded",
+                    "source": "optimizer_generate",
+                    "productName": product_name,
+                    "description": description,
+                    "tone": tone,
+                    "goal": goal,
+                    "stylePreset": style,
+                    "productType": product_type,
+                    "aspectRatio": aspect_ratio,
+                    "referenceImageUrls": reference_image_urls,
+                    "referenceImageCount": len(reference_image_urls),
+                    "useBrandKit": payload.useBrandKit,
+                    "brandKitUsed": bool(brand_kit_context),
+                    "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+                    "visualPrompt": visual_prompt,
+                    "imageUrl": image_url,
+                    "storagePath": image_asset.get("storagePath"),
+                    "fileSizeBytes": image_asset.get("fileSizeBytes"),
+                    "contentType": image_asset.get("contentType"),
+                    "storageState": "active",
+                    "copy": {
+                        "headline": payload.improved_headline,
+                        "primary_text": payload.improved_primary_text,
+                        "cta": payload.improved_cta,
+                    },
+                    "error": None,
+                    "usage": {
+                        "used": cap_result.get("used"),
+                        "cap": cap_result.get("cap"),
+                        "month": cap_result.get("month"),
+                        "remaining": max(
+                            0,
+                            (cap_result.get("cap") or 0)
+                            - (cap_result.get("used") or 0),
+                        ),
+                    },
+                    "model": OPENAI_IMAGE_MODEL,
+                }
+            )
         except Exception:
             pass
 
@@ -3223,7 +3769,9 @@ Improve it.
                 "used": cap_result.get("used"),
                 "cap": cap_result.get("cap"),
                 "month": cap_result.get("month"),
-                "remaining": max(0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)),
+                "remaining": max(
+                    0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
+                ),
             },
         }
 
@@ -3234,6 +3782,7 @@ Improve it.
 
 
 # ---------------- Creation of Admin Page Routes ----------------
+
 
 def _require_admin_request(authorization: str | None):
     """Return the authenticated admin UID and claims or raise 403."""
@@ -3308,15 +3857,10 @@ def _get_admin_target_user(db, target_uid: str):
 
 
 def _current_usage_period(db, target_uid: str):
-    target_doc = (
-        db.collection("users")
-        .document(target_uid)
-        .get()
-        .to_dict()
-        or {}
-    )
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
 
     return target_doc, get_usage_period(target_doc)
+
 
 def _resource_admin_fields(resource: str) -> tuple[str, str]:
     mapping = {
@@ -3357,13 +3901,7 @@ def _grant_bonus_capacity(
             detail="Credits must be greater than zero.",
         )
 
-    target_doc = (
-        db.collection("users")
-        .document(target_uid)
-        .get()
-        .to_dict()
-        or {}
-    )
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
 
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
@@ -3445,13 +3983,7 @@ def _reset_resource_usage(
     By default, bonus capacity remains available for the current period.
     Pass clear_bonus=True only when you explicitly want to remove bonuses too.
     """
-    target_doc = (
-        db.collection("users")
-        .document(target_uid)
-        .get()
-        .to_dict()
-        or {}
-    )
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
 
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
@@ -3559,45 +4091,35 @@ def admin_list_users(
             tier_for_caps, helper_status = get_tier_and_status(profile)
             stripe_object = profile.get("stripe") or {}
 
-            requested_tier = (
-                stripe_object.get("requestedTier") or ""
-            ).strip()
+            requested_tier = (stripe_object.get("requestedTier") or "").strip()
 
-            user_tier = (
-                stripe_object.get("tier")
-                or profile.get("tier")
-                or "-"
-            )
+            user_tier = stripe_object.get("tier") or profile.get("tier") or "-"
             user_tier = str(user_tier).strip() or "-"
 
-            stripe_status = (
-                stripe_object.get("status")
-                or helper_status
-                or "inactive"
-            )
+            stripe_status = stripe_object.get("status") or helper_status or "inactive"
             stripe_status = str(stripe_status).strip().lower()
 
-            customer_id = (
-                stripe_object.get("customerId") or ""
-            ).strip()
+            customer_id = (stripe_object.get("customerId") or "").strip()
 
-            subscription_id = (
-                stripe_object.get("subscriptionId") or ""
-            ).strip()
+            subscription_id = (stripe_object.get("subscriptionId") or "").strip()
 
-            price_id = (
-                stripe_object.get("priceId") or ""
-            ).strip()
+            price_id = (stripe_object.get("priceId") or "").strip()
 
-            period_start = _safe_int(
-                stripe_object.get("currentPeriodStart"),
-                0,
-            ) or None
+            period_start = (
+                _safe_int(
+                    stripe_object.get("currentPeriodStart"),
+                    0,
+                )
+                or None
+            )
 
-            period_end = _safe_int(
-                stripe_object.get("currentPeriodEnd"),
-                0,
-            ) or None
+            period_end = (
+                _safe_int(
+                    stripe_object.get("currentPeriodEnd"),
+                    0,
+                )
+                or None
+            )
 
             requested_tier_at = _firebase_timestamp_to_iso(
                 stripe_object.get("requestedTierAt")
@@ -3645,12 +4167,8 @@ def admin_list_users(
                 "optimizer_runs",
                 profile,
             )
-            optimizer_used = _safe_int(
-                optimizer_usage.get("used")
-            )
-            optimizer_cap = _safe_int(
-                optimizer_usage.get("cap")
-            )
+            optimizer_used = _safe_int(optimizer_usage.get("used"))
+            optimizer_cap = _safe_int(optimizer_usage.get("cap"))
             optimizer_remaining = _safe_int(
                 optimizer_usage.get("remaining"),
                 max(0, optimizer_cap - optimizer_used),
@@ -3663,30 +4181,29 @@ def admin_list_users(
             storage_summary = {}
 
             try:
-                storage_summary = get_storage_summary(
-                    db,
-                    auth_uid,
-                    tier_for_caps,
-                ) or {}
+                storage_summary = (
+                    get_storage_summary(
+                        db,
+                        auth_uid,
+                        tier_for_caps,
+                    )
+                    or {}
+                )
             except Exception:
                 storage_summary = {}
 
             storage_used_bytes = _safe_int(
-                storage_summary.get("usedBytes")
-                or storage_summary.get("used_bytes")
+                storage_summary.get("usedBytes") or storage_summary.get("used_bytes")
             )
             storage_limit_bytes = _safe_int(
-                storage_summary.get("limitBytes")
-                or storage_summary.get("limit_bytes")
+                storage_summary.get("limitBytes") or storage_summary.get("limit_bytes")
             )
             storage_asset_count = _safe_int(
-                storage_summary.get("assetCount")
-                or storage_summary.get("asset_count")
+                storage_summary.get("assetCount") or storage_summary.get("asset_count")
             )
 
             storage_usage_pct = _safe_int(
-                storage_summary.get("usagePct")
-                or storage_summary.get("usage_pct")
+                storage_summary.get("usagePct") or storage_summary.get("usage_pct")
             )
 
             if storage_usage_pct <= 0 and storage_limit_bytes > 0:
@@ -3698,10 +4215,7 @@ def admin_list_users(
             if tier_norm != "all" and user_tier.lower() != tier_norm:
                 continue
 
-            if (
-                status_norm != "all"
-                and stripe_status.lower() != status_norm
-            ):
+            if status_norm != "all" and stripe_status.lower() != status_norm:
                 continue
 
             if q_norm:
@@ -3732,7 +4246,6 @@ def admin_list_users(
                     "disabled": bool(auth_user.disabled),
                     "createdAt": created_iso,
                     "lastSignInAt": last_sign_in_iso,
-
                     "tier": user_tier,
                     "requestedTier": requested_tier,
                     "requestedTierAt": requested_tier_at,
@@ -3742,28 +4255,23 @@ def admin_list_users(
                     "priceId": price_id,
                     "currentPeriodStart": period_start,
                     "currentPeriodEnd": period_end,
-
                     "used": image_used,
                     "cap": image_cap,
                     "remaining": image_remaining,
                     "usagePct": image_usage_pct,
                     "monthlyUsage": image_used,
-
                     "videoUsed": video_used,
                     "videoCap": video_cap,
                     "videoRemaining": video_remaining,
                     "videoUsagePct": video_usage_pct,
-
                     "optimizerUsed": optimizer_used,
                     "optimizerCap": optimizer_cap,
                     "optimizerRemaining": optimizer_remaining,
                     "optimizerUsagePct": optimizer_usage_pct,
-
                     "storageUsedBytes": storage_used_bytes,
                     "storageLimitBytes": storage_limit_bytes,
                     "storageAssetCount": storage_asset_count,
                     "storageUsagePct": storage_usage_pct,
-
                     "hasProfile": bool(profile),
                     "periodKey": image_usage.get("periodKey"),
                     "periodStart": image_usage.get("periodStart"),
@@ -3792,6 +4300,7 @@ def admin_list_users(
 
 
 # ---------- Image usage ----------
+
 
 @app.post("/admin/users/{target_uid}/usage/grant")
 def admin_grant_image_credits(
@@ -3837,6 +4346,7 @@ def admin_reset_image_usage(
 
 
 # ---------- Video usage ----------
+
 
 @app.post("/admin/users/{target_uid}/video/usage/grant")
 def admin_grant_video_credits(
@@ -3885,6 +4395,7 @@ def admin_reset_video_usage(
 
 # ---------- Optimizer usage ----------
 
+
 @app.post("/admin/users/{target_uid}/optimizer/usage/grant")
 def admin_grant_optimizer_runs(
     target_uid: str,
@@ -3928,7 +4439,6 @@ def admin_reset_optimizer_usage(
     }
 
 
-
 @app.post("/admin/users/{target_uid}/usage/reset-all")
 def admin_reset_all_usage(
     target_uid: str,
@@ -3939,13 +4449,7 @@ def admin_reset_all_usage(
 
     db = get_db()
 
-    target_doc = (
-        db.collection("users")
-        .document(target_uid)
-        .get()
-        .to_dict()
-        or {}
-    )
+    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
 
     usage_period = get_usage_period(target_doc)
     usage_ref = db.collection("usage").document(target_uid)
@@ -3987,6 +4491,7 @@ def admin_reset_all_usage(
 
 # ---------- Requested plan changes ----------
 
+
 @app.post("/admin/users/{target_uid}/tier/request")
 def admin_request_tier_change(
     target_uid: str,
@@ -4007,10 +4512,7 @@ def admin_request_tier_change(
     if requested_tier not in allowed_tiers:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Invalid requestedTier. "
-                f"Allowed: {sorted(allowed_tiers)}"
-            ),
+            detail=("Invalid requestedTier. " f"Allowed: {sorted(allowed_tiers)}"),
         )
 
     db = get_db()
@@ -4088,6 +4590,7 @@ def clear_requested_tier(
 
 # ---------- Subscription sync ----------
 
+
 @app.post("/admin/users/{target_uid}/subscription/sync")
 def admin_sync_user_subscription(
     target_uid: str,
@@ -4102,9 +4605,7 @@ def admin_sync_user_subscription(
     )
 
     stripe_object = user_doc.get("stripe") or {}
-    customer_id = (
-        stripe_object.get("customerId") or ""
-    ).strip()
+    customer_id = (stripe_object.get("customerId") or "").strip()
 
     if not customer_id:
         raise HTTPException(
@@ -4168,9 +4669,7 @@ def admin_sync_user_subscription(
         )[0]
 
         subscription_id = latest.get("id")
-        subscription_status = (
-            latest.get("status") or "inactive"
-        )
+        subscription_status = latest.get("status") or "inactive"
 
         if subscription_status in {
             "active",
@@ -4181,9 +4680,7 @@ def admin_sync_user_subscription(
         else:
             app_status = "inactive"
 
-        items = (
-            latest.get("items") or {}
-        ).get("data") or []
+        items = (latest.get("items") or {}).get("data") or []
 
         price_id = None
         resolved_tier = None
@@ -4192,9 +4689,7 @@ def admin_sync_user_subscription(
             price_id = items[0]["price"].get("id")
             resolved_tier = price_id_to_tier(price_id)
 
-        period_start, period_end = extract_subscription_period(
-            latest
-        )
+        period_start, period_end = extract_subscription_period(latest)
 
         stripe_update = {
             "customerId": customer_id,
@@ -4210,14 +4705,10 @@ def admin_sync_user_subscription(
             stripe_update["tier"] = resolved_tier
 
         if period_start:
-            stripe_update["currentPeriodStart"] = int(
-                period_start
-            )
+            stripe_update["currentPeriodStart"] = int(period_start)
 
         if period_end:
-            stripe_update["currentPeriodEnd"] = int(
-                period_end
-            )
+            stripe_update["currentPeriodEnd"] = int(period_end)
 
         user_ref.set(
             {"stripe": stripe_update},
@@ -4252,6 +4743,7 @@ def admin_sync_user_subscription(
             detail=f"Could not sync subscription: {exc}",
         )
 
+
 # --- Video Credit Usage (My Account + Dashboard compatibility) ---
 @app.get("/video/usage")
 def get_video_usage(authorization: str | None = Header(default=None)):
@@ -4271,7 +4763,6 @@ def get_video_usage(authorization: str | None = Header(default=None)):
         "tier": tier,
         "unit": "video_credits",
     }
-
 
 
 @app.get("/download-image/{job_id}")
@@ -4309,10 +4800,9 @@ async def download_image(
     return StreamingResponse(
         io.BytesIO(r.content),
         media_type="image/png",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
 
 @app.get("/image/jobs")
 async def list_image_jobs(
@@ -4368,6 +4858,7 @@ async def get_image_job(
     data["id"] = snap.id
     return data
 
+
 @app.delete("/image/jobs/{job_id}")
 def delete_image_job(job_id: str, authorization: str | None = Header(default=None)):
     uid, _email, claims = require_user(authorization)
@@ -4384,9 +4875,15 @@ def delete_image_job(job_id: str, authorization: str | None = Header(default=Non
         path = data.get("storagePath")
         if path:
             delete_firebase_storage_object(path)
-        release_storage_asset(db, data.get("uid") or uid, size_bytes=int(data.get("fileSizeBytes") or 0), asset_type="image")
+        release_storage_asset(
+            db,
+            data.get("uid") or uid,
+            size_bytes=int(data.get("fileSizeBytes") or 0),
+            asset_type="image",
+        )
     ref.delete()
     return {"ok": True, "jobId": job_id}
+
 
 @app.post("/creative/performance/{kind}/{job_id}")
 async def update_creative_performance(
@@ -4419,11 +4916,20 @@ async def update_creative_performance(
     perf = payload.model_dump(exclude_none=True)
 
     # Percent validation (0-100)
-    pct_fields = {"ctr", "thumb_stop_rate", "view_3s", "view_6s", "hold_rate", "conversion_rate"}
+    pct_fields = {
+        "ctr",
+        "thumb_stop_rate",
+        "view_3s",
+        "view_6s",
+        "hold_rate",
+        "conversion_rate",
+    }
     for k in list(perf.keys()):
         if k in pct_fields and perf[k] is not None:
             if perf[k] < 0 or perf[k] > 100:
-                raise HTTPException(status_code=400, detail=f"{k} must be between 0 and 100.")
+                raise HTTPException(
+                    status_code=400, detail=f"{k} must be between 0 and 100."
+                )
 
     # Money validation
     spend = perf.get("spend")
@@ -4433,7 +4939,7 @@ async def update_creative_performance(
         raise HTTPException(status_code=400, detail="spend must be >= 0.")
     if revenue is not None and revenue < 0:
         raise HTTPException(status_code=400, detail="revenue must be >= 0.")
-    if cpm is not None and cpm < 0:  
+    if cpm is not None and cpm < 0:
         raise HTTPException(status_code=400, detail="cpm must be >= 0.")
 
     # Notes cleanup
@@ -4473,7 +4979,10 @@ async def _creative_insights_impl(
 
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(status_code=402, detail="Subscription inactive. Please subscribe to continue.")
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
         require_pro_or_business(tier)
 
     def fetch_jobs(col_name: str) -> List[dict]:
@@ -4513,13 +5022,12 @@ async def _creative_insights_impl(
     top_by_roas = _rank(items, "roas", desc=True)[:5]
     top_by_ctr = _rank(items, "ctr", desc=True)[:5]
     lowest_cpa = _rank_low(items, "cpa")[:5]
-    lowest_cpm = _rank_low(items, "cpm")[:5] 
+    lowest_cpm = _rank_low(items, "cpm")[:5]
 
     all_roas = [_safe_num((x.get("performance") or {}).get("roas")) for x in items]
     all_ctr = [_safe_num((x.get("performance") or {}).get("ctr")) for x in items]
     all_cpa = [_safe_num((x.get("performance") or {}).get("cpa")) for x in items]
     all_cpm = [_safe_num((x.get("performance") or {}).get("cpm")) for x in items]
-    
 
     summary = {
         "count_with_performance": len(items),
@@ -4534,7 +5042,9 @@ async def _creative_insights_impl(
 
     best_platform = _group_best(items, "platform", min_spend=min_spend)
     best_tone = _group_best(items, "tone", min_spend=min_spend)
-    best_style = _group_best([x for x in items if x["kind"] == "image"], "stylePreset", min_spend=min_spend)
+    best_style = _group_best(
+        [x for x in items if x["kind"] == "image"], "stylePreset", min_spend=min_spend
+    )
 
     ratio_groups = defaultdict(list)
     for it in items:
@@ -4548,16 +5058,45 @@ async def _creative_insights_impl(
 
     ratio_rows = []
     for ratio, arr in ratio_groups.items():
-        ratio_rows.append({
-            "value": ratio,
-            "count": len(arr),
-            "weighted_roas": _weighted_roas(arr),
-            "avg_ctr": _avg([_safe_num((x.get("performance") or {}).get("ctr")) for x in arr if _safe_num((x.get("performance") or {}).get("ctr")) is not None]),
-            "avg_cpa": _avg([_safe_num((x.get("performance") or {}).get("cpa")) for x in arr if _safe_num((x.get("performance") or {}).get("cpa")) is not None]),
-            "avg_cpm": _avg([_safe_num((x.get("performance") or {}).get("cpm")) for x in arr if _safe_num((x.get("performance") or {}).get("cpm")) is not None]),
-        })
-    ratio_rows.sort(key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18), reverse=True)
-    best_ratio = {"best": ratio_rows[0] if ratio_rows else None, "rows": ratio_rows[:10]}
+        ratio_rows.append(
+            {
+                "value": ratio,
+                "count": len(arr),
+                "weighted_roas": _weighted_roas(arr),
+                "avg_ctr": _avg(
+                    [
+                        _safe_num((x.get("performance") or {}).get("ctr"))
+                        for x in arr
+                        if _safe_num((x.get("performance") or {}).get("ctr"))
+                        is not None
+                    ]
+                ),
+                "avg_cpa": _avg(
+                    [
+                        _safe_num((x.get("performance") or {}).get("cpa"))
+                        for x in arr
+                        if _safe_num((x.get("performance") or {}).get("cpa"))
+                        is not None
+                    ]
+                ),
+                "avg_cpm": _avg(
+                    [
+                        _safe_num((x.get("performance") or {}).get("cpm"))
+                        for x in arr
+                        if _safe_num((x.get("performance") or {}).get("cpm"))
+                        is not None
+                    ]
+                ),
+            }
+        )
+    ratio_rows.sort(
+        key=lambda r: (r["weighted_roas"] if r["weighted_roas"] is not None else -1e18),
+        reverse=True,
+    )
+    best_ratio = {
+        "best": ratio_rows[0] if ratio_rows else None,
+        "rows": ratio_rows[:10],
+    }
 
     guidance_parts = []
     if best_platform.get("best") and best_platform["best"].get("value"):
@@ -4586,6 +5125,7 @@ async def _creative_insights_impl(
         "guidance": " • ".join(guidance_parts) if guidance_parts else "",
     }
 
+
 @app.get("/creative-insights")
 async def creative_insights(
     authorization: str | None = Header(default=None),
@@ -4594,6 +5134,7 @@ async def creative_insights(
 ):
     return await _creative_insights_impl(authorization, limit, min_spend)
 
+
 @app.get("/insights")
 async def insights(
     authorization: str | None = Header(default=None),
@@ -4601,6 +5142,7 @@ async def insights(
     min_spend: float = Query(0.0, ge=0.0),
 ):
     return await _creative_insights_impl(authorization, limit, min_spend)
+
 
 @app.get("/winners/profile")
 async def winners_profile(
@@ -4669,9 +5211,11 @@ async def winners_profile(
     }
 
 
-
 # ---------------- Stripe routes ----------------
 app.include_router(stripe_router)
+
+
+
 
 
 

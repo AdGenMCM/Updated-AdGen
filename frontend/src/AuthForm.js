@@ -15,6 +15,7 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ArrowRight, Check, Eye, EyeOff, Image, Video, Palette, BarChart3 } from "lucide-react";
+import { trackEvent } from "./analytics/tracking";
 
 const db = getFirestore();
 const googleProvider = new GoogleAuthProvider();
@@ -190,10 +191,10 @@ export default function AuthForm({ onLogin }) {
 
       if (isNewUser) {
         await createWelcomeNotification(user);
-      }
 
-      if (window.fbq && credential?._tokenResponse?.isNewUser) {
-        window.fbq("track", "CompleteRegistration");
+        trackEvent("signup_completed", {
+          method: "google",
+        });
       }
 
       await continueAfterAuthentication(user);
@@ -250,7 +251,9 @@ export default function AuthForm({ onLogin }) {
 
         await createWelcomeNotification(credential.user);
 
-        if (window.fbq) window.fbq("track", "CompleteRegistration");
+        trackEvent("signup_completed", {
+          method: "email",
+        });
 
         await sendEmailVerification(credential.user);
         showMessage(

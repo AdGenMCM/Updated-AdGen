@@ -7,6 +7,8 @@ import ProductCanvas from "../ProductCanvas";
 import ProductMomentCard from "../ProductMomentCard";
 import DashboardPreview from "../DashboardPreview";
 
+import { trackEvent } from "../../../analytics/tracking";
+
 export default function Hero() {
   return (
     <Section
@@ -39,7 +41,15 @@ export default function Hero() {
         </p>
 
         <div className="adgen-marketing-hero-actions">
-          <MarketingButton href="/subscribe" size="lg">
+          <MarketingButton
+            href="/subscribe"
+            size="lg"
+            onClick={() =>
+              trackEvent("start_free_click", {
+                location: "home_hero",
+              })
+            }
+          >
             Start Free
           </MarketingButton>
 

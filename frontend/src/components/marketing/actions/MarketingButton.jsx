@@ -14,14 +14,22 @@ export default function MarketingButton({
 
   if (href) {
     return (
-      <a className={classes} href={href}>
+      <a
+        className={classes}
+        href={href}
+        onClick={onClick}
+      >
         {children}
       </a>
     );
   }
 
   return (
-    <button className={classes} type={type} onClick={onClick}>
+    <button
+      className={classes}
+      type={type}
+      onClick={onClick}
+    >
       {children}
     </button>
   );

@@ -689,7 +689,7 @@ const markAllRead = async () => {
                   </Link>
 
                   <Link
-                    to="/brand-kit"
+                    to={isFreePlan ? "/subscribe?upgrade=1" : "/brand-kit"}
                     onClick={() => setAccountOpen(false)}
                     role="menuitem"
                   >
