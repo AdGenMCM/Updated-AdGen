@@ -32,6 +32,7 @@ import Optimizer from "./pages/Optimizer";
 //Admin Imports 
 import AdminRoute from "./AdminRoute";
 import AdminUsers from "./pages/AdminUsers";
+import AdminCreative from "./pages/AdminCreative";
 
 //App Styling 
 import DashboardRoute from "./components/DashboardRoute";
@@ -74,6 +75,7 @@ function ConditionalNavbar() {
     "/campaigns",
     "/account",
     "/admin/users",
+    "/admin/creative",
   ];
 
   const isDashboardRoute = dashboardRoutes.some((route) =>
@@ -136,6 +138,7 @@ export default function App() {
           <Route element={<AdminRoute />}>
             <Route element={<DashboardRoute />}>
               <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/creative" element={<AdminCreative />} />
               <Route path="/campaigns" element={<CampaignManager />} />
             </Route>
           </Route>
@@ -148,6 +151,7 @@ export default function App() {
     </>
   );
 }
+
 
 
 

@@ -4019,6 +4019,238 @@ def _reset_resource_usage(
     }
 
 
+
+
+# ---------------- Admin Creative Manager ----------------
+def _admin_creative_user(db, uid: str, cache: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if not uid:
+        return {
+            "uid": "",
+            "email": "",
+            "displayName": "Unknown user",
+            "tier": "unknown",
+            "status": "inactive",
+        }
+
+    if uid in cache:
+        return cache[uid]
+
+    profile = {}
+    try:
+        snap = db.collection("users").document(uid).get()
+        profile = snap.to_dict() or {} if snap.exists else {}
+    except Exception:
+        profile = {}
+
+    auth_user = None
+    try:
+        auth_user = admin_auth.get_user(uid)
+    except Exception:
+        auth_user = None
+
+    stripe_obj = profile.get("stripe") or {}
+    display_name = (
+        (profile.get("fullName") or "").strip()
+        or " ".join(
+            str(value).strip()
+            for value in [profile.get("firstName"), profile.get("lastName")]
+            if value
+        ).strip()
+        or ((getattr(auth_user, "display_name", None) or "").strip())
+        or "AdGen user"
+    )
+
+    email = (
+        (profile.get("email") or "").strip()
+        or ((getattr(auth_user, "email", None) or "").strip())
+    )
+
+    tier_value, helper_status = get_tier_and_status(profile)
+    tier = stripe_obj.get("tier") or profile.get("tier") or tier_value or "unknown"
+    subscription_status = (
+        stripe_obj.get("status")
+        or profile.get("subscriptionStatus")
+        or helper_status
+        or "inactive"
+    )
+
+    result = {
+        "uid": uid,
+        "email": email,
+        "displayName": display_name,
+        "tier": str(tier),
+        "status": str(subscription_status).lower(),
+    }
+    cache[uid] = result
+    return result
+
+
+def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict:
+    is_video = kind == "video"
+    media_url = (
+        _pick(data, ["finalVideoUrl", "videoUrl", "outputUrl"], default=None)
+        if is_video
+        else _pick(data, ["imageUrl"], default=None)
+    )
+    thumbnail_url = (
+        _pick(data, ["thumbnailUrl", "posterUrl"], default=None)
+        if is_video
+        else media_url
+    )
+
+    prompt = (
+        _pick(data, ["directorPrompt", "userPrompt", "promptText", "prompt"], default="")
+        if is_video
+        else _pick(data, ["visualPrompt", "prompt"], default="")
+    )
+
+    return {
+        "id": doc_id,
+        "kind": kind,
+        "uid": data.get("uid") or "",
+        "createdAt": _safe_int(data.get("createdAt"), 0),
+        "updatedAt": _safe_int(data.get("updatedAt"), 0),
+        "status": str(data.get("status") or "unknown").lower(),
+        "source": data.get("source") or data.get("sourceType") or None,
+        "productName": _pick(data, ["productName", "product_name"], default=None),
+        "url": media_url,
+        "thumbnailUrl": thumbnail_url,
+        "prompt": prompt or "",
+        "copy": data.get("copy") if isinstance(data.get("copy"), dict) else None,
+        "ratio": _pick(data, ["aspectRatio", "ratio"], default=None),
+        "duration": _safe_int(data.get("duration"), 0) if is_video else None,
+        "model": data.get("model") or None,
+        "fileSizeBytes": _safe_int(data.get("fileSizeBytes"), 0),
+        "error": data.get("error") or None,
+        "brandKitUsed": bool(data.get("brandKitUsed") or data.get("useBrandKit")),
+        "user": user,
+    }
+
+
+@app.get("/admin/creative")
+def admin_list_creative(
+    authorization: str | None = Header(default=None),
+    kind: str = Query(default="all"),
+    status: str = Query(default="all"),
+    q: str = Query(default=""),
+    days: int = Query(default=0, ge=0, le=3650),
+    limit: int = Query(default=48, ge=1, le=100),
+    cursor: int | None = Query(default=None),
+) -> dict[str, Any]:
+    """Return a read-only, admin-only view of generated image and video assets."""
+    _require_admin_request(authorization)
+    db = get_db()
+
+    kind_norm = (kind or "all").strip().lower()
+    status_norm = (status or "all").strip().lower()
+    search_norm = (q or "").strip().lower()
+
+    if kind_norm not in {"all", "image", "video"}:
+        raise HTTPException(status_code=400, detail="Invalid creative type.")
+
+    collections = []
+    if kind_norm in {"all", "image"}:
+        collections.append(("image", "image_jobs"))
+    if kind_norm in {"all", "video"}:
+        collections.append(("video", "video_jobs"))
+
+    start_timestamp = 0
+    if days > 0:
+        start_timestamp = int(time.time()) - (days * 86400)
+
+    # Fetch enough records to support cross-collection merge and light admin search.
+    per_collection_limit = min(300, max(limit * 3, 100 if search_norm else limit * 2))
+    raw_items: list[tuple[str, str, dict]] = []
+
+    for creative_kind, collection_name in collections:
+        query_ref = db.collection(collection_name).order_by(
+            "createdAt", direction=gc_firestore.Query.DESCENDING
+        )
+
+        if cursor is not None:
+            query_ref = query_ref.where("createdAt", "<", int(cursor))
+        if start_timestamp:
+            query_ref = query_ref.where("createdAt", ">=", start_timestamp)
+
+        query_ref = query_ref.limit(per_collection_limit)
+
+        try:
+            for snap in query_ref.stream():
+                data = snap.to_dict() or {}
+                item_status = str(data.get("status") or "unknown").lower()
+                if status_norm != "all" and item_status != status_norm:
+                    continue
+                raw_items.append((creative_kind, snap.id, data))
+        except Exception as exc:
+            print(
+                f"ADMIN CREATIVE QUERY ERROR collection={collection_name}:",
+                repr(exc),
+                flush=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not load {creative_kind} creative records.",
+            )
+
+    raw_items.sort(
+        key=lambda row: (_safe_int(row[2].get("createdAt"), 0), row[1]),
+        reverse=True,
+    )
+
+    user_cache: dict[str, dict[str, Any]] = {}
+    items = []
+
+    for creative_kind, doc_id, data in raw_items:
+        uid = str(data.get("uid") or "")
+        user = _admin_creative_user(db, uid, user_cache)
+        item = _admin_creative_item(creative_kind, doc_id, data, user)
+
+        if search_norm:
+            copy_obj = item.get("copy") or {}
+            haystack = " ".join(
+                str(value or "")
+                for value in [
+                    item.get("id"),
+                    item.get("uid"),
+                    item.get("kind"),
+                    item.get("status"),
+                    item.get("productName"),
+                    item.get("prompt"),
+                    item.get("model"),
+                    item.get("source"),
+                    user.get("email"),
+                    user.get("displayName"),
+                    copy_obj.get("headline"),
+                    copy_obj.get("primary_text"),
+                    copy_obj.get("cta"),
+                ]
+            ).lower()
+            if search_norm not in haystack:
+                continue
+
+        items.append(item)
+        if len(items) >= limit:
+            break
+
+    next_cursor = None
+    if len(items) == limit:
+        last_created_at = _safe_int(items[-1].get("createdAt"), 0)
+        if last_created_at > 0:
+            next_cursor = last_created_at
+
+    return {
+        "items": items,
+        "nextCursor": next_cursor,
+        "count": len(items),
+        "filters": {
+            "kind": kind_norm,
+            "status": status_norm,
+            "q": q or "",
+            "days": days,
+        },
+    }
+
+
 @app.get("/admin/users")
 def admin_list_users(
     authorization: str | None = Header(default=None),

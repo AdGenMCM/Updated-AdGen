@@ -50,6 +50,7 @@ import {
   X,
   Menu,
   CheckCheck,
+  Images,
 } from "lucide-react";
 
 import "../styles/dashboard-layout.css";
@@ -198,8 +199,13 @@ export default function DashboardLayout({ children }) {
               },
               {
                 to: "/admin/users",
-                label: "Admin",
+                label: "Admin Users",
                 icon: Settings,
+              },
+              {
+                to: "/admin/creative",
+                label: "Creative Manager",
+                icon: Images,
               },
             ]
           : []),

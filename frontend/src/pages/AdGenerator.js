@@ -517,7 +517,7 @@ function AdGenerator() {
   const editInCreativeStudio = () => {
     if (!result?.imageUrl) return;
 
-    navigate("/texteditor", {
+    navigate("/creative-studio", {
       state: {
         creativeStudio: {
           sourceType: "ad_generator",
