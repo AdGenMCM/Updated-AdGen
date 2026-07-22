@@ -304,7 +304,7 @@ const VISUAL_CEILINGS = {
     loading_brand_kit: 21,
     building_prompt: 31,
     submitting_to_runway: 47,
-    waiting_for_runway: 60,
+    waiting_for_runway: 67,
     processing_video: 77,
     generating_voiceover: 85,
     mixing_audio: 92,
@@ -434,7 +434,7 @@ export default function GenerationProgress({
     }
 
     const animationInterval =
-      type === "video" && stage === "waiting_for_runway" ? 5000 : 2400;
+      type === "video" && stage === "waiting_for_runway" ? 6500 : 2400;
 
     const timer = window.setInterval(() => {
       setDisplayPercent((current) => {
@@ -468,17 +468,15 @@ export default function GenerationProgress({
   let reassurance = null;
 
   if (isRunwayRendering) {
-    if (elapsedSeconds >= 120) {
+    if (elapsedSeconds >= 180) {
       reassurance =
         "Your video is still rendering normally. Complex scenes or high demand can increase generation time.";
     } else if (elapsedSeconds >= 60) {
       reassurance =
         "Your video is still actively generating. More detailed scenes may take a little longer.";
     } else {
-      const maxSeconds = expectedMaxSeconds || 180;
-      const maxMinutes = Math.max(1, Math.round(maxSeconds / 60));
-
-      reassurance = `High-quality video generation can take up to ${maxMinutes} minutes.`;
+      reassurance =
+        "High-quality video generation typically completes within 1–4 minutes.";
     }
   } else if (!failed && elapsedSeconds >= 45 && stage !== "succeeded") {
     reassurance =

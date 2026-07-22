@@ -1065,7 +1065,7 @@ return (
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
-                High-quality video generation can take up to 3 minutes.
+                High-quality video generation can take up to 4 minutes.
               </div>
             </>
           )}
@@ -1289,7 +1289,7 @@ return (
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
-                High-quality video generation can take up to 3 minutes.
+                High-quality video generation can take up to 4 minutes.
               </div>
             </>
           )}
