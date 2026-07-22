@@ -20,16 +20,31 @@ const RUNWAY_VOICES = [
 ];
 
 // ✅ One dropdown: Platform + Aspect Ratio
-// Backend expects ratio strings like "1080:1350"
 const FORMAT_OPTIONS = [
-  { id: "tiktok_9x16_720",  label: "TikTok / Reels / Shorts — 9:16 (720×1280)",   platform: "TikTok / Reels / Shorts",  ratio: "720:1280" },
-  { id: "tiktok_9x16_1080", label: "TikTok / Reels / Shorts — 9:16 (1080×1920)",  platform: "TikTok / Reels / Shorts",  ratio: "1080:1920" },
-
-  { id: "yt_16x9_720",      label: "YouTube — 16:9 (1280×720)",                   platform: "YouTube", ratio: "1280:720" },
-  { id: "yt_16x9_1080",     label: "YouTube — 16:9 (1920×1080)",                  platform: "YouTube", ratio: "1920:1080" },
-
-  { id: "meta_1x1",         label: "Meta Feed — 1:1 (1080×1080)",                 platform: "Meta Feed",    ratio: "1080:1080" },
-  { id: "meta_4x5",         label: "Meta Feed — 4:5 (1080×1350)",                 platform: "Meta Feed",    ratio: "1080:1350" },
+  {
+    id: "tiktok_9x16",
+    label: "TikTok / Reels / Shorts — Vertical (720×1280)",
+    platform: "TikTok / Reels / Shorts",
+    ratio: "720:1280",
+  },
+  {
+    id: "youtube_16x9",
+    label: "YouTube — Landscape (1280×720)",
+    platform: "YouTube",
+    ratio: "1280:720",
+  },
+  {
+    id: "meta_square",
+    label: "Meta Feed — Square (960×960)",
+    platform: "Meta Feed",
+    ratio: "960:960",
+  },
+  {
+    id: "meta_portrait",
+    label: "Meta Feed — Portrait (832×1104)",
+    platform: "Meta Feed",
+    ratio: "832:1104",
+  },
 ];
 
 // Handles: detail as string, detail as {message}, detail as nested objects, etc.
@@ -133,11 +148,11 @@ export default function VideoAds() {
     if (!brandKit) return {};
 
     const platformFormatMap = {
-      meta: "meta_4x5",
-      tiktok: "tiktok_9x16_720",
-      google: "yt_16x9_720",
-      linkedin: "meta_1x1",
-      pinterest: "tiktok_9x16_720",
+      meta: "meta_portrait",
+      tiktok: "tiktok_9x16",
+      google: "youtube_16x9",
+      linkedin: "meta_square",
+      pinterest: "tiktok_9x16",
     };
 
     const sceneStyleMap = {
@@ -681,11 +696,13 @@ return (
   <div className="videoAds">
     <GenerationProgress
       open={isGenerating}
+      type="video"
       stage={progressStage}
       message={progressMessage}
       percent={progressPercent}
       voiceoverEnabled={voiceEnabled && !!(voiceoverScript || "").trim()}
       failed={status === "failed"}
+      expectedMaxSeconds={180}
     />
 
     <div className="videoAdsHeader videoAdsHero">
@@ -1048,7 +1065,7 @@ return (
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
-                Typical time: ~30–90 seconds (can vary by demand).
+                High-quality video generation can take up to 3 minutes.
               </div>
             </>
           )}
@@ -1272,7 +1289,7 @@ return (
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
-                Typical time: ~30–90 seconds (can vary by demand).
+                High-quality video generation can take up to 3 minutes.
               </div>
             </>
           )}
