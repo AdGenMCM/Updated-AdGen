@@ -884,3 +884,711 @@
     animation-duration: 1.5s;
   }
 }
+
+/* Creative Studio Part 5 — canvas tools, layers, selection, groups */
+.csv4__workspace {
+  grid-template-columns: 82px 250px minmax(520px, 1fr) 310px;
+}
+
+.csv4-layer-row {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  cursor: default;
+}
+
+.csv4-layer-row.is-hidden {
+  opacity: 0.48;
+}
+
+.csv4-layer-row__content {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.csv4-layer-row__meta {
+  min-height: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.csv4-layer-row__meta small {
+  color: #7dd3fc;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.csv4-layer-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.csv4-layer-row__actions button {
+  width: 25px;
+  height: 25px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.csv4-layer-row__actions button:hover {
+  background: rgba(148, 163, 184, 0.13);
+  color: #fff;
+}
+
+.csv4-layer-row__rename {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(96, 165, 250, 0.72);
+  border-radius: 6px;
+  background: #0f172a;
+  color: #fff;
+  padding: 5px 7px;
+  font-size: 0.74rem;
+}
+
+.csv4-layers__hint {
+  margin: 4px 10px 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 9px;
+  color: #64748b;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.csv4-section-title {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.csv4-canvas-summary {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: #111827;
+  padding: 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.csv4-canvas-summary strong {
+  font-size: 0.78rem;
+}
+
+.csv4-canvas-summary span {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.csv4-locked-notice {
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  color: #fde68a;
+  padding: 10px 11px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.csv4-field input:disabled,
+.csv4-field textarea:disabled,
+.csv4-field select:disabled,
+.csv4-check-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.csv4-properties-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  opacity: 0.5;
+}
+
+.csv4-canvas-area {
+  position: relative;
+}
+
+.csv4-canvas-area.has-rulers {
+  padding-top: 24px;
+  padding-left: 24px;
+}
+
+.csv4-ruler {
+  position: absolute;
+  z-index: 5;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  background: rgba(13, 20, 34, 0.97);
+  color: #64748b;
+  pointer-events: none;
+}
+
+.csv4-ruler--horizontal {
+  top: 0;
+  left: 24px;
+  right: 0;
+  height: 24px;
+}
+
+.csv4-ruler--vertical {
+  top: 24px;
+  bottom: 0;
+  left: 0;
+  width: 24px;
+}
+
+.csv4-ruler span {
+  position: absolute;
+  font-size: 0.52rem;
+  font-weight: 700;
+}
+
+.csv4-ruler span i {
+  position: absolute;
+  display: block;
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.csv4-ruler--horizontal span {
+  top: 0;
+}
+
+.csv4-ruler--horizontal span i {
+  top: 14px;
+  width: 1px;
+  height: 9px;
+}
+
+.csv4-ruler--horizontal span b {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-weight: inherit;
+}
+
+.csv4-ruler--vertical span {
+  left: 0;
+}
+
+.csv4-ruler--vertical span i {
+  left: 14px;
+  width: 9px;
+  height: 1px;
+}
+
+.csv4-ruler--vertical span b {
+  position: absolute;
+  top: 3px;
+  left: 2px;
+  writing-mode: vertical-rl;
+  font-weight: inherit;
+}
+
+.csv4-canvas-frame.is-transparent {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+    linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+
+.csv4-canvas-topbar {
+  max-width: min(100%, 880px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 1320px) {
+  .csv4__workspace {
+    grid-template-columns: 76px 220px minmax(430px, 1fr);
+  }
+
+  .csv4-properties {
+    grid-column: 2 / -1;
+    border-left: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.13);
+  }
+}
+
+/* Part 6: typography controls */
+.csv4-typography-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.csv4-section-title {
+  margin-top: 2px;
+  color: #dbeafe;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.csv4-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  border-radius: 10px;
+  background: #111827;
+}
+
+.csv4-segmented button {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #94a3b8;
+  padding: 7px 4px;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.csv4-segmented button:hover:not(:disabled),
+.csv4-segmented button.is-active {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(37, 99, 235, 0.15);
+  color: #ffffff;
+}
+
+.csv4-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.csv4-effect-box {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+/* Part 7: image editing */
+.csv4-image-edit-section {
+  display: grid;
+  gap: 14px;
+}
+
+.csv4-image-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.csv4-properties-button--secondary {
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  background: #111827 !important;
+  color: #e2e8f0 !important;
+}
+
+.csv4-properties-button--secondary:hover:not(:disabled) {
+  border-color: rgba(96, 165, 250, 0.48) !important;
+  background: rgba(37, 99, 235, 0.12) !important;
+}
+
+.csv4-range-field > span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.csv4-range-field > span:first-child strong {
+  color: #dbeafe;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.csv4-range-field input[type="range"] {
+  width: 100%;
+  accent-color: #2563eb;
+}
+
+@media (max-width: 1180px) {
+  .csv4-image-edit-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Part 7.1 fixes: stable canvas layout and independently scrolling panels */
+@media (min-width: 1321px) {
+  .csv4__workspace {
+    height: calc(100vh - 148px);
+    min-height: 560px;
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .csv4-toolbar,
+  .csv4-panel,
+  .csv4__stage-shell {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .csv4-toolbar,
+  .csv4-panel {
+    overflow-y: auto;
+    overflow-x: visible;
+  }
+
+  .csv4__stage-shell {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .csv4-canvas-wrap {
+    flex: 1 0 auto;
+    min-height: max(500px, calc(100% - 58px));
+    align-content: center;
+  }
+}
+
+/* The rulers belong to the canvas dimensions and must not affect centering. */
+.csv4-canvas-area {
+  flex: 0 0 auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+
+/* Part 7.2: keep toolbar popovers interactive.
+   overflow-y:auto on the toolbar clipped absolutely positioned picker menus,
+   making Shapes, Ad Elements, and Images appear unresponsive. */
+@media (min-width: 1321px) {
+  .csv4-toolbar {
+    overflow: visible;
+  }
+
+  .csv4-toolbar__picker-wrap,
+  .csv4-shape-picker {
+    overflow: visible;
+  }
+
+  .csv4-shape-picker {
+    z-index: 100;
+  }
+}
+
+/* Part 7.3: Library image picker */
+.csv4-library-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.csv4-library-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(2, 6, 23, 0.78);
+  backdrop-filter: blur(8px);
+  cursor: default;
+}
+
+.csv4-library-modal__card {
+  position: relative;
+  width: min(1040px, 96vw);
+  max-height: min(820px, 90vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 20px;
+  background: #0f172a;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.48);
+}
+
+.csv4-library-modal__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.csv4-library-modal__header h2 {
+  margin: 4px 0 6px;
+  color: #f8fafc;
+  font-size: 1.4rem;
+}
+
+.csv4-library-modal__header p {
+  max-width: 700px;
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.csv4-library-modal__close {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.csv4-library-modal__controls {
+  display: flex;
+  gap: 12px;
+  padding: 16px 26px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.csv4-library-modal__controls label {
+  flex: 1;
+}
+
+.csv4-library-modal__controls input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: #111827;
+  color: #f8fafc;
+  padding: 0 14px;
+  outline: none;
+}
+
+.csv4-library-modal__controls input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
+.csv4-library-modal__body {
+  min-height: 320px;
+  overflow: auto;
+  padding: 20px 26px 28px;
+}
+
+.csv4-library-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.csv4-library-card {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: #111827;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.csv4-library-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.72);
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.42);
+}
+
+.csv4-library-card:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.csv4-library-card__preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background-color: #e5e7eb;
+  background-image:
+    linear-gradient(45deg, #cbd5e1 25%, transparent 25%),
+    linear-gradient(-45deg, #cbd5e1 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #cbd5e1 75%),
+    linear-gradient(-45deg, transparent 75%, #cbd5e1 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.csv4-library-card__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.csv4-library-card__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(2, 6, 23, 0.78);
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.csv4-library-card__content {
+  display: block;
+  padding: 12px 13px 14px;
+}
+
+.csv4-library-card__content strong,
+.csv4-library-card__content small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv4-library-card__content strong {
+  color: #e2e8f0;
+  font-size: 0.82rem;
+}
+
+.csv4-library-card__content small {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.csv4-library-modal__state {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.csv4-library-modal__state strong {
+  color: #e2e8f0;
+}
+
+.csv4-library-modal__state--error span {
+  max-width: 560px;
+  color: #fca5a5;
+}
+
+.csv4-image-edit-actions__wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .csv4-library-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .csv4-library-modal {
+    padding: 10px;
+  }
+
+  .csv4-library-modal__header,
+  .csv4-library-modal__controls,
+  .csv4-library-modal__body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .csv4-library-modal__controls {
+    flex-direction: column;
+  }
+
+  .csv4-library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.csv4-project-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.csv4-project-delete {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
+}
+
+.csv4-project-delete:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+
+.csv4-project-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+
+/* Part 8: Brand Kit and image placement */
+.csv4-brand-panel{position:fixed;right:24px;top:88px;bottom:24px;width:min(390px,calc(100vw - 48px));z-index:1400;background:#0f172a;border:1px solid rgba(148,163,184,.24);border-radius:18px;box-shadow:0 24px 70px rgba(2,6,23,.5);display:flex;flex-direction:column;overflow:hidden;color:#e5e7eb}
+.csv4-brand-panel__header{display:flex;align-items:flex-start;justify-content:space-between;padding:18px;border-bottom:1px solid rgba(148,163,184,.16)}
+.csv4-brand-panel__header>div{display:flex;flex-direction:column;gap:4px}.csv4-brand-panel__header span,.csv4-brand-panel__muted,.csv4-brand-panel__empty span{font-size:12px;color:#94a3b8}.csv4-brand-panel__header button{border:0;background:transparent;color:#cbd5e1;font-size:24px;cursor:pointer}
+.csv4-brand-panel__controls{display:grid;grid-template-columns:1fr auto;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(148,163,184,.12)}.csv4-brand-panel__controls label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#94a3b8}.csv4-brand-panel__controls select,.csv4-brand-panel__controls button{height:38px;border-radius:9px;border:1px solid rgba(148,163,184,.22);background:#111827;color:#f8fafc;padding:0 10px}.csv4-brand-panel__controls button{align-self:end;cursor:pointer}
+.csv4-brand-panel__body{overflow:auto;padding:4px 18px 22px}.csv4-brand-panel__body section{padding:16px 0;border-bottom:1px solid rgba(148,163,184,.12)}.csv4-brand-panel__section-title{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}.csv4-brand-panel__section-title span{font-size:11px;color:#94a3b8}.csv4-brand-panel__error{margin:12px 18px 0;padding:10px;border-radius:9px;background:rgba(239,68,68,.12);color:#fecaca;font-size:12px}.csv4-brand-panel__empty{padding:28px 18px;display:flex;flex-direction:column;gap:5px;text-align:center}
+.csv4-brand-logo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.csv4-brand-logo-grid button{display:flex;flex-direction:column;gap:5px;text-align:left;padding:9px;border-radius:11px;border:1px solid rgba(148,163,184,.18);background:#111827;color:#e5e7eb;cursor:pointer}.csv4-brand-logo-grid__preview{height:82px;border-radius:8px;background-color:#fff;background-image:linear-gradient(45deg,#e5e7eb 25%,transparent 25%),linear-gradient(-45deg,#e5e7eb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e7eb 75%),linear-gradient(-45deg,transparent 75%,#e5e7eb 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;display:flex;align-items:center;justify-content:center;overflow:hidden}.csv4-brand-logo-grid img{max-width:88%;max-height:72px;object-fit:contain}.csv4-brand-logo-grid small,.csv4-brand-font-list small{color:#60a5fa}
+.csv4-brand-color-list{display:flex;flex-direction:column;gap:8px}.csv4-brand-color-row{display:grid;grid-template-columns:34px 1fr auto auto;gap:8px;align-items:center}.csv4-brand-color-swatch{width:34px;height:34px;border-radius:9px;border:2px solid rgba(255,255,255,.5);cursor:pointer}.csv4-brand-color-row>div{display:flex;flex-direction:column}.csv4-brand-color-row>div span{font-size:10px;color:#94a3b8}.csv4-brand-color-row>button:not(.csv4-brand-color-swatch){height:30px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:#111827;color:#dbeafe;font-size:10px;cursor:pointer}
+.csv4-brand-font-list{display:flex;flex-direction:column;gap:8px}.csv4-brand-font-list button{display:grid;grid-template-columns:70px 1fr;gap:3px 10px;text-align:left;padding:10px;border-radius:10px;border:1px solid rgba(148,163,184,.18);background:#111827;color:#e5e7eb;cursor:pointer}.csv4-brand-font-list button>span{font-size:10px;color:#94a3b8;text-transform:uppercase}.csv4-brand-font-list button>strong{font-size:15px}.csv4-brand-font-list button>small{grid-column:2}.csv4-brand-font-list button:disabled{opacity:.5;cursor:not-allowed}
+.csv4-placement-backdrop{position:fixed;inset:0;z-index:1700;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:20px}.csv4-placement-modal{width:min(620px,100%);background:#0f172a;color:#e5e7eb;border:1px solid rgba(148,163,184,.24);border-radius:18px;box-shadow:0 28px 90px rgba(0,0,0,.55);overflow:hidden}.csv4-placement-modal__header{display:flex;justify-content:space-between;align-items:flex-start;padding:18px;border-bottom:1px solid rgba(148,163,184,.15)}.csv4-placement-modal__header>div{display:flex;flex-direction:column;gap:4px}.csv4-placement-modal__header span{font-size:12px;color:#94a3b8}.csv4-placement-modal__header button{border:0;background:transparent;color:#cbd5e1;font-size:24px;cursor:pointer}.csv4-placement-modal__preview{height:220px;padding:16px;display:flex;align-items:center;justify-content:center;background-color:#f8fafc;background-image:linear-gradient(45deg,#e5e7eb 25%,transparent 25%),linear-gradient(-45deg,#e5e7eb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e7eb 75%),linear-gradient(-45deg,transparent 75%,#e5e7eb 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.csv4-placement-modal__preview img{max-width:100%;max-height:100%;object-fit:contain}.csv4-placement-modal__choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:18px}.csv4-placement-modal__choices button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px;text-align:left;border-radius:12px;border:1px solid rgba(96,165,250,.28);background:#111827;color:#e5e7eb;cursor:pointer}.csv4-placement-modal__choices button:hover{border-color:#60a5fa;background:#172033}.csv4-placement-modal__choices small{color:#94a3b8;line-height:1.45}.csv4-placement-modal__icon{font-size:24px;color:#60a5fa}
+@media(max-width:720px){.csv4-brand-panel{right:12px;left:12px;top:74px;bottom:12px;width:auto}.csv4-placement-modal__choices{grid-template-columns:1fr}.csv4-brand-color-row{grid-template-columns:34px 1fr}.csv4-brand-color-row>button:not(.csv4-brand-color-swatch){grid-column:auto}}
+
+/* Parts 9 & 10: template-first projects and export */
+.csv4-project-backdrop{position:fixed;inset:0;z-index:2200;background:rgba(2,6,23,.82);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:22px}
+.csv4-project-modal{width:min(1120px,100%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(148,163,184,.2);border-radius:22px;background:#0b1220;color:#e5e7eb;box-shadow:0 34px 110px rgba(0,0,0,.62)}
+.csv4-project-modal__header{display:flex;justify-content:space-between;gap:20px;padding:24px 28px 18px;border-bottom:1px solid rgba(148,163,184,.14)}
+.csv4-project-modal__header span,.csv4-export-modal header span{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#60a5fa}
+.csv4-project-modal__header h2,.csv4-export-modal h2{margin:6px 0 6px;color:#f8fafc;font-size:1.65rem}.csv4-project-modal__header p,.csv4-export-modal p{margin:0;color:#94a3b8}
+.csv4-project-modal__header>button,.csv4-export-modal header>button{width:40px;height:40px;border:1px solid rgba(148,163,184,.2);border-radius:11px;background:#111827;color:#cbd5e1;font-size:24px;cursor:pointer}
+.csv4-template-tabs{display:flex;gap:8px;overflow:auto;padding:14px 28px;border-bottom:1px solid rgba(148,163,184,.12)}.csv4-template-tabs button{white-space:nowrap;border:1px solid rgba(148,163,184,.18);border-radius:999px;background:#111827;color:#94a3b8;padding:8px 13px;cursor:pointer}.csv4-template-tabs button.is-active{border-color:#3b82f6;background:rgba(37,99,235,.18);color:#dbeafe}
+.csv4-custom-project{display:flex;align-items:end;gap:10px;padding:14px 28px;background:rgba(15,23,42,.72);border-bottom:1px solid rgba(148,163,184,.12)}.csv4-custom-project label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#94a3b8}.csv4-custom-project input{width:130px;height:38px;border:1px solid rgba(148,163,184,.22);border-radius:9px;background:#111827;color:#fff;padding:0 10px}.csv4-custom-project>button{height:38px;border:0;border-radius:9px;background:#2563eb;color:#fff;padding:0 16px;font-weight:700;cursor:pointer}.csv4-custom-project>span{padding-bottom:10px;color:#64748b}
+.csv4-template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;overflow:auto;padding:22px 28px 28px}.csv4-template-card{padding:0;overflow:hidden;border:1px solid rgba(148,163,184,.16);border-radius:15px;background:#111827;color:inherit;text-align:left;cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}.csv4-template-card:hover,.csv4-template-card.is-selected{transform:translateY(-2px);border-color:#3b82f6;box-shadow:0 16px 36px rgba(2,6,23,.38)}
+.csv4-template-card__preview{height:155px;display:grid;place-items:center;padding:17px;background-image:linear-gradient(135deg,rgba(255,255,255,.07),transparent)}.csv4-template-card__preview>span{width:auto;max-width:88%;height:100%;max-height:120px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.06);box-shadow:0 8px 24px rgba(0,0,0,.18)}.csv4-template-card__preview b{padding:8px;color:#fff;font-size:12px;text-align:center}
+.csv4-template-card__content{display:flex;flex-direction:column;gap:5px;padding:13px 14px 15px}.csv4-template-card__content strong{color:#f8fafc}.csv4-template-card__content small{color:#60a5fa}.csv4-template-card__content em{min-height:34px;color:#94a3b8;font-size:12px;font-style:normal;line-height:1.4}
+.csv4-project-modal__footer{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 28px;border-top:1px solid rgba(148,163,184,.14);background:#0f172a}.csv4-project-modal__footer>div{display:flex;flex-direction:column;gap:3px}.csv4-project-modal__footer span{color:#94a3b8;font-size:12px}
+.csv4-export-modal{width:min(540px,100%);overflow:hidden;border:1px solid rgba(148,163,184,.2);border-radius:20px;background:#0b1220;color:#e5e7eb;box-shadow:0 34px 110px rgba(0,0,0,.62)}.csv4-export-modal header{display:flex;justify-content:space-between;gap:20px;padding:22px 24px;border-bottom:1px solid rgba(148,163,184,.14)}.csv4-export-modal__body{display:flex;flex-direction:column;gap:17px;padding:22px 24px}.csv4-export-modal__body label{display:flex;flex-direction:column;gap:7px;color:#cbd5e1;font-size:12px}.csv4-export-modal__body select{height:42px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:#111827;color:#fff;padding:0 11px}.csv4-export-modal__body input[type=range]{width:100%}.csv4-export-summary{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px solid rgba(96,165,250,.2);border-radius:11px;background:rgba(37,99,235,.08)}.csv4-export-summary span,.csv4-export-summary small{color:#94a3b8;font-size:11px}.csv4-export-summary strong{color:#dbeafe}.csv4-export-modal footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid rgba(148,163,184,.14)}
+@media(max-width:800px){.csv4-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.csv4-project-modal__header,.csv4-template-tabs,.csv4-template-grid,.csv4-project-modal__footer{padding-left:16px;padding-right:16px}.csv4-custom-project{padding-left:16px;padding-right:16px;flex-wrap:wrap}}
+@media(max-width:520px){.csv4-template-grid{grid-template-columns:1fr}.csv4-project-modal__footer{align-items:flex-start;flex-direction:column}.csv4-project-modal__footer button{width:100%}}
+
+/* Parts 9–10 revised: projects-first workflow */
+.csv4-projects-home,.csv4-template-page{min-height:100vh;padding:36px;overflow:auto;background:#070b14;color:#e5edf9}.csv4-projects-hero,.csv4-template-page__header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;max-width:1440px;margin:0 auto 28px}.csv4-projects-hero h1,.csv4-template-page h1{margin:6px 0 8px;font-size:38px}.csv4-projects-hero p,.csv4-template-page p{margin:0;color:#94a3b8}.csv4-projects-toolbar{max-width:1440px;margin:0 auto 22px;display:flex;gap:12px}.csv4-projects-toolbar input{flex:1;max-width:480px;background:#101827;border:1px solid #28364c;border-radius:10px;color:#fff;padding:12px 14px}.csv4-project-card-grid{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:20px}.csv4-project-card,.csv4-project-create-card{background:#0f1726;border:1px solid #25334a;border-radius:16px;overflow:hidden;min-height:270px}.csv4-project-create-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:#dbeafe;cursor:pointer;padding:24px}.csv4-project-create-card span{font-size:42px;color:#60a5fa}.csv4-project-create-card small{color:#8da0ba;text-align:center}.csv4-project-card__preview{width:100%;height:190px;border:0;background:repeating-conic-gradient(#202b3b 0 25%,#182231 0 50%) 50%/20px 20px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:14px}.csv4-project-card__preview img{max-width:100%;max-height:100%;object-fit:contain}.csv4-project-card__preview span{max-width:100%;max-height:100%;background:#1e293b;color:#94a3b8;display:grid;place-items:center;padding:15px}.csv4-project-card__meta{display:flex;justify-content:space-between;gap:12px;padding:14px}.csv4-project-card__meta div{display:flex;flex-direction:column;gap:3px;min-width:0}.csv4-project-card__meta strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.csv4-project-card__meta span,.csv4-project-card__meta small{color:#8da0ba;font-size:12px}.csv4-project-card__meta button{align-self:center;border:1px solid #365079;background:#17243a;color:#dbeafe;border-radius:8px;padding:8px 12px;cursor:pointer}.csv4-project-empty{max-width:900px;margin:80px auto;text-align:center;background:#0f1726;border:1px solid #25334a;border-radius:18px;padding:50px;color:#94a3b8}.csv4-project-empty h2{color:#fff}.csv4-back-link{display:block;border:0;background:none;color:#60a5fa;padding:0;margin-bottom:20px;cursor:pointer}.csv4-template-layout{max-width:1440px;margin:0 auto 90px;display:grid;grid-template-columns:210px 1fr;gap:24px}.csv4-template-sidebar{background:#0f1726;border:1px solid #25334a;border-radius:16px;padding:18px;align-self:start;position:sticky;top:20px}.csv4-template-sidebar h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#8da0ba;margin:14px 0 8px}.csv4-template-sidebar>button:not(.csv4-header-button){display:block;width:100%;text-align:left;border:0;background:transparent;color:#cbd5e1;padding:9px 10px;border-radius:8px;cursor:pointer}.csv4-template-sidebar>button.is-active{background:#1d4ed8;color:#fff}.csv4-custom-size{display:flex;align-items:center;gap:6px;margin-bottom:10px}.csv4-custom-size input{width:76px;background:#101827;border:1px solid #334155;border-radius:7px;color:#fff;padding:8px}.csv4-template-main{min-width:0}.csv4-theme-row{display:flex;justify-content:space-between;gap:20px;align-items:center;background:#0f1726;border:1px solid #25334a;border-radius:16px;padding:16px 18px;margin-bottom:20px}.csv4-theme-row>div:first-child{display:flex;flex-direction:column}.csv4-theme-row span{color:#8da0ba;font-size:13px}.csv4-theme-row>div:last-child{display:flex;gap:8px;flex-wrap:wrap}.csv4-theme-row button{display:flex;align-items:center;gap:3px;border:1px solid #334155;background:#101827;color:#cbd5e1;border-radius:10px;padding:7px 9px;cursor:pointer}.csv4-theme-row button.is-active{outline:2px solid #3b82f6}.csv4-theme-row i{width:15px;height:15px;border-radius:50%;display:block}.csv4-theme-row b{font-size:11px;margin-left:4px}.csv4-template-grid--page{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}.csv4-template-card__preview>span{position:relative;overflow:hidden}.csv4-template-card__preview em{position:absolute;width:45%;height:10%;border-radius:999px;bottom:15%;left:12%}.csv4-template-sticky-footer{position:fixed;left:0;right:0;bottom:0;background:rgba(7,11,20,.96);border-top:1px solid #26354c;padding:14px 36px;display:flex;justify-content:flex-end;align-items:center;gap:25px;z-index:40}.csv4-template-sticky-footer div{display:flex;flex-direction:column;text-align:right}.csv4-template-sticky-footer span{color:#8da0ba;font-size:12px}@media(max-width:850px){.csv4-projects-home,.csv4-template-page{padding:22px}.csv4-projects-hero{align-items:flex-start;flex-direction:column}.csv4-template-layout{grid-template-columns:1fr}.csv4-template-sidebar{position:static}.csv4-theme-row{align-items:flex-start;flex-direction:column}.csv4-template-sticky-footer{padding:12px 20px}}
+
+/* Creative Studio V2 project wizard */
+.csv4-wizard-page{min-height:100vh;padding:34px 44px 92px;background:#080d17;color:#e8eef9;overflow:auto}.csv4-wizard-header{max-width:1440px;margin:0 auto 24px}.csv4-wizard-header h1{margin:8px 0 8px;font-size:34px}.csv4-wizard-header p{margin:0;color:#9aa8bd;max-width:760px}.csv4-wizard-steps{max-width:1440px;margin:0 auto 24px;display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #223047;border-radius:16px;overflow:hidden;background:#0c1422}.csv4-wizard-steps button{border:0;border-right:1px solid #223047;background:transparent;color:#8290a5;padding:14px 16px;display:flex;align-items:center;gap:10px;justify-content:center}.csv4-wizard-steps button:last-child{border-right:0}.csv4-wizard-steps button span{display:grid;place-items:center;width:25px;height:25px;border-radius:999px;background:#172235;font-size:12px}.csv4-wizard-steps button.is-active{background:#111d30;color:#fff}.csv4-wizard-steps button.is-active span{background:#4f46e5}.csv4-wizard-steps button.is-complete{color:#b9c8dc}.csv4-wizard-steps button.is-complete span{background:#0d8b69;color:#fff}.csv4-wizard-body{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:26px;align-items:start}.csv4-wizard-options{min-height:600px;border:1px solid #223047;border-radius:18px;background:#0c1422;padding:26px}.csv4-wizard-copy h2{margin:0 0 8px;font-size:25px}.csv4-wizard-copy p{margin:0 0 24px;color:#95a4b9}.csv4-choice-grid{display:grid;gap:14px}.csv4-choice-grid button{min-width:0;text-align:left;border:1px solid #26364e;border-radius:14px;background:#101a2a;color:#e9eff9;padding:14px;transition:.16s ease}.csv4-choice-grid button:hover{border-color:#526b93;transform:translateY(-1px)}.csv4-choice-grid button.is-selected{border-color:#6d67ff;box-shadow:0 0 0 2px rgba(109,103,255,.2);background:#141e33}.csv4-choice-grid button strong,.csv4-choice-grid button small,.csv4-choice-grid button em{display:block}.csv4-choice-grid button small{color:#8fa0b8;margin-top:4px}.csv4-choice-grid button em{font-style:normal;color:#7e8da4;margin-top:7px;font-size:12px;line-height:1.35}.csv4-choice-grid--formats{grid-template-columns:repeat(4,minmax(0,1fr))}.csv4-format-icon{display:block;width:54px;max-height:54px;min-height:24px;border:2px solid #6c83a9;border-radius:5px;margin-bottom:14px;background:#172337}.csv4-choice-grid--layouts,.csv4-choice-grid--styles,.csv4-choice-grid--backgrounds{grid-template-columns:repeat(4,minmax(0,1fr))}.csv4-layout-thumb,.csv4-style-swatch,.csv4-background-thumb{height:112px;border-radius:10px;display:block;position:relative;overflow:hidden;margin-bottom:12px;background:#172337}.csv4-layout-thumb i{position:absolute;display:block;background:#6b7f9f;border-radius:5px}.csv4-layout-thumb i:nth-child(1){left:10%;top:15%;width:52%;height:16%}.csv4-layout-thumb i:nth-child(2){left:10%;top:40%;width:80%;height:38%;opacity:.45}.csv4-layout-thumb i:nth-child(3){left:10%;bottom:10%;width:30%;height:10%;background:#6d67ff}.csv4-layout-thumb--split i:nth-child(1){left:0;top:0;width:47%;height:100%;border-radius:0}.csv4-layout-thumb--split i:nth-child(2){left:55%;top:20%;width:35%;height:24%}.csv4-layout-thumb--split i:nth-child(3){left:55%;bottom:18%;width:24%;height:12%}.csv4-layout-thumb--offer i:nth-child(1){left:20%;top:14%;width:60%;height:28%}.csv4-layout-thumb--offer i:nth-child(2){left:28%;top:50%;width:44%;height:10%}.csv4-layout-thumb--offer i:nth-child(3){left:35%;bottom:14%;width:30%;height:13%}.csv4-style-swatch i{position:absolute;inset:14px;border-radius:10px}.csv4-style-swatch b{position:absolute;right:18px;bottom:18px;width:36px;height:12px;border-radius:999px}.csv4-style-swatch em{position:absolute;left:26px;top:28px;font-style:normal;font-size:24px;font-weight:800}.csv4-background-thumb{background:var(--bg)}.csv4-background-thumb i,.csv4-background-thumb b,.csv4-background-thumb em{position:absolute;display:block}.csv4-background-thumb--split i{right:0;top:0;width:48%;height:100%;background:var(--surface)}.csv4-background-thumb--glow i{right:-12%;top:-30%;width:72%;height:90%;border-radius:50%;background:var(--accent);opacity:.45}.csv4-background-thumb--glow b{left:-12%;bottom:-38%;width:60%;height:78%;border-radius:50%;background:var(--surface)}.csv4-background-thumb--geometric i{right:-5%;top:-20%;width:46%;height:76%;background:var(--accent);transform:rotate(13deg)}.csv4-background-thumb--geometric b{left:-12%;bottom:-22%;width:55%;height:48%;background:var(--surface);transform:rotate(-9deg)}.csv4-background-thumb--waves i{right:-15%;top:-30%;width:85%;height:110%;border-radius:50%;background:var(--surface)}.csv4-background-thumb--waves b{right:5%;top:15%;width:38%;height:48%;border-radius:50%;background:var(--accent);opacity:.55}.csv4-background-thumb--framed i{inset:10%;border-radius:12px;background:var(--surface)}.csv4-background-thumb--transparent{background-image:linear-gradient(45deg,#172235 25%,transparent 25%),linear-gradient(-45deg,#172235 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#172235 75%),linear-gradient(-45deg,transparent 75%,#172235 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}.csv4-wizard-preview-panel{position:sticky;top:24px;border:1px solid #223047;border-radius:18px;background:#0c1422;padding:20px}.csv4-wizard-preview{height:380px;border-radius:13px;background:#111b2b;display:grid;place-items:center;padding:20px;overflow:hidden}.csv4-wizard-preview.is-transparent{background-image:linear-gradient(45deg,#192437 25%,transparent 25%),linear-gradient(-45deg,#192437 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#192437 75%),linear-gradient(-45deg,transparent 75%,#192437 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.csv4-wizard-preview__canvas{width:100%;max-height:340px;position:relative;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.35)}.csv4-wizard-preview__canvas b{position:absolute;left:9%;top:24%;width:72%;font-size:clamp(12px,2vw,22px);line-height:1.06}.csv4-wizard-preview__canvas em{position:absolute;left:9%;top:50%;font-style:normal;font-size:10px}.csv4-wizard-preview__canvas>i{position:absolute;left:9%;bottom:12%;font-style:normal;font-size:8px;font-weight:800;color:white;border-radius:7px;padding:7px 10px}.csv4-wizard-preview__surface,.csv4-wizard-preview__accent{position:absolute;display:none}.csv4-wizard-preview__canvas--split .csv4-wizard-preview__surface{display:block;right:0;top:0;width:48%;height:100%}.csv4-wizard-preview__canvas--glow .csv4-wizard-preview__accent{display:block;right:-15%;top:-35%;width:75%;height:100%;border-radius:50%;opacity:.4}.csv4-wizard-preview__canvas--geometric .csv4-wizard-preview__accent{display:block;right:-10%;top:-20%;width:48%;height:75%;transform:rotate(13deg)}.csv4-wizard-preview__canvas--waves .csv4-wizard-preview__surface{display:block;right:-18%;top:-25%;width:84%;height:105%;border-radius:50%}.csv4-wizard-preview__canvas--framed .csv4-wizard-preview__surface{display:block;inset:7%;border-radius:16px}.csv4-wizard-preview-panel>strong,.csv4-wizard-preview-panel>span{display:block;margin-top:13px}.csv4-wizard-preview-panel>span{color:#8fa0b8;font-size:13px;margin-top:4px}.csv4-wizard-footer{position:fixed;left:0;right:0;bottom:0;height:72px;border-top:1px solid #223047;background:rgba(8,13,23,.96);backdrop-filter:blur(18px);display:flex;align-items:center;justify-content:space-between;padding:0 44px;z-index:20}.csv4-wizard-footer>div{display:flex;align-items:center;gap:16px}.csv4-wizard-footer span{color:#8797ad;font-size:13px}.csv4-wizard-custom{display:flex;align-items:flex-end;gap:12px;margin-top:20px;padding:18px;border:1px solid #26364e;border-radius:14px;background:#101a2a;width:max-content}.csv4-wizard-custom label{display:grid;gap:7px;color:#9dadc2;font-size:12px}.csv4-wizard-custom input,.csv4-wizard-name-step input{border:1px solid #31435e;background:#0b1320;color:#fff;border-radius:10px;padding:12px}.csv4-wizard-name-step{max-width:760px;margin:60px auto}.csv4-wizard-name-step>label{display:grid;gap:10px;font-size:13px;color:#9cacbf}.csv4-wizard-name-step>label input{font-size:20px;padding:16px}.csv4-wizard-summary{margin-top:24px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.csv4-wizard-summary span{background:#111d30;border:1px solid #26364e;border-radius:10px;padding:13px;color:#c9d4e4}.csv4-wizard-summary b{display:block;color:#8191a8;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+@media(max-width:1100px){.csv4-wizard-body{grid-template-columns:1fr}.csv4-wizard-preview-panel{position:relative;top:auto}.csv4-choice-grid--formats,.csv4-choice-grid--layouts,.csv4-choice-grid--styles,.csv4-choice-grid--backgrounds{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.csv4-wizard-page{padding:22px 16px 92px}.csv4-wizard-steps button b{display:none}.csv4-wizard-options{padding:18px}.csv4-choice-grid--formats,.csv4-choice-grid--layouts,.csv4-choice-grid--styles,.csv4-choice-grid--backgrounds{grid-template-columns:1fr}.csv4-wizard-footer{padding:0 16px}}

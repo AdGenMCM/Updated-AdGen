@@ -1205,3 +1205,149 @@
     transition: none;
   }
 }
+
+
+/* ======================================================
+   FULL-CARD SUBSCRIBE SELECTION + HOVER LIFT
+====================================================== */
+
+.subscribe-v2-card {
+  cursor: pointer;
+  outline: none;
+}
+
+.subscribe-v2-card:hover {
+  transform: translateY(-7px);
+}
+
+.subscribe-v2-card.featured:hover {
+  transform: translateY(-14px);
+}
+
+.subscribe-v2-card.selected:hover {
+  transform: translateY(-10px) scale(1.018);
+}
+
+.subscribe-v2-card:focus-visible {
+  border-color: rgba(79, 70, 229, 0.72);
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.18),
+    0 20px 42px rgba(15, 23, 42, 0.08),
+    0 42px 96px rgba(79, 70, 229, 0.14);
+}
+
+.subscribe-v2-card-select {
+  pointer-events: none;
+  user-select: none;
+}
+
+.subscribe-v2-card.is-disabled {
+  cursor: not-allowed;
+}
+
+.subscribe-v2-card.is-disabled:hover {
+  transform: none;
+}
+
+.subscribe-v2-card.is-disabled.featured,
+.subscribe-v2-card.is-disabled.featured:hover {
+  transform: translateY(-8px);
+}
+
+.subscribe-v2-card.is-disabled.selected,
+.subscribe-v2-card.is-disabled.selected:hover {
+  transform: translateY(-6px) scale(1.018);
+}
+
+@media (max-width: 759px) {
+  .subscribe-v2-card:hover,
+  .subscribe-v2-card.featured:hover,
+  .subscribe-v2-card.selected:hover,
+  .subscribe-v2-card.is-disabled.featured,
+  .subscribe-v2-card.is-disabled.featured:hover,
+  .subscribe-v2-card.is-disabled.selected,
+  .subscribe-v2-card.is-disabled.selected:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscribe-v2-card:focus-visible {
+    transition: none;
+  }
+}
+
+
+/* ======================================================
+   SUBSCRIBE V3.3 — MOBILE STICKY OFFSET + STRONGER HOVER
+====================================================== */
+
+/* Keep the selected-plan summary fully below the public mobile navbar. */
+@media (max-width: 759px) {
+  .subscribe-v3-summary,
+  .subscribe-v3-summary.is-docked {
+    top: 88px;
+    max-height: calc(100dvh - 104px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Make desktop plan-card interactivity more noticeable. */
+@media (hover: hover) and (pointer: fine) {
+  .subscribe-v2-card:hover {
+    transform: translateY(-10px) scale(1.008);
+    border-color: rgba(79, 70, 229, 0.4);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(238, 242, 255, 0.42),
+        rgba(255, 255, 255, 0.98) 30%
+      ),
+      #ffffff;
+    box-shadow:
+      0 24px 52px rgba(15, 23, 42, 0.11),
+      0 54px 118px rgba(79, 70, 229, 0.2);
+  }
+
+  .subscribe-v2-card:hover .subscribe-v2-card-glow {
+    opacity: 1;
+  }
+
+  .subscribe-v2-card.featured:hover {
+    transform: translateY(-16px) scale(1.008);
+  }
+
+  .subscribe-v2-card.selected:hover {
+    transform: translateY(-12px) scale(1.022);
+    border-color: rgba(79, 70, 229, 0.78);
+    box-shadow:
+      0 26px 56px rgba(15, 23, 42, 0.12),
+      0 60px 128px rgba(79, 70, 229, 0.3);
+  }
+
+  .subscribe-v2-card.is-disabled:hover {
+    transform: none;
+    border-color: rgba(15, 23, 42, 0.09);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow:
+      0 12px 30px rgba(15, 23, 42, 0.06),
+      0 30px 70px rgba(15, 23, 42, 0.07);
+  }
+
+  .subscribe-v2-card.is-disabled.featured:hover {
+    transform: translateY(-8px);
+  }
+
+  .subscribe-v2-card.is-disabled.selected:hover {
+    transform: translateY(-6px) scale(1.018);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscribe-v2-card:hover,
+  .subscribe-v2-card.featured:hover,
+  .subscribe-v2-card.selected:hover {
+    transform: none;
+  }
+}

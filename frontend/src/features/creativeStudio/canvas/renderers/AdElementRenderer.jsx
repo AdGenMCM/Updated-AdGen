@@ -1,21 +1,20 @@
 import React from "react";
 import { Circle, Line, Rect, Star, Text } from "react-konva";
+import { getTypographyProps, transformText } from "../typography";
 
 function centeredTextProps(layer, overrides = {}) {
-  return {
+  return getTypographyProps(layer, {
     x: 0,
     y: 0,
     width: layer.width,
     height: layer.height,
-    align: "center",
+    align: layer.align || "center",
     verticalAlign: "middle",
-    fontFamily: "Inter, Arial, sans-serif",
-    fontStyle: "bold",
     fill: layer.textColor || layer.fill || "#111827",
     fontSize: layer.fontSize || 36,
     listening: false,
     ...overrides,
-  };
+  });
 }
 
 function RatingStars({ layer }) {
@@ -53,7 +52,7 @@ function RatingStars({ layer }) {
           y={0}
           width={textArea}
           height={layer.height}
-          text={layer.text || String(layer.rating || 5)}
+          text={transformText(layer.text || String(layer.rating || 5), layer.textTransform)}
           align="center"
           verticalAlign="middle"
           fontFamily="Inter, Arial, sans-serif"
@@ -61,6 +60,7 @@ function RatingStars({ layer }) {
           fontSize={layer.fontSize || 34}
           fill={layer.textColor || "#111827"}
           listening={false}
+          {...getTypographyProps(layer)}
         />
       )}
     </>
@@ -83,7 +83,7 @@ export default function AdElementRenderer({ layer }) {
             shadowOpacity={layer.shadowOpacity ?? 0.2}
             shadowOffsetY={8}
           />
-          <Text {...centeredTextProps(layer)} text={layer.text || "SHOP NOW"} />
+          <Text {...centeredTextProps(layer)} text={transformText(layer.text || "SHOP NOW", layer.textTransform)} />
         </>
       );
 
@@ -103,7 +103,7 @@ export default function AdElementRenderer({ layer }) {
               padding: layer.width * 0.16,
               lineHeight: 0.9,
             })}
-            text={layer.text || "50%\nOFF"}
+            text={transformText(layer.text || "50%\nOFF", layer.textTransform)}
           />
         </>
       );
@@ -138,25 +138,27 @@ export default function AdElementRenderer({ layer }) {
             y={layer.height * 0.13}
             width={layer.width * 0.72}
             height={layer.height * 0.55}
-            text={layer.text || "$29.99"}
+            text={transformText(layer.text || "$29.99", layer.textTransform)}
             fontFamily="Inter, Arial, sans-serif"
             fontStyle="bold"
             fontSize={layer.fontSize || 56}
             fill={layer.textColor || "#ffffff"}
             verticalAlign="middle"
-          />
+            {...getTypographyProps(layer)}
+        />
           <Text
             x={layer.width * 0.06}
             y={layer.height * 0.65}
             width={layer.width * 0.72}
             height={layer.height * 0.22}
-            text={layer.subtext || "LIMITED OFFER"}
+            text={transformText(layer.subtext || "LIMITED OFFER", layer.textTransform)}
             fontFamily="Inter, Arial, sans-serif"
             fontStyle="bold"
             fontSize={Math.max(12, (layer.fontSize || 56) * 0.28)}
             fill={layer.accentColor || "#f59e0b"}
             letterSpacing={1.5}
-          />
+            {...getTypographyProps(layer)}
+        />
         </>
       );
 
@@ -183,7 +185,7 @@ export default function AdElementRenderer({ layer }) {
               x: layer.height * 0.18,
               width: layer.width - layer.height * 0.18,
             })}
-            text={layer.text || "LIMITED TIME"}
+            text={transformText(layer.text || "LIMITED TIME", layer.textTransform)}
           />
         </>
       );
@@ -236,7 +238,7 @@ export default function AdElementRenderer({ layer }) {
               x: layer.width * 0.1,
               width: layer.width * 0.8,
             })}
-            text={layer.text || "BEST SELLER"}
+            text={transformText(layer.text || "BEST SELLER", layer.textTransform)}
           />
         </>
       );
@@ -276,37 +278,40 @@ export default function AdElementRenderer({ layer }) {
             y={layer.height * 0.09}
             width={layer.width * 0.62}
             height={layer.height * 0.25}
-            text={layer.title || "Premium Formula"}
+            text={transformText(layer.title || "Premium Formula", layer.textTransform)}
             fontFamily="Inter, Arial, sans-serif"
             fontStyle="bold"
             fontSize={layer.fontSize || 36}
             fill={layer.textColor || "#111827"}
             verticalAlign="middle"
-          />
+            {...getTypographyProps(layer)}
+        />
           <Text
             x={layer.width * 0.07}
             y={layer.height * 0.43}
             width={layer.width * 0.86}
             height={layer.height * 0.23}
-            text={layer.text || "Built to stand out and convert."}
+            text={transformText(layer.text || "Built to stand out and convert.", layer.textTransform)}
             fontFamily="Inter, Arial, sans-serif"
             fontSize={Math.max(16, (layer.fontSize || 36) * 0.48)}
             fill={layer.textColor || "#111827"}
             opacity={0.72}
             wrap="word"
-          />
+            {...getTypographyProps(layer)}
+        />
           <Text
             x={layer.width * 0.07}
             y={layer.height * 0.72}
             width={layer.width * 0.4}
             height={layer.height * 0.18}
-            text={layer.price || "$39"}
+            text={transformText(layer.price || "$39", layer.textTransform)}
             fontFamily="Inter, Arial, sans-serif"
             fontStyle="bold"
             fontSize={Math.max(22, (layer.fontSize || 36) * 0.86)}
             fill={layer.accentColor || "#2563eb"}
             verticalAlign="middle"
-          />
+            {...getTypographyProps(layer)}
+        />
           <Rect
             x={layer.width * 0.61}
             y={layer.height * 0.72}
@@ -327,7 +332,8 @@ export default function AdElementRenderer({ layer }) {
             fontStyle="bold"
             fontSize={Math.max(13, (layer.fontSize || 36) * 0.38)}
             fill="#ffffff"
-          />
+            {...getTypographyProps(layer)}
+        />
         </>
       );
 

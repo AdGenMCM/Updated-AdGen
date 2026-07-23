@@ -61,7 +61,7 @@ const PLAN_OPTIONS = [
     description:
       "Experience the connected creative workflow with real image and video generation.",
     images: "10 images",
-    videos: "2 video credits",
+    videos: "3 video credits",
     optimizer: "No Optimizer",
     brands: "1 Brand Kit",
     storage: "2 GB storage",
@@ -81,7 +81,7 @@ const PLAN_OPTIONS = [
     description:
       "A dependable monthly creative workflow for freelancers, brands, and small businesses.",
     images: "40 images",
-    videos: "5 video credits",
+    videos: "6 video credits",
     optimizer: "No Optimizer",
     brands: "1 Brand Kit",
     storage: "10 GB storage",
@@ -101,7 +101,7 @@ const PLAN_OPTIONS = [
     description:
       "Create, optimize, measure, and improve active campaigns from one connected workspace.",
     images: "100 images",
-    videos: "12 video credits",
+    videos: "14 video credits",
     optimizer: "20 Optimizer runs",
     brands: "3 Brand Kits",
     storage: "50 GB storage",
@@ -122,7 +122,7 @@ const PLAN_OPTIONS = [
     description:
       "Higher limits and multi-brand capacity for high-volume creative workflows.",
     images: "250 images",
-    videos: "30 video credits",
+    videos: "32 video credits",
     optimizer: "75 Optimizer runs",
     brands: "10 Brand Kits",
     storage: "200 GB storage",
@@ -368,7 +368,7 @@ export default function Subscribe() {
         if (!summary) return;
 
         const stickyTop = window.matchMedia("(max-width: 759px)").matches
-          ? 10
+          ? 88
           : 76;
 
         setSummaryDocked(
@@ -577,6 +577,9 @@ export default function Subscribe() {
     status === "trialing" ||
     status === "past_due";
 
+  const planSelectionDisabled =
+    showSpinner || (isActive && !upgradeMode);
+
   if (!currentUser) {
     return (
       <main className="subscribe-v2-page">
@@ -754,7 +757,7 @@ export default function Subscribe() {
             </div>
           </div>
 
-          <div className="subscribe-v2-grid">
+          <div className="subscribe-v2-grid" role="radiogroup" aria-label="Subscription plans">
             {PLAN_OPTIONS.map((plan, index) => {
               const selected = plan.id === tier;
 
@@ -765,27 +768,41 @@ export default function Subscribe() {
                     "subscribe-v2-card",
                     plan.featured ? "featured" : "",
                     selected ? "selected" : "",
+                    planSelectionDisabled ? "is-disabled" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   style={{ "--plan-delay": `${index * 80}ms` }}
+                  role="radio"
+                  aria-checked={selected}
+                  aria-disabled={planSelectionDisabled}
+                  tabIndex={planSelectionDisabled ? -1 : 0}
+                  onClick={() => {
+                    if (!planSelectionDisabled) {
+                      handlePlanSelect(plan.id);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (planSelectionDisabled) return;
+
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handlePlanSelect(plan.id);
+                    }
+                  }}
                 >
                   <div className="subscribe-v2-card-glow" aria-hidden="true" />
 
-                  <button
-                    type="button"
+                  <div
                     className="subscribe-v2-card-select"
-                    onClick={() => handlePlanSelect(plan.id)}
-                    disabled={showSpinner || (isActive && !upgradeMode)}
-                    aria-pressed={selected}
-                    aria-label={`Select ${plan.label}`}
+                    aria-hidden="true"
                   >
                     <span className="subscribe-v2-radio">
                       <i />
                     </span>
 
                     <span>{selected ? "Selected plan" : `Choose ${plan.label}`}</span>
-                  </button>
+                  </div>
 
                   <span className="subscribe-v2-card-eyebrow">
                     {plan.eyebrow}

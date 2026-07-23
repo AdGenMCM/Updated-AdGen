@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Pricing.css";
 
 import Reveal from "../components/motion/Reveal";
@@ -190,9 +191,15 @@ function CheckCell({ value }) {
 }
 
 export default function Pricing() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     trackEvent("view_pricing");
   }, []);
+
+  const openTier = (tier) => {
+    navigate(tier.href || `/subscribe?tier=${tier.id}`);
+  };
 
   return (
     <main className="pricing-page pricing-v2">
@@ -239,6 +246,19 @@ export default function Pricing() {
                     "pricing-v2-card",
                     tier.highlighted ? "featured" : "",
                   ].filter(Boolean).join(" ")}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`${tier.cta}: ${tier.name} plan`}
+                  onClick={(event) => {
+                    if (event.target.closest("a, button")) return;
+                    openTier(tier);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openTier(tier);
+                    }
+                  }}
                 >
                   <div className="pricing-v2-card-glow" aria-hidden="true" />
 

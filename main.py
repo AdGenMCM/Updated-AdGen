@@ -1936,108 +1936,289 @@ async def save_creative_studio_image(
     project: str = Form(...),
     title: str = Form("Creative Studio design"),
     source_image_job_id: str = Form(""),
+    project_id: str = Form(""),
+    save_as: bool = Form(False),
     authorization: str | None = Header(default=None),
 ):
-    """Save a flattened Studio export and its editable project as a new Library image."""
+    """
+    Create or update a Creative Studio project.
+
+    - New project:
+      project_id is blank, or save_as=True.
+    - Existing project update:
+      project_id is provided and save_as=False.
+    """
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
     db = get_db()
+
     user_doc = db.collection("users").document(uid).get().to_dict() or {}
     tier, _status = get_tier_and_status(user_doc)
 
     content_type = (file.content_type or "image/png").lower().strip()
-    if content_type not in {"image/png", "image/jpeg", "image/jpg", "image/webp"}:
+
+    if content_type not in {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+    }:
         raise HTTPException(
-            status_code=400, detail="Creative Studio can save PNG, JPG, or WEBP images."
+            status_code=400,
+            detail="Creative Studio can save PNG, JPG, or WEBP images.",
         )
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="The rendered image is empty.")
-    if len(data) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="The rendered image is too large.")
+
+    rendered_data = await file.read()
+
+    if not rendered_data:
+        raise HTTPException(
+            status_code=400,
+            detail="The rendered image is empty.",
+        )
+
+    if len(rendered_data) > 15 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="The rendered image is too large.",
+        )
 
     try:
         project_data = json.loads(project)
     except Exception:
         raise HTTPException(
-            status_code=400, detail="The editable Studio project is invalid."
+            status_code=400,
+            detail="The editable Studio project is invalid.",
         )
-    if not isinstance(project_data, dict) or not isinstance(
-        project_data.get("layers", []), list
+
+    if (
+        not isinstance(project_data, dict)
+        or not isinstance(project_data.get("layers", []), list)
     ):
         raise HTTPException(
-            status_code=400, detail="The editable Studio project is invalid."
+            status_code=400,
+            detail="The editable Studio project is invalid.",
         )
+
     if len(project_data.get("layers", [])) > 150:
         raise HTTPException(
-            status_code=400, detail="This project contains too many layers."
+            status_code=400,
+            detail="This project contains too many layers.",
         )
 
-    if not admin:
-        ensure_storage_available(db, uid, tier, len(data))
+    clean_title = (
+        title
+        or project_data.get("title")
+        or project_data.get("metadata", {}).get("title")
+        or "Creative Studio design"
+    ).strip()[:120]
 
-    stored = None
-    registered = False
+    requested_project_id = (project_id or "").strip()
+    is_update = bool(requested_project_id) and not save_as
+
+    existing_ref = None
+    existing_item = None
+
+    if is_update:
+        existing_ref = db.collection("image_jobs").document(requested_project_id)
+        existing_snapshot = existing_ref.get()
+
+        if not existing_snapshot.exists:
+            raise HTTPException(
+                status_code=404,
+                detail="Creative Studio project not found.",
+            )
+
+        existing_item = existing_snapshot.to_dict() or {}
+
+        if not admin and existing_item.get("uid") != uid:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to update this project.",
+            )
+
+        if (
+            existing_item.get("source") != "creative_studio"
+            and existing_item.get("sourceType") != "creative_studio"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="This Library item is not an editable Creative Studio project.",
+            )
+
+    if not admin:
+        ensure_storage_available(
+            db,
+            uid,
+            tier,
+            len(rendered_data),
+        )
+
+    new_storage = None
+    new_storage_registered = False
+    firestore_saved = False
+
     try:
-        stored = upload_bytes_to_firebase_storage_with_metadata(
-            data,
+        new_storage = upload_bytes_to_firebase_storage_with_metadata(
+            rendered_data,
             uid,
             content_type=content_type,
             folder="creative_studio_exports",
             filename_hint=file.filename or "creative-studio-export",
         )
-        register_storage_asset(
-            db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
-        )
-        registered = True
 
-        job_id = uuid.uuid4().hex
-        clean_title = (title or "Creative Studio design").strip()[:120]
+        new_size_bytes = int(
+            new_storage.get("fileSizeBytes") or len(rendered_data)
+        )
+
+        register_storage_asset(
+            db,
+            uid,
+            size_bytes=new_size_bytes,
+            asset_type="image",
+        )
+        new_storage_registered = True
+
+        now = int(time.time())
+
+        if is_update:
+            job_id = requested_project_id
+            document_ref = existing_ref
+            created_at = int(existing_item.get("createdAt") or now)
+        else:
+            job_id = uuid.uuid4().hex
+            document_ref = db.collection("image_jobs").document(job_id)
+            created_at = now
+
+        metadata = project_data.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        project_data["title"] = clean_title
+        project_data["projectId"] = job_id
+        project_data["createdAt"] = int(
+            project_data.get("createdAt") or created_at
+        )
+        project_data["updatedAt"] = now
+        project_data["metadata"] = {
+            **metadata,
+            "title": clean_title,
+            "projectId": job_id,
+            "updatedAt": now,
+        }
+
         item = {
             "uid": uid,
-            "createdAt": int(time.time()),
+            "createdAt": created_at,
+            "updatedAt": now,
             "status": "succeeded",
             "source": "creative_studio",
             "sourceType": "creative_studio",
-            "sourceImageJobId": source_image_job_id or None,
+            "sourceImageJobId": (
+                source_image_job_id
+                or (
+                    existing_item.get("sourceImageJobId")
+                    if existing_item
+                    else None
+                )
+                or None
+            ),
             "productName": clean_title,
-            "imageUrl": stored["url"],
-            "storagePath": stored.get("storagePath"),
-            "fileSizeBytes": stored.get("fileSizeBytes"),
-            "contentType": stored.get("contentType"),
+            "title": clean_title,
+            "imageUrl": new_storage["url"],
+            "thumbnailUrl": new_storage["url"],
+            "storagePath": new_storage.get("storagePath"),
+            "fileSizeBytes": new_size_bytes,
+            "contentType": (
+                new_storage.get("contentType") or content_type
+            ),
             "storageState": "active",
             "creativeProject": project_data,
-            "copy": {"headline": "", "primary_text": "", "cta": ""},
+            "copy": {
+                "headline": "",
+                "primary_text": "",
+                "cta": "",
+            },
             "error": None,
         }
-        db.collection("image_jobs").document(job_id).set(item)
+
+        document_ref.set(item, merge=is_update)
+        firestore_saved = True
+
+        if is_update and existing_item:
+            old_storage_path = existing_item.get("storagePath")
+            old_size_bytes = int(existing_item.get("fileSizeBytes") or 0)
+
+            if (
+                old_storage_path
+                and old_storage_path != new_storage.get("storagePath")
+            ):
+                try:
+                    delete_firebase_storage_object(old_storage_path)
+                except Exception as cleanup_error:
+                    print(
+                        "CREATIVE STUDIO OLD FILE DELETE ERROR:",
+                        repr(cleanup_error),
+                    )
+
+                try:
+                    release_storage_asset(
+                        db,
+                        existing_item.get("uid") or uid,
+                        size_bytes=old_size_bytes,
+                        asset_type="image",
+                    )
+                except Exception as cleanup_error:
+                    print(
+                        "CREATIVE STUDIO OLD STORAGE RELEASE ERROR:",
+                        repr(cleanup_error),
+                    )
+
         return {
             "ok": True,
-            "item": {"id": job_id, **item},
+            "created": not is_update,
+            "updated": is_update,
+            "projectId": job_id,
+            "item": {
+                "id": job_id,
+                **item,
+            },
             "storage": get_storage_summary(db, uid, tier),
         }
+
     except HTTPException:
         raise
+
     except Exception as exc:
-        if stored and stored.get("storagePath"):
-            try:
-                delete_firebase_storage_object(stored["storagePath"])
-            except Exception:
-                pass
-        if registered and stored:
-            try:
-                release_storage_asset(
-                    db,
-                    uid,
-                    size_bytes=int(stored.get("fileSizeBytes") or 0),
-                    asset_type="image",
-                )
-            except Exception:
-                pass
+        if not firestore_saved and new_storage:
+            new_storage_path = new_storage.get("storagePath")
+
+            if new_storage_path:
+                try:
+                    delete_firebase_storage_object(new_storage_path)
+                except Exception:
+                    pass
+
+            if new_storage_registered:
+                try:
+                    release_storage_asset(
+                        db,
+                        uid,
+                        size_bytes=int(
+                            new_storage.get("fileSizeBytes") or 0
+                        ),
+                        asset_type="image",
+                    )
+                except Exception:
+                    pass
+
         print("CREATIVE STUDIO SAVE ERROR:", repr(exc))
+
         raise HTTPException(
             status_code=500,
-            detail="The finished creative could not be saved. Please try again.",
+            detail=(
+                "The Creative Studio project could not be saved. "
+                "Please try again."
+            ),
         )
 
 
