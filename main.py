@@ -758,6 +758,58 @@ def _read_progress_job(db, collection: str, job_id: str, uid: str, admin: bool):
         raise HTTPException(status_code=403, detail="Forbidden.")
     return {"jobId": job_id, **data}
 
+ACTIVE_IMAGE_GENERATION_STATUSES = {
+    "queued",
+    "running",
+    "pending",
+    "processing",
+}
+
+
+def require_no_active_image_generation(db, uid: str) -> None:
+    """
+    Prevent one user from starting multiple image generations at the same time.
+
+    Checks progress-job collections, not the completed Library collection.
+    """
+
+    # Regular Ad Generator image jobs
+    for snap in (
+        db.collection("image_generation_jobs")
+        .where("uid", "==", uid)
+        .limit(25)
+        .stream()
+    ):
+        data = snap.to_dict() or {}
+        status = str(data.get("status") or "").strip().lower()
+
+        if status in ACTIVE_IMAGE_GENERATION_STATUSES:
+            raise HTTPException(
+                status_code=429,
+                detail="You already have an image generation in progress.",
+            )
+
+    # Optimizer-generated image jobs
+    for snap in (
+        db.collection("optimizer_jobs")
+        .where("uid", "==", uid)
+        .limit(25)
+        .stream()
+    ):
+        data = snap.to_dict() or {}
+
+        job_type = str(data.get("jobType") or "").strip().lower()
+        status = str(data.get("status") or "").strip().lower()
+
+        if (
+            job_type == "optimizer_generation"
+            and status in ACTIVE_IMAGE_GENERATION_STATUSES
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail="You already have an image generation in progress.",
+            )
+
 
 # ---------------- Helpers ----------------
 def upload_png_to_firebase_storage(img_bytes: bytes, uid: str) -> dict:
@@ -2487,7 +2539,13 @@ async def start_image_generation(
 ):
     uid, _email, claims = require_user(authorization)
     db = get_db()
+
+    # Prevent duplicate simultaneous image generations.
+    if not is_admin(claims):
+        require_no_active_image_generation(db, uid)
+
     job_id = uuid.uuid4().hex
+
     db.collection("image_generation_jobs").document(job_id).set(
         {
             "uid": uid,
@@ -2502,10 +2560,18 @@ async def start_image_generation(
             "error": None,
         }
     )
+
     background_tasks.add_task(
-        _run_image_generation_job, job_id, payload, authorization or ""
+        _run_image_generation_job,
+        job_id,
+        payload,
+        authorization or "",
     )
-    return ProgressStartResponse(jobId=job_id, status="queued")
+
+    return ProgressStartResponse(
+        jobId=job_id,
+        status="queued",
+    )
 
 
 @app.get("/image/status/{job_id}")
@@ -2563,7 +2629,13 @@ async def start_optimizer_generation(
 ):
     uid, _email, claims = require_user(authorization)
     db = get_db()
+
+    # Prevent simultaneous Ad Generator and Optimizer image generations.
+    if not is_admin(claims):
+        require_no_active_image_generation(db, uid)
+
     job_id = uuid.uuid4().hex
+
     db.collection("optimizer_jobs").document(job_id).set(
         {
             "uid": uid,
@@ -2578,10 +2650,18 @@ async def start_optimizer_generation(
             "error": None,
         }
     )
+
     background_tasks.add_task(
-        _run_optimizer_generation_job, job_id, payload, authorization or ""
+        _run_optimizer_generation_job,
+        job_id,
+        payload,
+        authorization or "",
     )
-    return ProgressStartResponse(jobId=job_id, status="queued")
+
+    return ProgressStartResponse(
+        jobId=job_id,
+        status="queued",
+    )
 
 
 @app.get("/optimizer/generate/status/{job_id}")
