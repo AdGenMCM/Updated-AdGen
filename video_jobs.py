@@ -43,6 +43,16 @@ from notification_utils import (
     create_usage_notifications,
 )
 
+from video_safety import (
+    enforce_user_submission_window,
+    moderate_video_request,
+    require_active_account,
+    require_no_active_video_job,
+    reserve_platform_cost,
+    rollback_platform_cost,
+    rollback_user_submission_window,
+)
+
 
 
 # -----------------------------
@@ -868,6 +878,21 @@ async def start_image_video(
         .to_dict()
         or {}
     )
+
+    require_active_account(user_doc)
+    require_no_active_video_job(db, uid)
+
+    moderation_result = await moderate_video_request(
+        db,
+        uid,
+        text_parts=[
+            req.promptText,
+            req.voiceoverScript,
+            req.winnerGuidance,
+        ],
+        image_url=req.promptImageUrl,
+    )
+    enforce_user_submission_window(db, uid)
     
     # Compact visual Brand Kit direction for Runway.
     tier = None
@@ -950,6 +975,9 @@ async def start_image_video(
         "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
         "usageRefunded": False,
         "usageRefundReason": None,
+        "moderationChecked": bool(moderation_result.get("checked")),
+        "moderationCategories": moderation_result.get("categories") or [],
+        "estimatedProviderCostUsd": None,
         "ratio": req.ratio,
         "model": req.model,
 
@@ -1044,8 +1072,18 @@ async def start_image_video(
     })
     set_video_progress(job_ref, "submitting_to_runway")
 
-    # Only this call is eligible for an automatic usage refund.
+    # Reserve against the platform-wide provider budget before creating a paid task.
+    cost_reservation = None
     try:
+        cost_reservation = reserve_platform_cost(
+            db,
+            duration=int(req.duration),
+            include_tts=bool(req.voiceover.enabled and (req.voiceoverScript or "").strip()),
+        )
+        job_ref.update({
+            "estimatedProviderCostUsd": cost_reservation.estimated_cost_usd,
+            "providerCostGuardDocument": cost_reservation.document_id,
+        })
         runway_task_id = await create_image_to_video(
             prompt_image=req.promptImageUrl,
             prompt_text=prompt_text,
@@ -1055,6 +1093,8 @@ async def start_image_video(
         )
 
     except RunwayError as e:
+        rollback_platform_cost(db, cost_reservation)
+        rollback_user_submission_window(db, uid)
         if not admin and usage_reservation:
             refunded = refund_video_usage_once(
                 db,
@@ -1084,6 +1124,8 @@ async def start_image_video(
         )
 
     except Exception as e:
+        rollback_platform_cost(db, cost_reservation)
+        rollback_user_submission_window(db, uid)
         if not admin and usage_reservation:
             refunded = refund_video_usage_once(
                 db,
@@ -1225,6 +1267,26 @@ async def start_prompt_video(
         or {}
     )
 
+    require_active_account(user_doc)
+    require_no_active_video_job(db, uid)
+
+    moderation_result = await moderate_video_request(
+        db,
+        uid,
+        text_parts=[
+            req.productName,
+            req.description,
+            req.offer,
+            req.audience,
+            req.fullCreativeDirection,
+            req.userPrompt,
+            req.callToAction,
+            req.voiceoverScript,
+            req.winnerGuidance,
+        ],
+    )
+    enforce_user_submission_window(db, uid)
+
     tier = None
     status = None
 
@@ -1351,6 +1413,9 @@ async def start_prompt_video(
         "usagePeriodKey": (usage_reservation or {}).get("periodKey"),
         "usageRefunded": False,
         "usageRefundReason": None,
+        "moderationChecked": bool(moderation_result.get("checked")),
+        "moderationCategories": moderation_result.get("categories") or [],
+        "estimatedProviderCostUsd": None,
         "ratio": req.ratio,
         "model": req.model,
 
@@ -1416,9 +1481,19 @@ async def start_prompt_video(
         ),
     })
 
-    # Only this call is eligible for an automatic usage refund.
+    # Reserve against the platform-wide provider budget before creating a paid task.
     set_video_progress(job_ref, "submitting_to_runway")
+    cost_reservation = None
     try:
+        cost_reservation = reserve_platform_cost(
+            db,
+            duration=int(req.duration),
+            include_tts=bool(req.voiceover.enabled and (req.voiceoverScript or "").strip()),
+        )
+        job_ref.update({
+            "estimatedProviderCostUsd": cost_reservation.estimated_cost_usd,
+            "providerCostGuardDocument": cost_reservation.document_id,
+        })
         runway_task_id = await create_text_to_video(
             prompt_text=director_prompt,
             model=req.model,
@@ -1427,6 +1502,8 @@ async def start_prompt_video(
         )
 
     except RunwayError as e:
+        rollback_platform_cost(db, cost_reservation)
+        rollback_user_submission_window(db, uid)
         if not admin and usage_reservation:
             refunded = refund_video_usage_once(
                 db,
@@ -1456,6 +1533,8 @@ async def start_prompt_video(
         )
 
     except Exception as e:
+        rollback_platform_cost(db, cost_reservation)
+        rollback_user_submission_window(db, uid)
         if not admin and usage_reservation:
             refunded = refund_video_usage_once(
                 db,
@@ -1792,44 +1871,26 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         task = await get_task(runway_video_task_id)
 
     except (RunwayError, Exception) as exc:
+        # A transient polling/network error does not mean the paid Runway task failed.
+        # Keep the job active so the user cannot start duplicate paid generations.
         error_message = str(exc)
-
-        refund_video_usage_once(
-            db,
-            job_ref,
-            uid,
-            reason="status_check_failure",
-        )
-
+        poll_errors = int(job.get("statusPollErrors") or 0) + 1
         job_ref.update({
-            "status": "failed",
-            "error": error_message,
-            **progress_payload("failed"),
+            "statusPollErrors": poll_errors,
+            "lastStatusPollError": error_message[:500],
+            "lastStatusPollErrorAt": int(time.time()),
+            "progressStage": "waiting_for_runway",
+            "progressPercent": VIDEO_PROGRESS["waiting_for_runway"][0],
+            "progressMessage": "The provider status check is temporarily unavailable. Your video is still processing.",
             "progressUpdatedAt": int(time.time()),
         })
-
-        create_notification(
-            db,
-            uid,
-            event_key=f"video_failed_{job_id}",
-            title="Video generation failed",
-            body=(
-                "The video service could not complete your request. "
-                "Review the creative direction and try again."
-            ),
-            notification_type="generation_failed",
-            link="/video-ads",
-            metadata={
-                "jobId": job_id,
-                "error": error_message[:300],
-            },
-        )
-
         return VideoStatusResponse(
             jobId=job_id,
-            status="failed",
-            error=error_message,
-            **progress_payload("failed"),
+            status="running",
+            error=None,
+            progressStage="waiting_for_runway",
+            progressMessage="The provider status check is temporarily unavailable. Your video is still processing.",
+            progressPercent=VIDEO_PROGRESS["waiting_for_runway"][0],
         )
 
     st = task.get("status")
@@ -1859,15 +1920,20 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
             reason="provider_generation_failure",
         )
 
+        failure_code = task.get("failureCode") or task.get("failure_code")
         err = (
-            task.get("error")
+            task.get("failure")
+            or task.get("error")
             or task.get("failureReason")
             or "Runway task failed."
         )
 
         job_ref.update({
             "status": "failed",
-            "error": err,
+            "error": str(err),
+            "providerFailureCode": failure_code,
+            "providerFailureReason": str(err)[:1000],
+            "providerTaskStatus": st,
             **progress_payload("failed"),
         })
 
@@ -1914,6 +1980,10 @@ async def tts_preview(req: TTSPreviewRequest, authorization: str | None = Header
     if not text:
         raise HTTPException(status_code=400, detail="Missing 'text'.")
 
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    require_active_account(user_doc)
+    await moderate_video_request(db, uid, text_parts=[text])
+
     voice = safe_voice(req.presetVoice)
     month_key = utc_month_key()
     cache_key = _sha256(f"{uid}|{month_key}|{voice}|{text}")
@@ -1928,10 +1998,16 @@ async def tts_preview(req: TTSPreviewRequest, authorization: str | None = Header
         tier, status = get_tier_and_status(user_doc)
         _enforce_tts_preview_caps_and_increment(db, uid, tier, status)
 
+    tts_cost_reservation = None
     try:
+        tts_cost_reservation = reserve_platform_cost(db, duration=0, include_tts=True)
         tts_task_id = await create_text_to_speech(prompt_text=text, preset_voice=voice or "Leslie")
     except RunwayError as e:
+        rollback_platform_cost(db, tts_cost_reservation)
         raise HTTPException(status_code=502, detail=f"text_to_speech failed: {e}")
+    except Exception:
+        rollback_platform_cost(db, tts_cost_reservation)
+        raise
 
     try:
         for _ in range(30):
