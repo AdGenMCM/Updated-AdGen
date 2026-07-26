@@ -151,93 +151,85 @@ export default function Dashboard() {
         />
       </section>
 
-      <div className="dashboard-stats">
-        <StatCard
-          to="/account"
-          label="Image Usage"
-          value={`${imageUsed} / ${imageCap}`}
-          description="Monthly image credits used"
-          icon={<Image size={20} />}
-        />
-
-        <StatCard
-          to="/account"
-          label="Video Usage"
-          value={videoCap > 0 ? `${videoUsed} / ${videoCap}` : "Not included"}
-          description={
-            videoCap > 0
-              ? (
-                  isFreePlan
-                    ? "Complimentary lifetime video credit"
-                    : "Monthly video credits used"
-                )
-              : "Upgrade to unlock video"
-          }
-          icon={<Video size={20} />}
-        />
-
-        <StatCard
-          to={
-            isFreePlan
-              ? "/subscribe?upgrade=1"
-              : "/brand-kit"
-          }
-          label="Brand Kit"
-          value={brandKitStatus?.label || "Needs Setup"}
-          description={
-            missingBrandItems.length
-              ? `${missingBrandItems.length} key items remaining`
-              : "Brand Kit ready"
-          }
-          icon={<Palette size={20} />}
-        />
-
-        <StatCard
-          to="/account"
-          label="Storage"
-          value={formatStorageUsage(
-            storageUsage?.usedBytes,
-            storageUsage?.limitBytes
-          )}
-          description="Creative storage used"
-          icon={<HardDrive size={20} />}
-        />
-      </div>
-
-      <section className="dashboard-section">
-        <SectionTitle
-          eyebrow="Quick Actions"
-          title="Create your next campaign asset"
-          description="Jump directly into the tools used most often."
-        />
-
-        <div className="dashboard-actions-grid">
-          <ActionCard
-            to="/adgenerator"
-            icon={<Wand2 size={22} />}
-            title="Generate Ad"
-            description="Create image ads and copy."
+      <div className="dashboard-top">
+        <div className="dashboard-stats">
+          <StatCard
+            to="/account"
+            label="Image Usage"
+            value={`${imageUsed} / ${imageCap}`}
+            description="Monthly image credits used"
+            icon={<Image size={20} />}
           />
 
-          <ActionCard
-            to="/video-ads"
-            icon={<Clapperboard size={22} />}
-            title="Generate Video"
-            description="Turn prompts or images into video ads."
-          />
-
-          <ActionCard
-            to={
-              isFreePlan
-                ? "/subscribe?upgrade=1"
-                : "/optimizer"
+          <StatCard
+            to="/account"
+            label="Video Usage"
+            value={videoCap > 0 ? `${videoUsed} / ${videoCap}` : "Not included"}
+            description={
+              videoCap > 0
+                ? isFreePlan
+                  ? "Complimentary lifetime video credit"
+                  : "Monthly video credits used"
+                : "Upgrade to unlock video"
             }
-            icon={<BarChart3 size={22} />}
-            title="Optimize Creative"
-            description="Improve ads using performance data."
+            icon={<Video size={20} />}
+          />
+
+          <StatCard
+            to={isFreePlan ? "/subscribe?upgrade=1" : "/brand-kit"}
+            label="Brand Kit"
+            value={brandKitStatus?.label || "Needs Setup"}
+            description={
+              missingBrandItems.length
+                ? `${missingBrandItems.length} key items remaining`
+                : "Brand Kit ready"
+            }
+            icon={<Palette size={20} />}
+          />
+
+          <StatCard
+            to="/account"
+            label="Storage"
+            value={formatStorageUsage(
+              storageUsage?.usedBytes,
+              storageUsage?.limitBytes
+            )}
+            description="Creative storage used"
+            icon={<HardDrive size={20} />}
           />
         </div>
-      </section>
+
+        <section className="dashboard-section dashboard-actions">
+          <SectionTitle
+            eyebrow="Quick Actions"
+            title="Create your next campaign asset"
+            description="Jump directly into the tools used most often."
+          />
+
+          <div className="dashboard-actions-grid">
+            <ActionCard
+              to="/adgenerator"
+              icon={<Wand2 size={22} />}
+              title="Generate Ad"
+              description="Create image ads and copy."
+            />
+
+            <ActionCard
+              to="/video-ads"
+              icon={<Clapperboard size={22} />}
+              title="Generate Video"
+              description="Turn prompts or images into video ads."
+            />
+
+            <ActionCard
+              to={isFreePlan ? "/subscribe?upgrade=1" : "/optimizer"}
+              icon={<BarChart3 size={22} />}
+              title="Optimize Creative"
+              description="Improve ads using performance data."
+            />
+          </div>
+        </section>
+      </div>
 
       <section className="dashboard-section">
         <SectionTitle

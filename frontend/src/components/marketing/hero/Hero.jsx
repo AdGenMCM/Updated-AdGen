@@ -21,12 +21,12 @@ export default function Hero() {
 
       <div className="adgen-marketing-hero-content">
         <p className="adgen-marketing-hero-eyebrow">
-          Creative intelligence for modern brands
+          Creative intelligence for modern marketers
         </p>
 
         <h1>
           <span className="marketing-hero-line marketing-hero-line-primary">
-            Better creative starts here.
+            Better advertising starts here.
           </span>
 
           <span className="marketing-hero-line marketing-hero-line-secondary">
@@ -35,9 +35,9 @@ export default function Hero() {
         </h1>
 
         <p className="adgen-marketing-hero-description">
-          Turn your brand direction into campaign-ready images, videos, and
-          copy—then use real performance signals to create stronger work every
-          time.
+          Create campaign-ready images, videos, and ad copy. 
+          Apply your Brand Kit, organize every creative asset, 
+          and improve performance from one intelligent creative workspace.
         </p>
 
         <div className="adgen-marketing-hero-actions">

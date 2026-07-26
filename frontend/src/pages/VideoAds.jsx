@@ -705,29 +705,29 @@ return (
       expectedMaxSeconds={180}
     />
 
-    <div className="videoAdsHeader videoAdsHero">
-      <h1>Generate Video</h1>
-      <p>
-        Create high-performing AI video advertisements from prompts or images using your Brand Kit,
-        winning creative insights, and optional AI voiceover.
-      </p>
-    </div>
-
-    {!isFreePlan ? (
-      <BrandKitSelector
-        value={brandKitId}
-        onChange={setBrandKitId}
-        onKitChange={setBrandKit}
-        disabled={isGenerating || !useBrandKit}
-      />
-    ) : (
-      <div className="hint" style={{ marginBottom: 16 }}>
-        Brand Kit is available on paid plans. Your complimentary video can still be created without it.
-      </div>
-    )}
-
     <div className="videoAdsLayout">
       <main className="videoAdsMain">
+        <div className="videoAdsHeader videoAdsHero">
+          <h1>Generate Video</h1>
+          <p>
+            Create high-performing AI video advertisements from prompts or images using your Brand Kit,
+            winning creative insights, and optional AI voiceover.
+          </p>
+        </div>
+
+        {!isFreePlan ? (
+          <BrandKitSelector
+            value={brandKitId}
+            onChange={setBrandKitId}
+            onKitChange={setBrandKit}
+            disabled={isGenerating || !useBrandKit}
+          />
+        ) : (
+          <div className="hint videoFreePlanHint">
+            Brand Kit is available on paid plans. Your complimentary video can still be created without it.
+          </div>
+        )}
+
         <div className="videoAdsForm">
         <StepSection
           step="1"

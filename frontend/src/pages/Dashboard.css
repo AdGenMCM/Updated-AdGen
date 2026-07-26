@@ -360,3 +360,33 @@ text-align:center;
 color:var(--ag-muted);
 
 }
+
+.dashboard-top {
+  display: flex;
+  flex-direction: column;
+  gap: 58px;
+}
+
+.dashboard-top > .dashboard-stats {
+  order: 1;
+  margin-bottom: 0;
+}
+
+.dashboard-top > .dashboard-actions {
+  order: 2;
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .dashboard-top {
+    gap: 36px;
+  }
+
+  .dashboard-top > .dashboard-actions {
+    order: 1;
+  }
+
+  .dashboard-top > .dashboard-stats {
+    order: 2;
+  }
+}
