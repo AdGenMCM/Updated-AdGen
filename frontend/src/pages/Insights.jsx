@@ -7,6 +7,8 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import FieldLabel from "../components/ui/FieldLabel";
+import GoogleAdsInsightsPanel from "../components/GoogleAdsInsightsPanel";
+import PerformanceIntelligencePanel from "../components/PerformanceIntelligencePanel";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -33,6 +35,10 @@ function money(n, digits = 2) {
   return `$${Number(n).toFixed(digits)}`;
 }
 
+
+
+
+
 export default function Insights() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -40,6 +46,36 @@ export default function Insights() {
 
   const [limit, setLimit] = useState(200);
   const [minSpend, setMinSpend] = useState(0);
+  const [activeSource, setActiveSource] = useState("intelligence");
+  const [me, setMe] = useState({
+    tier: null,
+    status: null,
+    isAdmin: false,
+  });
+
+  const canUsePerformanceFeatures = useMemo(() => {
+    if (me.isAdmin) return true;
+
+    const tier = String(me.tier || "").toLowerCase();
+    return [
+      "pro",
+      "pro_monthly",
+      "business",
+      "business_monthly",
+    ].includes(tier);
+  }, [me]);
+
+  const currentPlanLabel = useMemo(() => {
+    const tier = String(me.tier || "").toLowerCase();
+
+    if (me.isAdmin) return "Admin";
+    if (tier.includes("business")) return "Business";
+    if (tier.includes("pro")) return "Pro";
+    if (tier.includes("starter")) return "Starter";
+    if (tier.includes("trial")) return "Trial";
+    if (tier.includes("free")) return "Free";
+    return "Current";
+  }, [me]);
 
   const getToken = async () => {
     const user = auth.currentUser;
@@ -53,6 +89,41 @@ export default function Insights() {
 
     try {
       const token = await getToken();
+
+      const meRes = await fetch(`${API_BASE}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const meData = await safeJson(meRes);
+
+      const nextMe = meRes.ok
+        ? {
+            tier: meData?.tier || null,
+            status: meData?.status || null,
+            isAdmin: !!meData?.isAdmin,
+          }
+        : {
+            tier: null,
+            status: null,
+            isAdmin: false,
+          };
+
+      setMe(nextMe);
+
+      const nextTier = String(nextMe.tier || "").toLowerCase();
+      const hasAccess =
+        nextMe.isAdmin ||
+        [
+          "pro",
+          "pro_monthly",
+          "business",
+          "business_monthly",
+        ].includes(nextTier);
+
+      if (!hasAccess) {
+        setData(null);
+        setErr("");
+        return;
+      }
 
       const qs = new URLSearchParams({
         limit: String(limit),
@@ -72,14 +143,22 @@ export default function Insights() {
           return;
         }
 
-        setErr(json?.detail || "Failed to load insights.");
+        setErr(
+          typeof json?.detail === "string"
+            ? json.detail
+            : "Failed to load insights.",
+        );
         setData(null);
         return;
       }
 
       setData(json);
     } catch (e) {
-      setErr(e?.message || "Failed to load insights.");
+      setErr(
+        typeof e?.message === "string"
+          ? e.message
+          : "Failed to load insights.",
+      );
       setData(null);
     } finally {
       setLoading(false);
@@ -94,6 +173,7 @@ export default function Insights() {
   const summary = useMemo(() => data?.summary ?? {}, [data]);
   const top = useMemo(() => data?.top ?? {}, [data]);
   const guidance = useMemo(() => data?.guidance ?? "", [data]);
+
 
   const highlights = useMemo(() => {
     const patterns = data?.patterns || {};
@@ -145,7 +225,7 @@ export default function Insights() {
 
     if (guidance) return guidance;
 
-    return "Add performance data in the Library to let AdGen identify which platforms, styles, tones, and formats are driving your best results.";
+    return "Add performance data in the Library to let ADGen identify which platforms, styles, tones, and formats are driving your best results.";
   }, [guidance, highlights]);
 
   const aiRecommendations = useMemo(() => {
@@ -173,12 +253,61 @@ export default function Insights() {
 
     if (!recs.length) {
       recs.push("Add performance data in the Library to unlock AI recommendations.");
-      recs.push("Mark successful creatives so AdGen can learn from winners.");
+      recs.push("Mark successful creatives so ADGen can learn from winners.");
       recs.push("Connect Meta or Google Ads later to automate performance syncing.");
     }
 
     return recs.slice(0, 5);
   }, [highlights, summary]);
+
+  const renderLockedFeature = ({
+    eyebrow,
+    title,
+    description,
+    benefits,
+  }) => (
+    <div className="ins-proGate">
+      <div className="ins-proGateHero">
+        <div>
+          <span className="ins-proGateEyebrow">{eyebrow}</span>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        <span className="ins-proGateBadge">Pro & Business</span>
+      </div>
+
+      <div className="ins-proGateBody">
+        <div className="ins-proGateBenefits">
+          {benefits.map((benefit) => (
+            <div key={benefit}>
+              <span>✓</span>
+              <p>{benefit}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="ins-proGatePlan">
+          <span>Your plan</span>
+          <strong>{currentPlanLabel}</strong>
+          <p>
+            Upgrade to unlock performance tracking, connected ad data, and
+            learning that improves future image and video generations.
+          </p>
+          <Button
+            type="button"
+            onClick={() => (window.location.href = "/account")}
+          >
+            Upgrade to Pro
+          </Button>
+        </div>
+      </div>
+
+      <div className="ins-proGateNote">
+        You can continue generating and saving creatives on your current plan.
+        Performance learning begins after Pro or Business access is activated.
+      </div>
+    </div>
+  );
 
   const renderTopList = (title, items, metricLabel) => (
     <Card className="ins-card">
@@ -240,171 +369,365 @@ export default function Insights() {
       <PageHeader
         eyebrow="AI CREATIVE INTELLIGENCE"
         title="Understand what actually drives performance"
-        description="Track winners, identify patterns, and prepare for automatic Meta and Google Ads performance syncing."
-        actions={
-          <Button type="button" onClick={load} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh Insights"}
-          </Button>
-        }
+        description="See what ADGen has learned, review connected campaign performance, and turn real results into better future creative."
       />
 
-      <Card className="ins-sourcePanel">
-        <div className="ins-sourceHeader">
+      <Card className="ins-sourcePanel ins-sourceHub">
+        <div className="ins-sourceHeader ins-sourceHubHeader">
           <div>
             <h2>
               Performance Sources
-              <InfoTip text="Manual tracking is live today. Meta and Google Ads integrations are planned so AdGen can automatically sync campaign and creative performance." />
+              <InfoTip text="Switch between manually tracked creative performance and connected advertising platforms." />
             </h2>
             <p>
-              AdGen currently uses manually entered Library performance data.
-              Connected ad accounts will unlock automatic campaign intelligence.
+              Choose Performance Intelligence to see what ADGen has learned, or open a connected data source for detailed reporting.
             </p>
           </div>
         </div>
 
-        <div className="ins-sourceGrid">
-          <div className="ins-sourceCard connected">
-            <span>Connected</span>
-            <h3>AdGen Manual Tracking</h3>
-            <p>CTR, CPA, ROAS, CPM, spend, and winner labels from your Library.</p>
-          </div>
+        <div
+          className="ins-sourceTabs"
+          role="tablist"
+          aria-label="Performance sources"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSource === "intelligence"}
+            className={`ins-sourceTab ${
+              activeSource === "intelligence" ? "active" : ""
+            }`}
+            onClick={() => setActiveSource("intelligence")}
+          >
+            <span className="ins-sourceTabIcon intelligence">PI</span>
+            <span className="ins-sourceTabCopy">
+              <strong>Performance Intelligence</strong>
+              <small>
+                {canUsePerformanceFeatures
+                  ? "What ADGen has learned"
+                  : "Available on Pro & Business"}
+              </small>
+            </span>
+            <span
+              className={`ins-sourceTabStatus ${
+                canUsePerformanceFeatures ? "intelligence" : "locked"
+              }`}
+            >
+              {canUsePerformanceFeatures ? "Learning" : "Pro"}
+            </span>
+          </button>
 
-          <div className="ins-sourceCard coming">
-            <span>Coming Soon</span>
-            <h3>Meta Ads</h3>
-            <p>Auto-sync campaigns, creatives, impressions, clicks, spend, and conversions.</p>
-            <button type="button" disabled>Connect Meta</button>
-          </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSource === "manual"}
+            className={`ins-sourceTab ${
+              activeSource === "manual" ? "active" : ""
+            }`}
+            onClick={() => setActiveSource("manual")}
+          >
+            <span className="ins-sourceTabIcon">A</span>
+            <span className="ins-sourceTabCopy">
+              <strong>Manual Tracking</strong>
+              <small>
+                {canUsePerformanceFeatures
+                  ? "Connected"
+                  : "Available on Pro & Business"}
+              </small>
+            </span>
+            <span
+              className={`ins-sourceTabStatus ${
+                canUsePerformanceFeatures ? "connected" : "locked"
+              }`}
+            >
+              {canUsePerformanceFeatures ? "Live" : "Pro"}
+            </span>
+          </button>
 
-          <div className="ins-sourceCard coming">
-            <span>Coming Soon</span>
-            <h3>Google Ads</h3>
-            <p>Import creative and campaign performance for smarter AI recommendations.</p>
-            <button type="button" disabled>Connect Google</button>
-          </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSource === "google"}
+            className={`ins-sourceTab ${
+              activeSource === "google" ? "active" : ""
+            }`}
+            onClick={() => setActiveSource("google")}
+          >
+            <span className="ins-sourceTabIcon google">G</span>
+            <span className="ins-sourceTabCopy">
+              <strong>Google Ads</strong>
+              <small>
+                {canUsePerformanceFeatures
+                  ? "Campaign and creative intelligence"
+                  : "Available on Pro & Business"}
+              </small>
+            </span>
+            <span
+              className={`ins-sourceTabStatus ${
+                canUsePerformanceFeatures ? "available" : "locked"
+              }`}
+            >
+              {canUsePerformanceFeatures ? "Open" : "Pro"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSource === "meta"}
+            className={`ins-sourceTab ${
+              activeSource === "meta" ? "active" : ""
+            }`}
+            onClick={() => setActiveSource("meta")}
+          >
+            <span className="ins-sourceTabIcon meta">M</span>
+            <span className="ins-sourceTabCopy">
+              <strong>Meta Ads</strong>
+              <small>Not yet available</small>
+            </span>
+            <span className="ins-sourceTabStatus coming">Soon</span>
+          </button>
         </div>
 
-        <div className="ins-syncBenefits">
-          <span>Automatic sync will unlock:</span>
-          <p>Campaign import • Spend • Clicks • Impressions • Conversions • Automatic winner detection</p>
-        </div>
-      </Card>
+        <div className="ins-sourceDetail">
+          {activeSource === "intelligence" && (
+            <div className="ins-sourceDetailInner ins-intelligenceDetail">
+              {canUsePerformanceFeatures ? (
+                <PerformanceIntelligencePanel />
+              ) : (
+                renderLockedFeature({
+                  eyebrow: "Creative Intelligence",
+                  title: "Every campaign can make your next creative smarter",
+                  description:
+                    "On Pro and Business, ADGen learns from qualified campaign results and applies winning patterns to future image and video generations.",
+                  benefits: [
+                    "Learn from manually tracked performance and Google Ads results.",
+                    "Identify winning colors, styles, compositions, messaging, and CTAs.",
+                    "Build a brand-specific Creative DNA profile over time.",
+                    "Apply learned patterns inside Image Generator and Video Generator.",
+                  ],
+                })
+              )}
+            </div>
+          )}
 
-      <Card className="ins-toolbar">
-        <div className="ins-controls">
-          <div className="ins-field">
-            <FieldLabel
-              htmlFor="insLimit"
-              label="Lookback"
-              info="How many recent creatives AdGen should analyze for this Insights view."
-            />
-            <select id="insLimit" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-              <option value={100}>100 creatives</option>
-              <option value={200}>200 creatives</option>
-              <option value={500}>500 creatives</option>
-            </select>
-          </div>
+          {activeSource === "manual" && (
+            <div className="ins-sourceDetailInner">
+              {canUsePerformanceFeatures ? (
+                <>
+                  <div className="ins-sourceDetailIntro">
+                    <div>
+                      <div className="ins-sourceEyebrow">
+                        ADGen Manual Tracking
+                      </div>
+                      <h3>Library performance is connected</h3>
+                      <p>
+                        ADGen is analyzing impressions, clicks, conversions,
+                        CTR, CPA, ROAS, CPM, spend, and manually selected
+                        winners across saved image and video creatives.
+                      </p>
+                    </div>
 
-          <div className="ins-field">
-            <FieldLabel
-              htmlFor="insSpend"
-              label="Min Spend"
-              info="Filters out creatives with low spend so insights focus on more meaningful performance data."
-            />
-            <input
-              id="insSpend"
-              type="number"
-              step="0.01"
-              value={minSpend}
-              onChange={(e) => setMinSpend(Number(e.target.value))}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {err && (
-        <Card className="ins-error">
-          <h3>Insights Locked</h3>
-          <p>{err}</p>
-          <Button type="button" onClick={() => (window.location.href = "/account")}>
-            Upgrade Plan
-          </Button>
-        </Card>
-      )}
-
-      {!err && loading && (
-        <Card className="ins-stateCard">Loading creative intelligence...</Card>
-      )}
-
-      {!err && !loading && !data && (
-        <Card className="ins-stateCard">No insights available yet.</Card>
-      )}
-
-      {!err && data && (
-        <>
-          <div className="ins-statGrid">
-            <Card className="ins-statCard score">
-              <span>Creative Intelligence Score</span>
-              <strong>{intelligenceScore}/100</strong>
-              <p>{intelligenceScore >= 80 ? "Excellent signal quality" : intelligenceScore >= 60 ? "Good foundation" : "Needs more performance data"}</p>
-            </Card>
-
-            <Card className="ins-statCard">
-              <span>Tracked Creatives</span>
-              <strong>{summary.count_with_performance ?? 0}</strong>
-              <p>Creatives with performance data</p>
-            </Card>
-
-            <Card className="ins-statCard">
-              <span>Weighted ROAS</span>
-              <strong>{fmt(summary.weighted_roas, 2)}</strong>
-              <p>Revenue efficiency across tracked spend</p>
-            </Card>
-
-            <Card className="ins-statCard">
-              <span>Average CTR</span>
-              <strong>{pct(summary.avg_ctr, 2)}</strong>
-              <p>Average click-through rate</p>
-            </Card>
-          </div>
-
-          <div className="ins-mainGrid">
-            <Card className="ins-card ins-aiSummary">
-              <div className="ins-cardTitle">
-                AI Summary
-                <InfoTip text="A plain-English summary based on your tracked creative performance." />
-              </div>
-
-              <p>{aiNarrative}</p>
-
-              <div className="ins-recommendations">
-                {aiRecommendations.map((rec) => (
-                  <div key={rec}>✓ {rec}</div>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="ins-card">
-              <div className="ins-cardTitle">Winning Patterns</div>
-
-              <div className="ins-highlights">
-                {highlights.map((h) => (
-                  <div key={h.label} className="ins-highlight">
-                    <div className="ins-highlightLabel">{h.label}</div>
-                    <div className="ins-highlightValue">{h.value}</div>
-                    <div className="ins-highlightDetail">{h.detail}</div>
+                    <a className="ins-detailLink" href="/library">
+                      Open Library →
+                    </a>
                   </div>
-                ))}
-              </div>
-            </Card>
-          </div>
 
-          <div className="ins-leaderboards">
-            {renderTopList("Top by ROAS", top.by_roas, "ROAS")}
-            {renderTopList("Top by CTR", top.by_ctr, "CTR")}
-            {renderTopList("Lowest CPA", top.lowest_cpa, "CPA")}
-            {renderTopList("Lowest CPM", top.lowest_cpm, "CPM")}
+                  <div className="ins-sourceMetricStrip">
+                    <div>
+                      <small>Tracked creatives</small>
+                      <strong>{summary.count_with_performance ?? 0}</strong>
+                    </div>
+                    <div>
+                      <small>Average CTR</small>
+                      <strong>{pct(summary.avg_ctr, 2)}</strong>
+                    </div>
+                    <div>
+                      <small>Weighted ROAS</small>
+                      <strong>{fmt(summary.weighted_roas, 2)}</strong>
+                    </div>
+                    <div>
+                      <small>Minimum spend</small>
+                      <strong>{money(minSpend)}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                renderLockedFeature({
+                  eyebrow: "Manual Performance Tracking",
+                  title: "Turn Library results into reusable creative intelligence",
+                  description:
+                    "Pro and Business users can add delivery and outcome metrics to saved creatives so ADGen can identify reliable winners and underperformers.",
+                  benefits: [
+                    "Track impressions, clicks, conversions, spend, and revenue.",
+                    "Automatically calculate CTR, CPC, CPA, CPM, and ROAS.",
+                    "Qualify creatives using meaningful delivery volume.",
+                    "Feed successful results into future creative generations.",
+                  ],
+                })
+              )}
+            </div>
+          )}
+
+          {activeSource === "google" && (
+            <div className="ins-sourceDetailInner">
+              {canUsePerformanceFeatures ? (
+                <GoogleAdsInsightsPanel />
+              ) : (
+                renderLockedFeature({
+                  eyebrow: "Google Ads Integration",
+                  title: "Connect campaign results directly to ADGen",
+                  description:
+                    "Pro and Business users can sync Google Ads campaign and creative performance into the same intelligence system.",
+                  benefits: [
+                    "Import campaign delivery, clicks, spend, and conversions.",
+                    "Review campaign and creative performance inside Insights.",
+                    "Reduce manual data entry for active campaigns.",
+                    "Use real advertising results to strengthen Creative Intelligence.",
+                  ],
+                })
+              )}
+            </div>
+          )}
+
+          {activeSource === "meta" && (
+            <div className="ins-sourceDetailInner">
+              <div className="ins-comingCompact">
+                <div>
+                  <div className="ins-sourceEyebrow">Meta Ads</div>
+                  <h3>Automatic Meta performance syncing is coming later</h3>
+                  <p>
+                    The future integration will import campaigns, creatives,
+                    impressions, clicks, spend, and conversions into this same
+                    Insights workspace.
+                  </p>
+                </div>
+                <span className="ins-comingBadge">Coming Soon</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {activeSource === "manual" && canUsePerformanceFeatures && (
+        <>
+        <Card className="ins-toolbar">
+          <div className="ins-controls">
+            <div className="ins-field">
+              <FieldLabel
+                htmlFor="insLimit"
+                label="Lookback"
+                info="How many recent creatives ADGen should analyze for this Insights view."
+              />
+              <select id="insLimit" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+                <option value={100}>100 creatives</option>
+                <option value={200}>200 creatives</option>
+                <option value={500}>500 creatives</option>
+              </select>
+            </div>
+
+            <div className="ins-field">
+              <FieldLabel
+                htmlFor="insSpend"
+                label="Min Spend"
+                info="Filters out creatives with low spend so insights focus on more meaningful performance data."
+              />
+              <input
+                id="insSpend"
+                type="number"
+                step="0.01"
+                value={minSpend}
+                onChange={(e) => setMinSpend(Number(e.target.value))}
+              />
+            </div>
           </div>
+        </Card>
+
+        {err && (
+          <Card className="ins-error">
+            <h3>Insights Locked</h3>
+            <p>{err}</p>
+            <Button type="button" onClick={() => (window.location.href = "/account")}>
+              Upgrade Plan
+            </Button>
+          </Card>
+        )}
+
+        {!err && loading && (
+          <Card className="ins-stateCard">Loading creative intelligence...</Card>
+        )}
+
+        {!err && !loading && !data && (
+          <Card className="ins-stateCard">No insights available yet.</Card>
+        )}
+
+        {!err && data && (
+          <>
+            <div className="ins-statGrid">
+              <Card className="ins-statCard score">
+                <span>Creative Intelligence Score</span>
+                <strong>{intelligenceScore}/100</strong>
+                <p>{intelligenceScore >= 80 ? "Excellent signal quality" : intelligenceScore >= 60 ? "Good foundation" : "Needs more performance data"}</p>
+              </Card>
+
+              <Card className="ins-statCard">
+                <span>Tracked Creatives</span>
+                <strong>{summary.count_with_performance ?? 0}</strong>
+                <p>Creatives with performance data</p>
+              </Card>
+
+              <Card className="ins-statCard">
+                <span>Weighted ROAS</span>
+                <strong>{fmt(summary.weighted_roas, 2)}</strong>
+                <p>Revenue efficiency across tracked spend</p>
+              </Card>
+
+              <Card className="ins-statCard">
+                <span>Average CTR</span>
+                <strong>{pct(summary.avg_ctr, 2)}</strong>
+                <p>Average click-through rate</p>
+              </Card>
+            </div>
+
+            <div className="ins-mainGrid">
+              <Card className="ins-card ins-aiSummary">
+                <div className="ins-cardTitle">
+                  AI Summary
+                  <InfoTip text="A plain-English summary based on your tracked creative performance." />
+                </div>
+
+                <p>{aiNarrative}</p>
+
+                <div className="ins-recommendations">
+                  {aiRecommendations.map((rec) => (
+                    <div key={rec}>✓ {rec}</div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="ins-card">
+                <div className="ins-cardTitle">Winning Patterns</div>
+
+                <div className="ins-highlights">
+                  {highlights.map((h) => (
+                    <div key={h.label} className="ins-highlight">
+                      <div className="ins-highlightLabel">{h.label}</div>
+                      <div className="ins-highlightValue">{h.value}</div>
+                      <div className="ins-highlightDetail">{h.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            <div className="ins-leaderboards">
+              {renderTopList("Top by ROAS", top.by_roas, "ROAS")}
+              {renderTopList("Top by CTR", top.by_ctr, "CTR")}
+              {renderTopList("Lowest CPA", top.lowest_cpa, "CPA")}
+              {renderTopList("Lowest CPM", top.lowest_cpm, "CPM")}
+            </div>
+          </>
+        )}
         </>
       )}
     </div>

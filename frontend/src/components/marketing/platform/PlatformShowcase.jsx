@@ -11,7 +11,7 @@ const scatteredTools = [
   "Video tools",
   "Copy documents",
   "Asset folders",
-  "Performance sheets",
+  "Disconnected analytics",
 ];
 
 const connectedBenefits = [
@@ -28,8 +28,8 @@ const connectedBenefits = [
     title: "Past work remains organized and ready to reuse.",
   },
   {
-    label: "One Learning Loop",
-    title: "Performance improves what you create next.",
+    label: "Performance Intelligence",
+    title: "Qualified results guide future image and video generations.",
   },
 ];
 
@@ -38,9 +38,9 @@ export default function PlatformShowcase() {
     <Section size="lg" container="wide" className="adgen-platform-section">
       <SectionHeader
         align="center"
-        eyebrow="Less fragmentation"
-        title="Stop switching between disconnected creative tools."
-        description="Your brand direction, creative production, editing, organization, and performance data should strengthen each other—not live in separate tabs."
+        eyebrow="One connected platform"
+        title="Stop starting every campaign from zero."
+        description="Your brand, production workflow, creative history, and campaign results should stay connected instead of living in separate tools."
       />
 
       <div className="adgen-platform-transformation">
@@ -49,12 +49,11 @@ export default function PlatformShowcase() {
             The scattered workflow
           </div>
 
-          <h3>Too many tools. Too little continuity.</h3>
+          <h3>A workflow that loses context.</h3>
 
           <p>
-            Creative direction gets copied between documents, generators,
-            editors, folders, and spreadsheets—forcing every campaign to start
-            over.
+            Creative direction, assets, and campaign results live in separate
+            systems—so the lessons from one campaign rarely improve the next.
           </p>
 
           <div className="adgen-platform-tool-cloud">
@@ -78,11 +77,12 @@ export default function PlatformShowcase() {
             The connected workflow
           </div>
 
-          <h3>One system that remembers the work.</h3>
+          <h3>One system that carries the work forward.</h3>
 
           <p>
-            AdGen keeps your brand, creative assets, campaign context, and
-            performance insights connected from one campaign to the next.
+            ADGen keeps your brand, creative assets, campaign context, and
+            performance history together. Performance Intelligence then turns
+            qualified results into guidance for future generations.
           </p>
 
           <div className="adgen-platform-benefit-grid">
@@ -102,7 +102,7 @@ export default function PlatformShowcase() {
           href="/platform#generated-examples"
           size="lg"
         >
-          See what AdGen MCM creates
+          See what ADGen MCM creates
         </MarketingButton>
 
         <a

@@ -25,7 +25,7 @@ const items = [
   {
     name: "Learn what works",
     text:
-      "Track real campaign performance instead of relying only on creative instinct.",
+      "Use qualified campaign results to understand what should influence the next generation.",
   },
 ];
 
@@ -34,9 +34,9 @@ export default function TrustFoundation() {
     <Section size="lg" container="wide" className="adgen-trust-section">
       <SectionHeader
         align="center"
-        eyebrow="Built for confident execution"
-        title="Create faster without losing clarity or control."
-        description="AdGen helps your team move quickly while keeping the brand, assets, and performance context connected."
+        eyebrow="Built for real creative work"
+        title="Move faster without losing consistency, context, or control."
+        description="ADGen gives marketers one place to create, refine, organize, and learn from campaign performance."
       />
 
       <Stagger

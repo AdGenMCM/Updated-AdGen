@@ -7,24 +7,24 @@ import TiltCard from "../../motion/TiltCard";
 
 const metrics = [
   {
-    value: "+18%",
-    title: "Higher CTR",
-    text: "Top creative identified and reused automatically.",
+    value: "Signals",
+    title: "Qualified Performance",
+    text: "Separate meaningful results from low-volume or incomplete data.",
   },
   {
-    value: "Winner",
-    title: "Creative Library",
-    text: "Every version stays organized for future campaigns.",
+    value: "DNA",
+    title: "Creative DNA",
+    text: "Turn winning colors, styles, messaging, and composition into reusable guidance.",
   },
   {
-    value: "Brand",
-    title: "Always Consistent",
-    text: "Brand Kit keeps every asset aligned.",
+    value: "Image",
+    title: "Smarter Image Generation",
+    text: "Apply proven creative patterns when generating future image ads.",
   },
   {
-    value: "Loop",
-    title: "Continuous Learning",
-    text: "Every campaign becomes the starting point for the next.",
+    value: "Video",
+    title: "Smarter Video Generation",
+    text: "Carry the same brand-specific learning into future video creative.",
   },
 ];
 
@@ -62,9 +62,9 @@ export default function ResultsSection() {
           <div className="adgen-results-copy">
             <SectionHeader
               align="left"
-              eyebrow="Performance"
-              title="Every campaign makes the next one stronger."
-              description="Performance isn't the end of the workflow. Learn what performs, organize every creative, and generate smarter campaigns every time."
+              eyebrow="Performance Intelligence"
+              title="Turn campaign results into reusable creative direction."
+              description="Performance Intelligence identifies reliable patterns, builds your Creative DNA, and makes those insights available to future generations."
             />
 
             <div className="adgen-results-grid">
@@ -88,17 +88,17 @@ export default function ResultsSection() {
             <div className="results-dashboard">
               <div className="results-dashboard-top">
                 <div>
-                  <p>Creative Performance</p>
-                  <h3>Winner profile</h3>
+                  <p>Performance Intelligence</p>
+                  <h3>Creative DNA</h3>
                 </div>
 
-                <div className="results-badge">Live insights</div>
+                <div className="results-badge">Creative DNA</div>
               </div>
 
               <div className="results-stats-row">
                 <div>
-                  <span>CTR lift</span>
-                  <strong>+18%</strong>
+                  <span>Confidence</span>
+                  <strong>84%</strong>
                 </div>
 
                 <div>
@@ -107,8 +107,8 @@ export default function ResultsSection() {
                 </div>
 
                 <div>
-                  <span>Top channel</span>
-                  <strong>Meta</strong>
+                  <span>Best color</span>
+                  <strong>Blue</strong>
                 </div>
               </div>
 
@@ -154,8 +154,8 @@ export default function ResultsSection() {
                 </div>
 
                 <div className="chart-callout callout-two">
-                  <strong>Winner found</strong>
-                  <span>CTR +18%</span>
+                  <strong>Pattern qualified</strong>
+                  <span>Strong signal</span>
                 </div>
               </div>
 
@@ -167,12 +167,12 @@ export default function ResultsSection() {
 
                 <div>
                   <span />
-                  Top performer saved to creative library
+                  Qualified performance added to Creative DNA
                 </div>
 
                 <div>
                   <span />
-                  Winner profile ready for next campaign
+                  Creative DNA ready for next campaign
                 </div>
               </div>
             </div>

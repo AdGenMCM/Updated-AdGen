@@ -102,6 +102,13 @@ from campaign_backend.routes import router as campaign_router
 from line_items.routes import router as line_items_router
 from campaign_assets.routes import router as campaign_assets_router
 
+#Google ADs Integration
+from integrations.google_ads.routes import router as google_ads_router
+
+#Performance Intelligence 
+from performance_intelligence.routes import router as performance_intelligence_router
+from performance_intelligence.service import generation_profile as get_intelligence_generation_profile
+
 load_dotenv(override=True)
 
 app = FastAPI()
@@ -111,6 +118,10 @@ app.include_router(campaign_assets_router)
 
 app.include_router(video_router)
 app.include_router(brand_kits_router)
+
+
+app.include_router(google_ads_router)
+app.include_router(performance_intelligence_router)
 
 
 class AdminRequestTierBody(BaseModel):
@@ -344,7 +355,10 @@ class AdRequest(BaseModel):
     referenceImageUrls: Optional[List[str]] = None
     referenceImageMode: Optional[str] = "product_reference"
 
-    # Legacy winners text (keep)
+    # Performance Intelligence applies the user's learned generation profile.
+    usePerformanceIntelligence: bool = False
+
+    # Legacy winners text (keep for backwards compatibility)
     winnerGuidance: Optional[str] = None
 
     # ✅ NEW structured winners (preferred over winnerGuidance)
@@ -384,6 +398,12 @@ class GenerateFromOptimizerRequest(BaseModel):
 
 
 class PerformanceUpdate(BaseModel):
+    # Qualification-critical delivery and outcome volume.
+    impressions: Optional[int] = None
+    clicks: Optional[int] = None
+    conversions: Optional[float] = None
+
+    # Rates and costs may be entered manually or derived below.
     ctr: Optional[float] = None
     cpc: Optional[float] = None
     cpa: Optional[float] = None
@@ -1387,6 +1407,170 @@ def _group_best(items: List[dict], group_key: str, min_spend: float) -> Dict[str
         "best": out[0] if out else None,
         "rows": out[:10],
     }
+
+
+
+def _profile_values(
+    profile: Optional[Dict[str, Any]],
+    key: str,
+    limit: int = 3,
+) -> List[str]:
+    items = (profile or {}).get(key) or []
+    values: List[str] = []
+
+    if not isinstance(items, list):
+        return values
+
+    for item in items[:limit]:
+        if isinstance(item, dict):
+            value = item.get("value")
+        else:
+            value = item
+
+        cleaned = str(value or "").strip()
+        if cleaned:
+            values.append(cleaned)
+
+    return values
+
+
+def inject_performance_intelligence_image(
+    base_text: str,
+    intelligence_response: Optional[Dict[str, Any]],
+) -> str:
+    """
+    Adds concise, performance-learned creative direction.
+
+    The current request and Brand Kit remain higher priority. The profile is
+    applied only when qualified evidence exists and the learned field is
+    compatible with the requested creative.
+    """
+    if not intelligence_response:
+        return base_text
+
+    profile = intelligence_response.get("profile") or {}
+    qualified_count = int(
+        intelligence_response.get("qualifiedCount") or 0
+    )
+    positive_count = int(
+        intelligence_response.get("positiveCount") or 0
+    )
+    confidence = float(
+        intelligence_response.get("confidence") or 0
+    )
+
+    if qualified_count <= 0 or positive_count <= 0 or not profile:
+        return base_text
+
+    constraints: List[str] = []
+
+    colors = _profile_values(profile, "top_colors", 3)
+    styles = _profile_values(profile, "top_visual_styles", 2)
+    compositions = _profile_values(profile, "top_compositions", 2)
+    backgrounds = _profile_values(profile, "top_backgrounds", 2)
+    imagery_types = _profile_values(profile, "top_imagery_types", 2)
+    tones = _profile_values(profile, "top_emotional_tones", 2)
+    cta_openers = _profile_values(profile, "top_cta_openers", 2)
+    headline_openers = _profile_values(
+        profile,
+        "top_headline_openers",
+        2,
+    )
+
+    if colors:
+        constraints.append(
+            "Favor this learned color direction when compatible: "
+            + ", ".join(colors)
+            + "."
+        )
+    if styles:
+        constraints.append(
+            "Favor these learned visual styles: "
+            + ", ".join(styles)
+            + "."
+        )
+    if compositions:
+        constraints.append(
+            "Favor these learned compositions: "
+            + ", ".join(compositions)
+            + "."
+        )
+    if backgrounds:
+        constraints.append(
+            "Favor these learned background treatments: "
+            + ", ".join(backgrounds)
+            + "."
+        )
+    if imagery_types:
+        constraints.append(
+            "Favor these learned imagery types: "
+            + ", ".join(imagery_types)
+            + "."
+        )
+    if tones:
+        constraints.append(
+            "Favor these learned emotional tones: "
+            + ", ".join(tones)
+            + "."
+        )
+    if cta_openers:
+        constraints.append(
+            "When generating a CTA, favor an opener such as: "
+            + ", ".join(cta_openers)
+            + "."
+        )
+    if headline_openers:
+        constraints.append(
+            "When generating a headline, consider an opener such as: "
+            + ", ".join(headline_openers)
+            + "."
+        )
+
+    headline_length = profile.get(
+        "average_winning_headline_length"
+    )
+    if headline_length is not None:
+        try:
+            target = max(1, min(35, round(float(headline_length))))
+            constraints.append(
+                f"Aim for a headline near {target} characters."
+            )
+        except (TypeError, ValueError):
+            pass
+
+    product_prominence = profile.get(
+        "average_winning_product_prominence_percent"
+    )
+    if product_prominence is not None:
+        try:
+            prominence = max(
+                0,
+                min(100, round(float(product_prominence))),
+            )
+            constraints.append(
+                "Target approximately "
+                f"{prominence}% product prominence in the composition."
+            )
+        except (TypeError, ValueError):
+            pass
+
+    if not constraints:
+        return base_text
+
+    confidence_percent = round(confidence * 100)
+    section = (
+        "\n==================================================\n"
+        "PERFORMANCE INTELLIGENCE\n"
+        "==================================================\n"
+        f"Signal confidence: {confidence_percent}% from "
+        f"{qualified_count} qualified results.\n"
+        "Use these learned patterns as optimization guidance only. "
+        "The user's current request and Brand Kit take priority. "
+        "Do not copy a previous creative.\n"
+        + "\n".join(f"• {item}" for item in constraints)
+    )
+
+    return f"{base_text}{section}"
 
 
 def inject_winners_structured_image(
@@ -2716,6 +2900,27 @@ async def generate_ad(
         brand_kit
     )
 
+    use_performance_intelligence = bool(
+        getattr(payload, "usePerformanceIntelligence", False)
+    )
+    intelligence_response: Dict[str, Any] = {}
+
+    if use_performance_intelligence:
+        if not admin:
+            require_pro_or_business(tier)
+        try:
+            intelligence_response = (
+                get_intelligence_generation_profile(uid) or {}
+            )
+        except Exception as exc:
+            print(
+                "PERFORMANCE INTELLIGENCE PROFILE LOAD FAILED:",
+                repr(exc),
+                flush=True,
+            )
+            intelligence_response = {}
+
+    # Legacy Winner Profile support remains for older frontend clients.
     winner_guidance = (getattr(payload, "winnerGuidance", None) or "").strip()[:1000]
     winner_profile = getattr(payload, "winnerProfile", None)
     winners_apply = getattr(payload, "winnersApply", None)
@@ -2797,8 +3002,22 @@ async def generate_ad(
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
+    performance_intelligence_line = ""
+    if use_performance_intelligence and intelligence_response:
+        performance_intelligence_line = (
+            inject_performance_intelligence_image(
+                "",
+                intelligence_response,
+            ).strip()
+        )
+        if performance_intelligence_line:
+            performance_intelligence_line = (
+                "\n" + performance_intelligence_line
+            )
+
+    # Legacy fallback for older clients.
     winners_line = ""
-    if winner_profile:
+    if not performance_intelligence_line and winner_profile:
         winners_line = inject_winners_structured_image(
             "",
             winner_profile,
@@ -2807,8 +3026,12 @@ async def generate_ad(
         ).strip()
         if winners_line:
             winners_line = "\n" + winners_line
-    elif winner_guidance:
-        winners_line = f"\nPast winners guidance (use lightly; do NOT mention metrics): {winner_guidance}"
+    elif not performance_intelligence_line and winner_guidance:
+        winners_line = (
+            "\nPast winners guidance "
+            "(use lightly; do NOT mention metrics): "
+            f"{winner_guidance}"
+        )
 
     set_generation_progress(db, "image", progress_job_id, "building_prompts")
 
@@ -2829,10 +3052,9 @@ When generating this creative, follow these priorities in order:
    Only apply Brand Kit fields that are present.
    Never override the user's current request with Brand Kit defaults.
 
-3. Use the Winner Profile as optimization guidance only.
-   Incorporate successful patterns when they do not conflict with the user's
-   request or Brand Kit.
-   Never copy previous creatives.
+3. Use Performance Intelligence as optimization guidance only.
+   Apply learned patterns when they do not conflict with the user's request
+   or Brand Kit. Never copy previous creatives.
 
 4. Follow general advertising best practices to maximize performance while
    maintaining originality and visual quality.
@@ -2865,28 +3087,23 @@ supplied_cta: {requested_cta or "N/A"}
 
 {brand_kit_context}
 
-{winners_line}
+{performance_intelligence_line or winners_line}
 """
 
-    winners_section = (
-        f"""
+    performance_section = ""
+    if performance_intelligence_line:
+        performance_section = performance_intelligence_line
+    elif winners_line:
+        performance_section = f"""
         ==================================================
-        PAST WINNING CREATIVE INSIGHTS
+        LEGACY WINNER PROFILE
         ==================================================
 
-        These insights summarize patterns identified from the advertiser's highest-performing creatives. Treat them as performance-informed creative direction that should influence your design decisions.
-
-        These insights represent characteristics shared by the advertiser's highest-performing creatives.
-
-        Use these insights to influence layout, composition, lighting, visual hierarchy, typography, color palette, and overall creative direction.
-
-        Do not copy previous advertisements directly. Instead, naturally apply the successful design principles while creating a new, original advertisement.
+        Use these older winner-profile signals only when compatible with the
+        current request and Brand Kit. Never copy a previous advertisement.
 
         {winners_line}
         """
-        if winners_line
-        else ""
-    )
 
     visual_prompt = f"""
 You are the Creative Director at a world-class advertising agency.
@@ -2962,10 +3179,9 @@ When generating this creative, follow these priorities in order:
    Only apply Brand Kit fields that are present.
    Never override the user's current request with Brand Kit defaults.
 
-3. Use the Winner Profile as optimization guidance only.
-   Incorporate successful patterns when they do not conflict with the user's
-   request or Brand Kit.
-   Never copy previous creatives.
+3. Use Performance Intelligence as optimization guidance only.
+   Apply learned patterns when they do not conflict with the user's request
+   or Brand Kit. Never copy previous creatives.
 
 4. Follow general advertising best practices to maximize performance while
    maintaining originality and visual quality.
@@ -3012,7 +3228,7 @@ If reference mode is product_reference, preserve the product, packaging, app scr
 
 If reference mode is style_inspiration, use the references only for composition, mood, lighting, framing, and design inspiration. Do not copy the reference image directly.
 
-{winners_section}
+{performance_section}
 
 ==================================================
 DESIGN REQUIREMENTS
@@ -3274,6 +3490,17 @@ It should be visually impressive enough to appear in a professional design portf
                         0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
                     ),
                 },
+                "usePerformanceIntelligence": use_performance_intelligence,
+                "performanceIntelligence": (
+                    {
+                        "confidence": intelligence_response.get("confidence", 0),
+                        "evidenceCount": intelligence_response.get("evidenceCount", 0),
+                        "qualifiedCount": intelligence_response.get("qualifiedCount", 0),
+                        "positiveCount": intelligence_response.get("positiveCount", 0),
+                    }
+                    if use_performance_intelligence
+                    else None
+                ),
                 "winnerProfile": winner_profile or None,
                 "winnersApply": winners_apply or None,
                 "winnersInfluence": (
@@ -5416,6 +5643,7 @@ async def update_creative_performance(
     kind: str,
     job_id: str,
     payload: PerformanceUpdate,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
 ):
     uid, _email, claims = require_user(authorization)
@@ -5440,6 +5668,36 @@ async def update_creative_performance(
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     perf = payload.model_dump(exclude_none=True)
+
+    # Delivery/outcome validation.
+    impressions = perf.get("impressions")
+    clicks = perf.get("clicks")
+    conversions = perf.get("conversions")
+
+    if impressions is not None and impressions < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="impressions must be >= 0.",
+        )
+    if clicks is not None and clicks < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="clicks must be >= 0.",
+        )
+    if conversions is not None and conversions < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="conversions must be >= 0.",
+        )
+    if (
+        impressions is not None
+        and clicks is not None
+        and clicks > impressions
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="clicks cannot exceed impressions.",
+        )
 
     # Percent validation (0-100)
     pct_fields = {
@@ -5472,11 +5730,26 @@ async def update_creative_performance(
     if "notes" in perf and perf["notes"] is not None:
         perf["notes"] = perf["notes"].strip()[:800]
 
-    # ✅ Auto-calc ROAS from spend + revenue
+    # Derive consistent metrics from the raw values whenever possible.
+    if impressions is not None and impressions > 0 and clicks is not None:
+        perf["ctr"] = round((clicks / impressions) * 100.0, 4)
+
+    if spend is not None and clicks is not None and clicks > 0:
+        perf["cpc"] = round(spend / clicks, 4)
+
+    if (
+        spend is not None
+        and conversions is not None
+        and conversions > 0
+    ):
+        perf["cpa"] = round(spend / conversions, 4)
+
+    if spend is not None and impressions is not None and impressions > 0:
+        perf["cpm"] = round((spend / impressions) * 1000.0, 4)
+
     if spend is not None and revenue is not None and spend > 0:
         perf["roas"] = round(revenue / spend, 4)
     else:
-        # prevent stale ROAS lingering
         perf.pop("roas", None)
 
     perf["updatedAt"] = int(time.time())
@@ -5484,7 +5757,41 @@ async def update_creative_performance(
 
     ref.set({"performance": perf}, merge=True)
 
-    return {"ok": True, "kind": kind, "jobId": job_id, "performance": perf}
+    # Refresh Performance Intelligence after the user's manual metrics save.
+    # The existing save response stays fast because analysis runs as a
+    # FastAPI background task.
+    try:
+        from performance_intelligence.adapters.manual import (
+            ingest_manual_creative,
+        )
+        from performance_intelligence.store import rebuild_summary
+
+        def _refresh_performance_intelligence():
+            ingest_manual_creative(
+                uid=uid,
+                kind=kind,
+                job_id=job_id,
+                analyze_media=True,
+            )
+            rebuild_summary(uid)
+
+        background_tasks.add_task(_refresh_performance_intelligence)
+        intelligence_refresh_queued = True
+    except Exception as exc:
+        intelligence_refresh_queued = False
+        print(
+            "PERFORMANCE INTELLIGENCE QUEUE ERROR:",
+            repr(exc),
+            flush=True,
+        )
+
+    return {
+        "ok": True,
+        "kind": kind,
+        "jobId": job_id,
+        "performance": perf,
+        "intelligenceRefreshQueued": intelligence_refresh_queued,
+    }
 
 
 # --- Shared insights implementation (we'll call it from BOTH /insights and /creative-insights) ---

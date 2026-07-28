@@ -31,14 +31,14 @@ const steps = [
     title: "Learn",
     label: "Understand what earns attention",
     description:
-      "Track performance, identify winning patterns, and save the creative signals that matter.",
+      "Bring in manual tracking or Google Ads results and identify reliable performance signals.",
   },
   {
     number: "05",
     title: "Improve",
     label: "Make every next campaign stronger",
     description:
-      "Use what worked before as the creative direction for the assets you produce next.",
+      "Use Creative DNA to guide future image and video generations without starting from zero.",
   },
 ];
 
@@ -48,8 +48,8 @@ export default function Workflow() {
       <SectionHeader
         align="center"
         eyebrow="A better creative process"
-        title="Move from direction to better-performing creative."
-        description="AdGen connects the full creative cycle so your team spends less time coordinating tools and more time improving the work."
+        title="A complete path from campaign direction to continuous improvement."
+        description="Define the campaign, create the assets, measure the results, and use what worked to guide the next generation."
       />
 
       <div className="adgen-workflow">

@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import "./VideoAds.css";
 import "./AdGenerator.css"; // ✅ reuse AdGenerator overlay + spinner styles
 import { auth } from "../firebaseConfig";
-import { useWinnersProfile } from "../hooks/useWinnersProfile";
 import StepSection from "../components/ui/StepSection";
 import InfoTip from "../components/ui/InfoTip";
+import PerformanceIntelligencePreview from "../components/PerformanceIntelligencePreview";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
 
@@ -131,14 +131,14 @@ export default function VideoAds() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const audioRef = useRef(null);
 
-  // ========== Winners guidance (Shared Hook) ==========
-  const [useWinners, setUseWinners] = useState(false);
+  // ========== Performance Intelligence ==========
+  const [usePerformanceIntelligence, setUsePerformanceIntelligence] = useState(false);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
   const lastVideoBrandDefaultsRef = useRef({});
 
-  const canUseWinners = useMemo(() => {
+  const canUsePerformanceIntelligence = useMemo(() => {
     if (me.isAdmin) return true;
     const t = String(me.tier || "").toLowerCase();
     return t === "pro_monthly" || t === "business_monthly";
@@ -191,13 +191,6 @@ export default function VideoAds() {
     lastVideoBrandDefaultsRef.current = nextDefaults;
   }, [useBrandKit, brandKit, videoBrandDefaults]);
 
-  const { winnersProfile, winnerGuidance, winnersLoading } = useWinnersProfile({
-    kind: "video",
-    enabled: useWinners && canUseWinners, // only fetch when entitled + toggle on
-    apiBase: API_BASE,
-    limit: 200,
-    minSpend: 0,
-  });
 
   // ========== Job state ==========
   const [loading, setLoading] = useState(false);
@@ -245,14 +238,18 @@ export default function VideoAds() {
     }
   }, [isFreePlan]);
 
-  // ✅ winners guidance should be Pro/Business only (admin allowed)
-
-  // If user toggles winners on without entitlement, auto-disable it
+  // Performance Intelligence is Pro/Business only (admin allowed).
   useEffect(() => {
-    if (useWinners && !canUseWinners) {
-      setUseWinners(false);
+    if (
+      usePerformanceIntelligence &&
+      !canUsePerformanceIntelligence
+    ) {
+      setUsePerformanceIntelligence(false);
     }
-  }, [useWinners, canUseWinners]);
+  }, [
+    usePerformanceIntelligence,
+    canUsePerformanceIntelligence,
+  ]);
 
   const isGenerating =
     loading || (!!jobId && !finalVideoUrl && status !== "failed" && status !== "succeeded");
@@ -465,11 +462,10 @@ export default function VideoAds() {
           presetVoice,
         },
 
-        // ✅ NEW: winners guidance injected lightly (Pro/Business only)
-        winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
-        winnerProfile: (useWinners && canUseWinners) ? (winnersProfile || null) : null,
-        winnersApply: (useWinners && canUseWinners) ? ["tone", "platform", "ratio"] : null,
-        winnersInfluence: (useWinners && canUseWinners) ? 0.6 : null,
+        // The backend securely resolves the current learned profile.
+        usePerformanceIntelligence:
+          usePerformanceIntelligence &&
+          canUsePerformanceIntelligence,
       };
 
       const res = await fetch(`${API_BASE}/video/start-image`, {
@@ -556,11 +552,10 @@ export default function VideoAds() {
           presetVoice,
         },
 
-        // ✅ NEW: winners guidance injected lightly (Pro/Business only)
-        winnerGuidance: (useWinners && canUseWinners) ? (winnerGuidance || "").trim() : null,
-        winnerProfile: (useWinners && canUseWinners) ? (winnersProfile || null) : null,
-        winnersApply: (useWinners && canUseWinners) ? ["tone", "platform", "ratio"] : null,
-        winnersInfluence: (useWinners && canUseWinners) ? 0.6 : null,
+        // The backend securely resolves the current learned profile.
+        usePerformanceIntelligence:
+          usePerformanceIntelligence &&
+          canUsePerformanceIntelligence,
       };
 
       const res = await fetch(`${API_BASE}/video/start-prompt`, {
@@ -862,40 +857,52 @@ return (
             )}
           </div>
 
-            <div className="videoEnhancementCard">
-              {isFreePlan ? (
+            <div
+              className={`videoEnhancementCard videoIntelligenceCard ${
+                usePerformanceIntelligence ? "enabled" : ""
+              }`}
+            >
+              {!canUsePerformanceIntelligence ? (
                 <div className="videoToggleCopy">
                   <span className="videoToggleTitle">
-                    <span>🔒 Winner Profile</span>
+                    <span>🔒 Performance Intelligence</span>
                   </span>
-                  <small>  Available on Pro &amp; Business plans.</small>
+                  <small>Available on Pro &amp; Business plans.</small>
                 </div>
               ) : (
                 <label className="videoToggle">
                   <input
                     type="checkbox"
-                    checked={useWinners}
-                    onChange={(e) => setUseWinners(e.target.checked)}
-                    disabled={!canUseWinners || isGenerating || winnersLoading}
+                    checked={usePerformanceIntelligence}
+                    onChange={(e) =>
+                      setUsePerformanceIntelligence(e.target.checked)
+                    }
+                    disabled={isGenerating}
                   />
 
                   <span className="videoToggleCopy">
                     <span className="videoToggleTitle">
-                      <span>Apply Winner Profile</span>
-                      <InfoTip text="Uses your highest-performing videos to guide pacing, scene direction, and creative style." />
+                      <span>Apply Performance Intelligence</span>
+                      <InfoTip text="Applies concise patterns learned from qualified performance data while preserving the current request, Brand Kit, source image, and Runway's 1,000-character prompt limit." />
                     </span>
-                    <small>Pro/Business</small>
+                    <small>
+                      {usePerformanceIntelligence
+                        ? "Learned video patterns will guide this generation"
+                        : "Use what AdGen has learned from your performance"}
+                    </small>
                   </span>
                 </label>
+              )}
+
+              {canUsePerformanceIntelligence && (
+                <PerformanceIntelligencePreview
+                  enabled={usePerformanceIntelligence}
+                  mode="video"
+                />
               )}
             </div>
           </div>
 
-          {useWinners && winnersLoading && (
-            <div className="hint" style={{ marginTop: 10 }}>
-              Loading your winners…
-            </div>
-          )}
 
           <div className={`box voBox ${!voiceEnabled ? "voBoxDisabled" : ""}`}>
             <div className="voiceHeader">
@@ -1378,9 +1385,13 @@ return (
             </div>
 
             <div className="videoSpecRow">
-              <span>Winner Profile</span>
-              <strong className={`videoStatusPill ${useWinners ? "on" : "off"}`}>
-                {useWinners ? "Enabled" : "Disabled"}
+              <span>Performance Intelligence</span>
+              <strong
+                className={`videoStatusPill ${
+                  usePerformanceIntelligence ? "on" : "off"
+                }`}
+              >
+                {usePerformanceIntelligence ? "Enabled" : "Disabled"}
               </strong>
             </div>
           </div>

@@ -13,10 +13,10 @@ const plans = [
     price: "$0",
     suffix: "",
     text:
-      "Start creating with no credit card required. Just create an account.",
+      "Create your first image and video assets with no credit card required.",
     features: [
-      "2 image generations",
-      "Creative Library",
+      "2 lifetime image generations",
+      "1 lifetime video credit",
       "No credit card required",
     ],
     featured: true,
@@ -27,11 +27,12 @@ const plans = [
     price: "$79.99",
     suffix: "/mo",
     text:
-      "For growing brands creating and optimizing campaigns every week.",
+      "For active advertisers ready to connect creation with real campaign performance.",
     features: [
       "100 image generations",
-      "15 video credits",
-      "30 Optimizer runs",
+      "14 video credits",
+      "20 Optimizer runs",
+      "Performance Intelligence",
     ],
     badge: "Most popular",
   },
@@ -40,11 +41,12 @@ const plans = [
     price: "$199.99",
     suffix: "/mo",
     text:
-      "For teams managing high-volume creative production across campaigns.",
+      "For teams and agencies managing higher-volume, multi-brand creative workflows.",
     features: [
-      "300 image generations",
-      "50 video credits",
-      "100 Optimizer runs",
+      "250 image generations",
+      "32 video credits",
+      "75 Optimizer runs",
+      "10 Brand Kits",
     ],
   },
 ];
@@ -59,8 +61,8 @@ export default function PricingPreview() {
       <SectionHeader
         align="center"
         eyebrow="Start free"
-        title="Try AdGen MCM for free. Upgrade when you need more creative power."
-        description="Generate your first ads with 2 free image generations and no credit card required. Upgrade only when you are ready for more images, videos, and optimization tools."
+        title="Start free. Unlock campaign learning when your workflow is ready."
+        description="Free gives you a simple way to create. Pro and Business add Performance Intelligence, Google Ads integration, and higher production limits."
       />
 
       <Stagger

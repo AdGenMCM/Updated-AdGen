@@ -471,3 +471,99 @@
 .reference-mode input:disabled {
   cursor: not-allowed;
 }
+
+/* =========================================================
+   FINAL Performance Intelligence tooltip/layout correction
+========================================================= */
+
+/* The tooltip must be allowed to extend beyond the card. */
+.adgen-form .performance-intelligence-option {
+  overflow: visible !important;
+}
+
+/* Style only the InfoTip root. Never target its child span because that
+   child is the actual tooltip box and needs the global ui.css dimensions. */
+.adgen-form .performance-intelligence-option .ui-info-tip {
+  position: relative !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 17px !important;
+  width: 17px !important;
+  min-width: 17px !important;
+  height: 17px !important;
+  gap: 0 !important;
+  line-height: 1 !important;
+}
+
+/* Restore the global tooltip-box behavior if an earlier page rule affected it. */
+.adgen-form .performance-intelligence-option .ui-info-tip-box {
+  position: absolute !important;
+  left: 50% !important;
+  bottom: calc(100% + 10px) !important;
+  display: block !important;
+  width: 260px !important;
+  min-width: 260px !important;
+  height: auto !important;
+  padding: 12px 14px !important;
+  transform: translateX(-50%) !important;
+  white-space: normal !important;
+  text-align: left !important;
+  line-height: 1.45 !important;
+  z-index: 1000 !important;
+}
+
+/* Keep title and icon on one clean line where space allows. */
+.adgen-form
+  .performance-intelligence-option
+  .option-toggle
+  > span
+  > strong {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  width: 100% !important;
+}
+
+/* Keep decorative layer behind the content without clipping the tooltip. */
+.adgen-form .performance-intelligence-option::after {
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.adgen-form .performance-intelligence-option .option-toggle {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 700px) {
+  .adgen-form .performance-intelligence-option .ui-info-tip-box {
+    left: auto !important;
+    right: -8px !important;
+    width: min(260px, calc(100vw - 48px)) !important;
+    min-width: 0 !important;
+    transform: none !important;
+  }
+
+  .adgen-form
+    .performance-intelligence-option
+    .ui-info-tip:hover
+    .ui-info-tip-box,
+  .adgen-form
+    .performance-intelligence-option
+    .ui-info-tip:focus
+    .ui-info-tip-box {
+    transform: translateY(-2px) !important;
+  }
+}
+
+
+/* Performance Intelligence expandable preview */
+.adgen-form .performance-intelligence-option {
+  align-self: start;
+}
+
+.adgen-form .performance-intelligence-option > .pi-preview {
+  position: relative;
+  z-index: 2;
+}

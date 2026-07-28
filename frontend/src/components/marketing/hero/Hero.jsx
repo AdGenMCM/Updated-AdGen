@@ -21,23 +21,22 @@ export default function Hero() {
 
       <div className="adgen-marketing-hero-content">
         <p className="adgen-marketing-hero-eyebrow">
-          Creative intelligence for modern marketers
+          THE CREATIVE PLATFORM THAT LEARNS WHAT WORKS
         </p>
 
         <h1>
           <span className="marketing-hero-line marketing-hero-line-primary">
-            Better advertising starts here.
+            Create better ads. Learn from every campaign.
           </span>
 
           <span className="marketing-hero-line marketing-hero-line-secondary">
-            Build, refine, and improve every campaign in one place.
+            Create, measure, and improve in one connected workspace.
           </span>
         </h1>
 
         <p className="adgen-marketing-hero-description">
-          Create campaign-ready images, videos, and ad copy. 
-          Apply your Brand Kit, organize every creative asset, 
-          and improve performance from one intelligent creative workspace.
+          Most AI creative tools generate an ad and stop there. 
+          ADGen learns from what performs, helping future image and video generations start from what already works.
         </p>
 
         <div className="adgen-marketing-hero-actions">
@@ -57,10 +56,10 @@ export default function Hero() {
             Explore the platform
           </MarketingButton>
         </div>
-        <p className="adgen-marketing-hero-description">✓ 2 free image generations, 1 free video credit, ✓ No credit card required, ✓ Takes less than 2 minutes</p>
+        <p className="adgen-marketing-hero-description">✓ 2 free image generations · ✓ 1 free video credit · ✓ No credit card required</p>
         <div
           className="adgen-marketing-hero-proof"
-          aria-label="AdGen platform benefits"
+          aria-label="ADGen platform benefits"
         >
           <span>
             <i aria-hidden="true" />
@@ -74,7 +73,7 @@ export default function Hero() {
 
           <span>
             <i aria-hidden="true" />
-            Performance-guided improvement
+            Performance Intelligence on Pro
           </span>
         </div>
       </div>
@@ -82,7 +81,7 @@ export default function Hero() {
       <div className="adgen-marketing-hero-visual">
         <ProductCanvas
           variant="hero"
-          alt="AdGen creative platform dashboard showing brand, generation, and performance workflows"
+          alt="ADGen creative platform dashboard showing brand, generation, and performance workflows"
           floatingCards={
             <>
               <ProductMomentCard
@@ -108,8 +107,8 @@ export default function Hero() {
                 status="insight"
                 icon="chart"
                 eyebrow="Performance"
-                title="Winner identified"
-                detail="Creative signals ready for reuse"
+                title="Performance signal found"
+                detail="Qualified results ready to guide what comes next"
               />
 
               <ProductMomentCard

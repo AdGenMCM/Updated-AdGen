@@ -58,6 +58,61 @@ function metricLabel(value, suffix = "") {
   return `${value}${suffix}`;
 }
 
+
+const INTELLIGENCE_STATUS = {
+  winner: {
+    label: "Winner",
+    detail: "Top qualified performance signal",
+    rank: 6,
+  },
+  strong: {
+    label: "Strong",
+    detail: "Positive qualified performance signal",
+    rank: 5,
+  },
+  qualified: {
+    label: "Qualified",
+    detail: "Reliable performance evidence",
+    rank: 4,
+  },
+  underperformer: {
+    label: "Underperformer",
+    detail: "Qualified negative signal",
+    rank: 3,
+  },
+  learning: {
+    label: "Learning",
+    detail: "Building toward qualification",
+    rank: 2,
+  },
+  insufficient: {
+    label: "Insufficient Data",
+    detail: "Needs delivery and outcome data",
+    rank: 1,
+  },
+};
+
+function intelligenceMeta(status) {
+  return (
+    INTELLIGENCE_STATUS[String(status || "").toLowerCase()] ||
+    INTELLIGENCE_STATUS.insufficient
+  );
+}
+
+function qualificationPercent(evidence) {
+  const score = Number(evidence?.qualification_score);
+  if (!Number.isFinite(score)) return null;
+  return Math.max(0, Math.min(100, Math.round(score * 100)));
+}
+
+function evidenceAssetId(evidence) {
+  return String(
+    evidence?.external_asset_id ||
+      evidence?.raw_metadata?.libraryJobId ||
+      ""
+  );
+}
+
 export default function Library() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -65,6 +120,8 @@ export default function Library() {
 
   const [videos, setVideos] = useState([]);
   const [images, setImages] = useState([]);
+  const [intelligenceEvidence, setIntelligenceEvidence] = useState({});
+  const [intelligenceStatus, setIntelligenceStatus] = useState("all");
 
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -89,6 +146,54 @@ export default function Library() {
     const user = auth.currentUser;
     if (!user) throw new Error("You must be logged in.");
     return await user.getIdToken(true);
+  };
+
+  const loadIntelligenceEvidence = async (token) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/performance-intelligence/evidence?limit=1000&source=manual_tracking`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      const data = await safeJson(res);
+
+      if (!res.ok) {
+        if (![402, 403].includes(res.status)) {
+          console.warn(
+            "[Library] Performance Intelligence evidence failed:",
+            data?.detail || res.status,
+          );
+        }
+        setIntelligenceEvidence({});
+        return;
+      }
+
+      const items = Array.isArray(data?.evidence) ? data.evidence : [];
+      const byAsset = {};
+
+      for (const evidence of items) {
+        const assetId = evidenceAssetId(evidence);
+        if (!assetId) continue;
+
+        const existing = byAsset[assetId];
+        const nextScore = Number(evidence?.qualification_score || 0);
+        const existingScore = Number(existing?.qualification_score || 0);
+
+        if (!existing || nextScore >= existingScore) {
+          byAsset[assetId] = evidence;
+        }
+      }
+
+      setIntelligenceEvidence(byAsset);
+    } catch (error) {
+      console.warn(
+        "[Library] Could not load Performance Intelligence evidence:",
+        error,
+      );
+      setIntelligenceEvidence({});
+    }
   };
 
   const load = async () => {
@@ -135,6 +240,8 @@ export default function Library() {
       setVideos(vItems);
       setImages(iItems);
 
+      await loadIntelligenceEvidence(token);
+
       setPerfDrafts((prev) => {
         const next = { ...prev };
 
@@ -164,7 +271,14 @@ export default function Library() {
 
   useEffect(() => {
     setVisibleCount(12);
-  }, [filter, sortBy, onlyWithPerf, onlySuccessful, search]);
+  }, [
+    filter,
+    sortBy,
+    onlyWithPerf,
+    onlySuccessful,
+    intelligenceStatus,
+    search,
+  ]);
 
   const combined = useMemo(() => {
     const mappedVideos = videos.map((v) => ({
@@ -182,6 +296,7 @@ export default function Library() {
       performance: v.performance || null,
       error: v.error || null,
       fileSizeBytes: v.fileSizeBytes || 0,
+      intelligence: intelligenceEvidence[v.id] || null,
     }));
 
     const mappedImages = images.map((i) => ({
@@ -202,6 +317,7 @@ export default function Library() {
       sourceType: i.sourceType || null,
       productName: i.productName || null,
       creativeProject: i.creativeProject || null,
+      intelligence: intelligenceEvidence[i.id] || null,
     }));
 
     let out = [...mappedVideos, ...mappedImages].filter(
@@ -219,6 +335,15 @@ export default function Library() {
 
     if (onlySuccessful) {
       out = out.filter((x) => x.performance?.marked_successful === true);
+    }
+
+    if (intelligenceStatus !== "all") {
+      out = out.filter(
+        (x) =>
+          String(
+            x.intelligence?.evidence_status || "insufficient",
+          ).toLowerCase() === intelligenceStatus,
+      );
     }
 
     const q = search.trim().toLowerCase();
@@ -243,6 +368,17 @@ export default function Library() {
 
     out = [...out].sort((a, b) => {
       if (sortBy === "newest") return (b.createdAt || 0) - (a.createdAt || 0);
+      if (sortBy === "intelligence") {
+        const aMeta = intelligenceMeta(a.intelligence?.evidence_status);
+        const bMeta = intelligenceMeta(b.intelligence?.evidence_status);
+        const statusDifference = bMeta.rank - aMeta.rank;
+        if (statusDifference) return statusDifference;
+
+        return (
+          Number(b.intelligence?.qualification_score || 0) -
+          Number(a.intelligence?.qualification_score || 0)
+        );
+      }
       if (sortBy === "ctr")
         return (
           (metric(b, "ctr") ?? -Infinity) - (metric(a, "ctr") ?? -Infinity)
@@ -261,7 +397,17 @@ export default function Library() {
     });
 
     return out;
-  }, [videos, images, filter, onlyWithPerf, onlySuccessful, sortBy, search]);
+  }, [
+    videos,
+    images,
+    intelligenceEvidence,
+    filter,
+    onlyWithPerf,
+    onlySuccessful,
+    intelligenceStatus,
+    sortBy,
+    search,
+  ]);
 
   const stats = useMemo(() => {
     const imageCount = images.filter((x) => x.status === "succeeded").length;
@@ -269,12 +415,28 @@ export default function Library() {
     const withPerf = [...images, ...videos].filter(
       (x) => x.performance && Object.keys(x.performance).length > 0,
     ).length;
-    const winners = [...images, ...videos].filter(
-      (x) => x.performance?.marked_successful === true,
+
+    const evidence = Object.values(intelligenceEvidence);
+    const qualified = evidence.filter((item) =>
+      ["qualified", "strong", "winner", "underperformer"].includes(
+        String(item?.evidence_status || "").toLowerCase(),
+      ),
     ).length;
 
-    return { imageCount, videoCount, withPerf, winners };
-  }, [images, videos]);
+    const positive = evidence.filter((item) =>
+      ["strong", "winner"].includes(
+        String(item?.evidence_status || "").toLowerCase(),
+      ),
+    ).length;
+
+    return {
+      imageCount,
+      videoCount,
+      withPerf,
+      qualified,
+      positive,
+    };
+  }, [images, videos, intelligenceEvidence]);
 
   const onPerfChange = (kind, id, field, value) => {
     const k = keyFor(kind, id);
@@ -299,6 +461,9 @@ export default function Library() {
       const payload = {};
 
       const numFields = [
+        "impressions",
+        "clicks",
+        "conversions",
         "ctr",
         "cpc",
         "cpa",
@@ -355,7 +520,12 @@ export default function Library() {
         return;
       }
 
-      setPerfNotice((prev) => ({ ...prev, [k]: "Saved ✓" }));
+      setPerfNotice((prev) => ({
+        ...prev,
+        [k]: data?.intelligenceRefreshQueued
+          ? "Saved · intelligence refresh queued"
+          : "Saved ✓",
+      }));
 
       const perfSaved = data?.performance || payload;
 
@@ -373,6 +543,15 @@ export default function Library() {
         ...prev,
         [k]: { ...(prev[k] || {}), ...perfSaved },
       }));
+
+      window.setTimeout(async () => {
+        try {
+          const refreshedToken = await getToken();
+          await loadIntelligenceEvidence(refreshedToken);
+        } catch {
+          // Non-fatal. The next Library refresh will load the new status.
+        }
+      }, 1400);
     } catch (e) {
       setPerfNotice((prev) => ({
         ...prev,
@@ -488,10 +667,10 @@ export default function Library() {
           <p>Creatives with performance data</p>
         </Card>
 
-        <Card className="lib-statCard">
-          <span>Winners</span>
-          <strong>{stats.winners}</strong>
-          <p>Marked successful</p>
+        <Card className="lib-statCard lib-intelligenceStat">
+          <span>Qualified Signals</span>
+          <strong>{stats.qualified}</strong>
+          <p>{stats.positive} positive learning signals</p>
         </Card>
       </div>
 
@@ -532,6 +711,7 @@ export default function Library() {
             Sort
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               <option value="newest">Newest</option>
+              <option value="intelligence">Best Intelligence Signal</option>
               <option value="ctr">Highest CTR</option>
               <option value="cpa">Lowest CPA</option>
               <option value="roas">Highest ROAS</option>
@@ -556,14 +736,31 @@ export default function Library() {
               checked={onlySuccessful}
               onChange={(e) => setOnlySuccessful(e.target.checked)}
             />
-            Successful only
+            Manually marked successful
+          </label>
+
+          <label className="lib-intelligenceFilter">
+            Intelligence status
+            <select
+              value={intelligenceStatus}
+              onChange={(e) => setIntelligenceStatus(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="winner">Winner</option>
+              <option value="strong">Strong</option>
+              <option value="qualified">Qualified</option>
+              <option value="learning">Learning</option>
+              <option value="underperformer">Underperformer</option>
+              <option value="insufficient">Insufficient Data</option>
+            </select>
           </label>
         </div>
       </Card>
 
       <div className="lib-hint">
-        Performance tracking helps AdGen identify winners over time and improve
-        future creative recommendations.
+        Add impressions, clicks, conversions, spend, and revenue so
+        Performance Intelligence can qualify each creative and improve future
+        image and video generations.
       </div>
 
       {loading && (
@@ -592,13 +789,23 @@ export default function Library() {
             d.roas != null && d.roas !== ""
               ? String(d.roas)
               : calcRoas(d.spend, d.revenue);
-
-          const hasPerf =
-            item.performance && Object.keys(item.performance).length > 0;
           const isWinner = item.performance?.marked_successful === true;
+          const intelligence = item.intelligence;
+          const intelligenceStatusValue = String(
+            intelligence?.evidence_status || "insufficient",
+          ).toLowerCase();
+          const intelligenceInfo = intelligenceMeta(
+            intelligenceStatusValue,
+          );
+          const intelligenceScore = qualificationPercent(intelligence);
 
           return (
-            <Card key={k} className={`lib-card ${isWinner ? "winner" : ""}`}>
+            <Card
+              key={k}
+              className={`lib-card intelligence-${intelligenceStatusValue} ${
+                isWinner ? "manual-winner" : ""
+              }`}
+            >
               <div className="lib-media">
                 {item.kind === "image" && item.thumb && (
                   <img src={item.thumb} alt={item.title} />
@@ -654,9 +861,14 @@ export default function Library() {
                   <span className={`lib-badge ${item.kind}`}>
                     {item.kind.toUpperCase()}
                   </span>
-                  {isWinner && <span className="lib-winnerBadge">Winner</span>}
-                  {!isWinner && hasPerf && (
-                    <span className="lib-trackedBadge">Tracked</span>
+                  <span
+                    className={`lib-intelligenceBadge ${intelligenceStatusValue}`}
+                    title={intelligenceInfo.detail}
+                  >
+                    {intelligenceInfo.label}
+                  </span>
+                  {isWinner && (
+                    <span className="lib-manualBadge">Manual Pick</span>
                   )}
                 </div>
 
@@ -665,14 +877,18 @@ export default function Library() {
                   {formatDate(item.createdAt)} ·{" "}
                   {formatBytes(item.fileSizeBytes)}
                 </p>
-                <button
-                  type="button"
-                  className="lib-perfToggle"
-                  onClick={() => deleteCreative(item)}
-                >
-                  Delete Creative
-                </button>
-
+                <div className="lib-intelligenceSummary">
+                  <div>
+                    <span>Performance Intelligence</span>
+                    <strong>{intelligenceInfo.label}</strong>
+                  </div>
+                  <p>
+                    {intelligenceInfo.detail}
+                    {intelligenceScore !== null
+                      ? ` · Signal ${intelligenceScore}%`
+                      : ""}
+                  </p>
+                </div>
                 {item.error && (
                   <div className="lib-errorSmall">
                     {String(item.error).slice(0, 140)}
@@ -681,12 +897,12 @@ export default function Library() {
 
                 <div className="lib-metricStrip">
                   <div>
-                    <span>CTR</span>
-                    <strong>{metricLabel(d.ctr, "%")}</strong>
+                    <span>Impressions</span>
+                    <strong>{metricLabel(d.impressions)}</strong>
                   </div>
                   <div>
-                    <span>CPA</span>
-                    <strong>{d.cpa ? `$${d.cpa}` : "—"}</strong>
+                    <span>CTR</span>
+                    <strong>{metricLabel(d.ctr, "%")}</strong>
                   </div>
                   <div>
                     <span>ROAS</span>
@@ -694,35 +910,100 @@ export default function Library() {
                   </div>
                 </div>
 
-                {canTrackPerformance ? (
+                <div className="lib-cardActions">
+                  {canTrackPerformance ? (
+                    <button
+                      type="button"
+                      className="lib-cardAction primary"
+                      onClick={() => togglePerf(k)}
+                    >
+                      {isExpanded ? "Hide Performance" : "Edit Performance"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="lib-cardAction primary"
+                      onClick={() => (window.location.href = "/account")}
+                    >
+                      Upgrade to Track
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    className="lib-perfToggle"
-                    onClick={() => togglePerf(k)}
+                    className="lib-cardAction danger"
+                    onClick={() => deleteCreative(item)}
+                    aria-label={`Delete ${item.title}`}
                   >
-                    {isExpanded ? "Hide Performance" : "Edit Performance"}
+                    Delete
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="lib-perfToggle lib-upgradePerf"
-                    onClick={() => (window.location.href = "/account")}
-                  >
-                    Upgrade to Track Performance
-                    <p className="upgradeNotice">
-                      Click to upgrade! Available on Pro/Business plans
-                    </p>
-                  </button>
-                )}
+                </div>
 
                 {isExpanded && (
                   <div className="lib-perf">
                     <div className="lib-perfTitle">
                       Performance Data
-                      <InfoTip text="These metrics power Insights, Winners Profile, and future optimization recommendations." />
+                      <InfoTip text="Impressions, clicks, conversions, spend, and revenue determine whether this creative becomes Learning, Qualified, Strong, Winner, or Underperformer evidence." />
                     </div>
 
                     <div className="lib-perfGrid">
+                      <label className="lib-field">
+                        <span>Impressions</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={d.impressions ?? ""}
+                          onChange={(e) =>
+                            onPerfChange(
+                              item.kind,
+                              item.id,
+                              "impressions",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="250"
+                        />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>Clicks</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={d.clicks ?? ""}
+                          onChange={(e) =>
+                            onPerfChange(
+                              item.kind,
+                              item.id,
+                              "clicks",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="10"
+                        />
+                      </label>
+
+                      <label className="lib-field">
+                        <span>Conversions</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={d.conversions ?? ""}
+                          onChange={(e) =>
+                            onPerfChange(
+                              item.kind,
+                              item.id,
+                              "conversions",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="1"
+                        />
+                      </label>
+
                       <label className="lib-field">
                         <span>CTR %</span>
                         <input
@@ -842,7 +1123,7 @@ export default function Library() {
                       </label>
 
                       <label className="lib-field lib-fieldWide">
-                        <span>Successful?</span>
+                        <span>Manual success override</span>
                         <select
                           value={
                             typeof d.marked_successful === "boolean"
@@ -859,9 +1140,9 @@ export default function Library() {
                             );
                           }}
                         >
-                          <option value="">Not set</option>
-                          <option value="true">Yes</option>
-                          <option value="false">No</option>
+                          <option value="">No override</option>
+                          <option value="true">Mark as successful</option>
+                          <option value="false">Mark as not successful</option>
                         </select>
                       </label>
 

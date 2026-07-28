@@ -16,7 +16,7 @@ const sections = [
     title: "Start with your brand.",
     outcome: "Create once. Stay consistent everywhere.",
     text:
-      "Define the identity, voice, audience, and creative rules that guide every image, video, and campaign asset generated inside AdGen.",
+      "Define the identity, voice, audience, and creative rules that guide every image, video, and campaign asset generated inside ADGen.",
     points: [
       "Upload your logo and brand assets",
       "Define colors, fonts, voice, and audience",
@@ -25,7 +25,7 @@ const sections = [
     ],
     image: "/screenshots/brand-kit.png",
     imageAlt:
-      "AdGen MCM Brand Kit showing brand strategy, colors, typography, logo, and a live brand preview",
+      "ADGen MCM Brand Kit showing brand strategy, colors, typography, logo, and a live brand preview",
     callouts: ["Brand identity", "Creative rules", "Live preview"],
     featured: true,
     visualTone: "violet",
@@ -45,7 +45,7 @@ const sections = [
     ],
     image: "/screenshots/image-generator.png",
     imageAlt:
-      "AdGen MCM Image Generator showing campaign inputs, Brand Kit defaults, audience controls, and generated creative",
+      "ADGen MCM Image Generator showing campaign inputs, Brand Kit defaults, audience controls, and generated creative",
     callouts: ["Brand-aware", "Reference guided", "Multi-format"],
     reverse: true,
     visualTone: "blue",
@@ -65,7 +65,7 @@ const sections = [
     ],
     image: "/screenshots/video-generator.png",
     imageAlt:
-      "AdGen MCM Video Generator showing prompt-to-video settings, Brand Kit controls, voiceover, duration, and format options",
+      "ADGen MCM Video Generator showing prompt-to-video settings, Brand Kit controls, voiceover, duration, and format options",
     callouts: ["Prompt to video", "Voiceover", "Vertical formats"],
     visualTone: "violet",
   },
@@ -84,7 +84,7 @@ const sections = [
     ],
     image: "/screenshots/optimizer.png",
     imageAlt:
-      "AdGen MCM Creative Optimizer showing campaign context, performance inputs, audience temperature, and analysis guidance",
+      "ADGen MCM Creative Optimizer showing campaign context, performance inputs, audience temperature, and analysis guidance",
     callouts: ["Performance diagnosis", "Action plan", "Stronger variants"],
     reverse: true,
     visualTone: "blue",
@@ -104,27 +104,27 @@ const sections = [
     ],
     image: "/screenshots/creative-library.png",
     imageAlt:
-      "AdGen MCM Creative Library showing generated image assets, video counts, performance tracking, filters, and winner labels",
+      "ADGen MCM Creative Library showing generated image assets, video counts, performance tracking, filters, and winner labels",
     callouts: ["Searchable assets", "Performance data", "Winner tracking"],
     visualTone: "violet",
   },
   {
     number: "06",
-    eyebrow: "INSIGHTS",
-    title: "Turn campaign results into smarter creative decisions.",
-    outcome: "Use past performance to guide what you create next.",
+    eyebrow: "PERFORMANCE INTELLIGENCE",
+    title: "Turn qualified results into future creative guidance.",
+    outcome: "Build a reusable Creative DNA profile for your brand.",
     text:
-      "Identify winning patterns across tracked creative and use those signals to make future campaign assets more focused and effective.",
+      "Performance Intelligence learns from manual tracking and Google Ads, identifies qualified creative patterns, and makes those insights available to future image and video generations.",
     points: [
-      "Track CTR, CPA, ROAS, and CPM",
-      "Identify winning creative patterns",
-      "Surface recommended next actions",
-      "Guide future generation with performance data",
+      "Connect Google Ads or add performance manually",
+      "Qualify reliable winners and underperformers",
+      "Build Creative DNA from colors, styles, copy, and composition",
+      "Apply learned patterns to future image and video generations",
     ],
     image: "/screenshots/insights.png",
     imageAlt:
-      "AdGen MCM Insights showing performance sources, creative intelligence score, weighted ROAS, CTR, and tracked creative",
-    callouts: ["Creative intelligence", "Winner patterns", "Next actions"],
+      "ADGen MCM Insights showing performance sources, creative intelligence score, weighted ROAS, CTR, and tracked creative",
+    callouts: ["Creative DNA", "Qualified signals", "Generation guidance"],
     reverse: true,
     visualTone: "blue",
   },
@@ -143,7 +143,7 @@ const sections = [
     ],
     image: "/screenshots/creative-studio.png",
     imageAlt:
-      "AdGen MCM Creative Studio showing a skincare ad canvas, editable text, typography controls, safe-area guides, and PNG export",
+      "ADGen MCM Creative Studio showing a skincare ad canvas, editable text, typography controls, safe-area guides, and PNG export",
     callouts: ["Editable layers", "Safe-area guides", "Export ready"],
     featured: true,
     visualTone: "violet",
@@ -155,21 +155,21 @@ const sections = [
 const imageExamples = [
   {
     src: "/examples/imagegen/image-ex1.png",
-    alt: "BaseBall University PowerBat campaign creative generated with AdGen MCM",
+    alt: "BaseBall University PowerBat campaign creative generated with ADGen MCM",
     title: "Sports equipment",
     detail: "Bold product campaign • Square format",
     format: "square",
   },
   {
     src: "/examples/imagegen/image-ex3.png",
-    alt: "Air Fresh household product campaign creative generated with AdGen MCM",
+    alt: "Air Fresh household product campaign creative generated with ADGen MCM",
     title: "Consumer goods",
     detail: "Clean product campaign • Landscape format",
     format: "landscape",
   },
   {
     src: "/examples/imagegen/image-ex2.png",
-    alt: "Lumière vitamin C skincare campaign creative generated with AdGen MCM",
+    alt: "Lumière vitamin C skincare campaign creative generated with ADGen MCM",
     title: "Skincare",
     detail: "Premium beauty campaign • Square format",
     format: "square",
@@ -182,9 +182,9 @@ function GeneratedImageExamples() {
       <div className="platform-container platform-output-container">
         <div className="platform-output-header">
           <span className="platform-output-badge">Real platform output</span>
-          <h3>See what AdGen MCM creates.</h3>
+          <h3>See what ADGen MCM creates.</h3>
           <p>
-            Every creative below was generated inside AdGen MCM using the same
+            Every creative below was generated inside ADGen MCM using the same
             image workflow available to customers.
           </p>
         </div>
@@ -202,7 +202,7 @@ function GeneratedImageExamples() {
                   loading="lazy"
                   decoding="async"
                 />
-                <span className="platform-output-watermark">Generated with AdGen MCM</span>
+                <span className="platform-output-watermark">Generated with ADGen MCM</span>
               </div>
 
               <div className="platform-output-card-copy">
@@ -225,7 +225,7 @@ function GeneratedVideoExample() {
           <span className="platform-output-badge">Real platform output</span>
           <h3>From prompt to polished motion.</h3>
           <p>
-            A cinematic product video generated inside AdGen MCM from a short
+            A cinematic product video generated inside ADGen MCM from a short
             creative direction—without a traditional production workflow.
           </p>
 
@@ -247,11 +247,11 @@ function GeneratedVideoExample() {
             controls
             playsInline
             preload="metadata"
-            aria-label="Energy drink product video generated with AdGen MCM"
+            aria-label="Energy drink product video generated with ADGen MCM"
           >
             Your browser does not support embedded video.
           </video>
-          <span className="platform-video-label">Generated with AdGen MCM</span>
+          <span className="platform-video-label">Generated with ADGen MCM</span>
         </div>
       </div>
     </section>
@@ -315,18 +315,18 @@ export default function Platform() {
 
           <h1>
             <span className="platform-v2-line platform-v2-line-primary">
-              Explore the complete
+              Connect the complete
             </span>
 
             <span className="platform-v2-line platform-v2-line-secondary">
-              creative workspace.
+              creative workflow.
             </span>
           </h1>
 
           <p className="platform-v2-description">
             Build your brand foundation, generate image and video creative,
-            refine campaigns, track performance, and turn results into stronger
-            future work—all inside one connected platform.
+            refine and organize assets, then use qualified campaign results to
+            guide future generations.
           </p>
 
           <div className="platform-v2-actions">
@@ -348,7 +348,7 @@ export default function Platform() {
           <ParallaxCard>
             <ProductCanvas
               src="/screenshots/dashboard.png"
-              alt="AdGen MCM dashboard showing image usage, video usage, Brand Kit status, current plan, and quick creative actions"
+              alt="ADGen MCM dashboard showing image usage, video usage, Brand Kit status, current plan, and quick creative actions"
               variant="hero"
               className="platform-v2-dashboard-canvas"
               floatingCards={
@@ -402,7 +402,7 @@ export default function Platform() {
           <i />
           <span>Image, video, and copy</span>
           <i />
-          <span>Optimization and insights</span>
+          <span>Performance Intelligence</span>
         </div>
       </Section>
 
@@ -415,19 +415,18 @@ export default function Platform() {
               </span>
 
               <h2>
-                Every campaign begins with your brand and becomes smarter with
-                every result.
+                Move from brand direction to generation, measurement, and improvement.
               </h2>
 
               <p>
-                AdGen connects creation, refinement, organization, and
-                performance so each stage of your workflow strengthens the
-                next.
+                ADGen connects the stages that normally live in separate tools,
+                giving your team one continuous path from idea to performance
+                learning.
               </p>
 
               <div
                 className="platform-story-steps"
-                aria-label="AdGen platform workflow"
+                aria-label="ADGen platform workflow"
               >
                 <span>Define</span>
                 <i aria-hidden="true" />
@@ -563,13 +562,13 @@ export default function Platform() {
               </span>
 
               <h2>
-                Bring your entire creative workflow into one platform.
+                Bring the entire creative workflow into one platform.
               </h2>
 
               <p>
-                Generate branded image ads, video creative, campaign copy,
-                optimized variations, organized assets, and performance-guided
-                insights without stitching together separate tools.
+                Generate branded image ads, video creative, and campaign copy,
+                then use qualified results to build Creative DNA and guide future
+                generations without stitching together separate tools.
               </p>
 
               <div className="platform-final-proof">
@@ -585,7 +584,7 @@ export default function Platform() {
 
                 <span>
                   <i aria-hidden="true" />
-                  Performance-guided improvement
+                  Creative that learns from performance
                 </span>
               </div>
 

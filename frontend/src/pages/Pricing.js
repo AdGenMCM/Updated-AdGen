@@ -14,7 +14,7 @@ const TIERS = [
     price: "$0",
     eyebrow: "Get started",
     description:
-      "Try AdGen MCM with 2 image generations and 1 video credit lifetime. No credit card required.",
+      "Try ADGen MCM with 2 image generations and 1 video credit lifetime. No credit card required.",
     images: "2 lifetime",
     videos: "1 lifetime",
     optimizer: "—",
@@ -38,7 +38,7 @@ const TIERS = [
     price: "$9.99",
     eyebrow: "Explore the platform",
     description:
-      "A low-friction way to experience AdGen's full creative workflow with real image and video generation.",
+      "A low-friction way to experience ADGen's full creative workflow with real image and video generation.",
     images: "10",
     videos: "3",
     optimizer: "—",
@@ -84,7 +84,7 @@ const TIERS = [
     price: "$79.99",
     eyebrow: "Most popular",
     description:
-      "For active advertisers who want to create, optimize, measure, and improve campaigns from one workspace.",
+      "For active advertisers who want ADGen to learn from campaign performance and improve future creative.",
     images: "100",
     videos: "14",
     optimizer: "20",
@@ -96,9 +96,10 @@ const TIERS = [
     includes: [
       "Everything in Starter",
       "Creative Optimizer",
-      "Performance tracking",
-      "Winner analysis",
-      "Advanced Insights",
+      "Performance Intelligence",
+      "Manual tracking and Google Ads",
+      "Creative DNA",
+      "Future generation guidance",
       "Multiple Brand Kits",
     ],
   },
@@ -108,7 +109,7 @@ const TIERS = [
     price: "$199.99",
     eyebrow: "For teams and agencies",
     description:
-      "Higher limits, more brands, and deeper creative intelligence for multi-brand and high-volume workflows.",
+      "Higher limits, more brands, and deeper Performance Intelligence for multi-brand and high-volume workflows.",
     images: "250",
     videos: "32",
     optimizer: "75",
@@ -139,13 +140,21 @@ const COMPARISON_ROWS = [
   ["Creative Studio", false, true, true, true, true],
   ["Creative Library", false, true, true, true, true],
   ["Brand Kit", false, true, true, true, true],
-  ["Performance tracking", false, false, false, true, true],
-  ["Winner analysis", false, false, false, true, true],
-  ["Advanced Insights", false, false, false, true, true],
+  ["Manual performance tracking", false, false, false, true, true],
+  ["Google Ads integration", false, false, false, true, true],
+  ["Performance Intelligence", false, false, false, true, true],
+  ["Creative DNA", false, false, false, true, true],
+  ["Applies learning to image generation", false, false, false, true, true],
+  ["Applies learning to video generation", false, false, false, true, true],
   ["Priority generation", false, false, false, false, true],
 ];
 
 const FAQS = [
+  {
+    question: "What is Performance Intelligence?",
+    answer:
+      "Performance Intelligence is available on Pro and Business. It uses qualified manual tracking and Google Ads results to build Creative DNA and guide future image and video generations.",
+  },
   {
     question: "What counts as a video credit?",
     answer:
@@ -210,14 +219,13 @@ export default function Pricing() {
           <p className="pricing-v2-eyebrow">Pricing</p>
 
           <h1>
-            <span>Choose the creative plan</span>
-            <span>that fits your workflow.</span>
+            <span>Choose the plan that fits</span>
+            <span>your creative workflow.</span>
           </h1>
 
           <p className="pricing-v2-description">
-            Start with the tools you need today and unlock more generation,
-            optimization, brand capacity, and creative intelligence as your
-            workflow grows.
+            Start free, scale your production limits, and unlock Performance
+            Intelligence when you are ready to learn from campaign results.
           </p>
 
           <div className="pricing-v2-billing-toggle" aria-label="Billing frequency">
@@ -231,7 +239,7 @@ export default function Pricing() {
           <div className="pricing-v2-proof" aria-label="Pricing assurances">
             <span><i /> No credit card required for Free</span>
             <span><i /> Secure Stripe billing for paid plans</span>
-            <span><i /> Upgrade whenever you grow</span>
+            <span><i /> Performance Intelligence on Pro</span>
           </div>
         </div>
       </section>
@@ -342,12 +350,12 @@ export default function Pricing() {
             <div className="pricing-v2-story-head">
               <span className="pricing-v2-pill">One connected platform</span>
 
-              <h2>Pay for a complete creative workflow—not another disconnected tool.</h2>
+              <h2>Start with creation. Add campaign learning when you need it.</h2>
 
               <p>
-                Start with image generation for free, then unlock video creation,
-                brand guidance, editing, asset management, optimization, and deeper
-                creative intelligence as your workflow grows.
+                Free, Trial, and Starter support creative production. Pro and
+                Business add Performance Intelligence, Google Ads integration,
+                Creative DNA, and future generation guidance.
               </p>
             </div>
           </Reveal>
@@ -357,7 +365,7 @@ export default function Pricing() {
               ["Create", "Generate campaign-ready images, video, copy, hooks, and calls to action."],
               ["Stay consistent", "Apply your Brand Kit across every creative workflow."],
               ["Refine", "Polish assets in Creative Studio without leaving the platform."],
-              ["Improve", "Use performance data and Optimizer insights to guide what comes next."],
+              ["Learn", "Use qualified campaign results to build Creative DNA and guide future generations."],
             ].map(([title, text], index) => (
               <Reveal key={title} delay={index * 80}>
                 <article className="pricing-v2-story-card">
@@ -378,8 +386,9 @@ export default function Pricing() {
               <span className="pricing-v2-pill">Compare plans</span>
               <h2>See exactly what each plan unlocks.</h2>
               <p>
-                Start small, then move into optimization, performance tracking,
-                advanced insights, and multi-brand workflows when you need them.
+                Compare production limits, Brand Kits, optimization, and the
+                Performance Intelligence capabilities included with Pro and
+                Business.
               </p>
             </div>
           </Reveal>
@@ -452,7 +461,7 @@ export default function Pricing() {
 
             <p>
               Bring your brand, image generation, video, copy, optimization,
-              asset management, and performance intelligence into one platform.
+              asset management, and Performance Intelligence into one platform.
             </p>
 
             <div className="pricing-v2-final-actions">

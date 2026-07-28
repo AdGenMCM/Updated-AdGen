@@ -15,14 +15,14 @@ export default function FinalCTA() {
       className="adgen-final-cta"
     >
       <p className="adgen-final-eyebrow">
-        Your next campaign can start here
+        Bring the full creative cycle together
       </p>
 
-      <h2>Build better creative without rebuilding the workflow.</h2>
+      <h2>Create, measure, and improve without rebuilding your workflow.</h2>
 
       <p className="adgen-final-copy">
-        Bring your brand, campaign assets, creative history, and performance
-        insights into one connected workspace built for continuous improvement.
+        Bring your brand, image and video generation, editing, asset
+        management, and Performance Intelligence into one connected platform.
       </p>
 
       <div className="adgen-final-proof">
@@ -38,7 +38,7 @@ export default function FinalCTA() {
 
         <span>
           <i aria-hidden="true" />
-          Performance-guided improvement
+          Performance Intelligence on Pro
         </span>
       </div>
 

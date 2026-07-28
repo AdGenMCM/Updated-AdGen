@@ -25,3 +25,6 @@ stripe==14.3.0
 firebase-admin==7.1.0
 python-multipart==0.0.9
 
+google-auth==2.40.3
+google-auth-oauthlib==1.2.2
+cryptography==45.0.5

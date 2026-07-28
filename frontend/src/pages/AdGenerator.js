@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
 import { auth } from "../firebaseConfig";
-import { useWinnersProfile } from "../hooks/useWinnersProfile";
 import InfoTip from "../components/ui/InfoTip";
+import PerformanceIntelligencePreview from "../components/PerformanceIntelligencePreview";
 import StepSection from "../components/ui/StepSection";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
@@ -63,7 +63,7 @@ function AdGenerator() {
   const [brandKit, setBrandKit] = useState(null);
   const [brandKitLoading, setBrandKitLoading] = useState(true);
   const [brandKitAppliedFields, setBrandKitAppliedFields] = useState({});
-  const [useWinners, setUseWinners] = useState(false);
+  const [usePerformanceIntelligence, setUsePerformanceIntelligence] = useState(false);
   const [referenceImages, setReferenceImages] = useState([]);
   const [referenceImageMode, setReferenceImageMode] = useState("product_reference");
   const [referenceUploading, setReferenceUploading] = useState(false);
@@ -193,14 +193,6 @@ function AdGenerator() {
     return String(detail);
   };
 
-  const { winnersProfile, winnerGuidance, winnersLoading, refreshWinners } =
-    useWinnersProfile({
-      kind: "image",
-      enabled: useWinners,
-      apiBase,
-      limit: 200,
-      minSpend: 0,
-    });
 
   const fieldBadge = (name) => {
     if (!useBrandKit || !brandKitAppliedFields[name]) return null;
@@ -373,32 +365,10 @@ function AdGenerator() {
         referenceImageUrls: referenceImages.map((img) => img.url).filter(Boolean),
         referenceImageMode,
         productType: form.productType === "auto" ? null : form.productType,
+        usePerformanceIntelligence:
+          !isFreePlan && usePerformanceIntelligence,
       };
 
-      if (useWinners) {
-        try {
-          const profile = winnersProfile || (await refreshWinners());
-
-          if (profile) {
-            payload.winnerProfile = profile;
-            payload.winnersApply = ["tone", "platform", "ratio", "style", "do", "avoid"];
-            payload.winnersInfluence = 0.6;
-
-            if (winnerGuidance) {
-              payload.winnerGuidance = winnerGuidance.slice(0, 1000);
-            }
-          }
-        } catch (err) {
-          setUiError({
-            type: "sub",
-            message:
-              err?.message ||
-              "Winners insights are available on Pro & Business plans. Upgrade to use this feature.",
-            upgradePath: "/account",
-          });
-          return;
-        }
-      }
 
       const response = await fetch(`${apiBase}/image/start`, {
         method: "POST",
@@ -836,28 +806,43 @@ function AdGenerator() {
                   )}
                 </div>
 
-                <div className="option-card enhancement-card">
+                <div className={`option-card enhancement-card performance-intelligence-option ${
+                  usePerformanceIntelligence ? "enabled" : ""
+                }`}>
                   {isFreePlan ? (
-                    <div>
-                      <strong>🔒 Winner Profile</strong>
-                      <small>  Available on Pro &amp; Business plans.</small>
+                    <div className="performance-intelligence-locked">
+                      <strong>🔒 Performance Intelligence</strong>
+                      <small>Available on Pro &amp; Business plans.</small>
                     </div>
                   ) : (
                     <label className="option-toggle">
                       <input
                         type="checkbox"
-                        checked={useWinners}
-                        onChange={(e) => setUseWinners(e.target.checked)}
+                        checked={usePerformanceIntelligence}
+                        onChange={(e) =>
+                          setUsePerformanceIntelligence(e.target.checked)
+                        }
                         disabled={loading}
                       />
                       <span>
                         <strong>
-                          Apply Winner Profile{" "}
-                          <InfoTip text="Uses patterns from your best-performing creatives, such as winning styles, hooks, platforms, and performance metrics. Available on Pro and Business." />
+                          Apply Performance Intelligence{" "}
+                          <InfoTip text="Applies the colors, visual styles, compositions, messaging patterns, CTA language, and headline structure AdGen has learned from your qualified performance data." />
                         </strong>
-                        <small>Pro/Business</small>
+                        <small>
+                          {usePerformanceIntelligence
+                            ? "Learned creative patterns will guide this generation"
+                            : "Use what AdGen has learned from your performance"}
+                        </small>
                       </span>
                     </label>
+                  )}
+
+                  {!isFreePlan && (
+                    <PerformanceIntelligencePreview
+                      enabled={usePerformanceIntelligence}
+                      mode="image"
+                    />
                   )}
                 </div>
               </div>
@@ -926,8 +911,8 @@ function AdGenerator() {
 
 
             <div className="button-row">
-              <button type="submit" disabled={loading || winnersLoading || referenceUploading}>
-                {loading ? "Generating..." : winnersLoading ? "Loading Winners..." : referenceUploading ? "Uploading..." : "✨ Generate Ad"}
+              <button type="submit" disabled={loading || referenceUploading}>
+                {loading ? "Generating..." : referenceUploading ? "Uploading..." : "✨ Generate Ad"}
               </button>
             </div>
           </form>

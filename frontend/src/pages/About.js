@@ -9,19 +9,19 @@ const principles = [
     number: "01",
     title: "Stay close to the customer.",
     text:
-      "The best product decisions come from understanding how real businesses create, test, and improve their advertising.",
+      "The best product decisions come from understanding how real businesses create, launch, measure, and improve their advertising.",
   },
   {
     number: "02",
     title: "Make powerful tools feel simple.",
     text:
-      "AdGen should remove friction from the creative process—not add another complicated system to manage.",
+      "ADGen should remove friction from the creative process—not add another complicated system to manage.",
   },
   {
     number: "03",
     title: "Build for continuity.",
     text:
-      "Creative work should carry context forward, so each campaign starts smarter than the one before it.",
+      "Creative work should carry context forward so teams can build on what they already know.",
   },
   {
     number: "04",
@@ -36,19 +36,19 @@ const milestones = [
     label: "Now",
     title: "A connected creative workspace",
     text:
-      "Brand identity, image generation, video, editing, optimization, asset management, and performance tracking in one place.",
+      "Brand identity, image generation, video, editing, optimization, asset management, and performance learning in one place.",
   },
   {
     label: "Next",
-    title: "Smarter campaign organization",
+    title: "Performance Intelligence in action",
     text:
-      "More structure around projects, campaigns, collaboration, and the way creative work moves from idea to launch.",
+      "A learning system that turns qualified campaign results into guidance for future image and video generations.",
   },
   {
     label: "Future",
-    title: "Creative intelligence that compounds",
+    title: "Creative intelligence that compounds over time",
     text:
-      "A system that understands brand context, remembers what performs, and helps every future campaign become more focused.",
+      "A system that understands brand context, remembers what performs, and helps every future campaign begin from stronger evidence.",
   },
 ];
 
@@ -59,17 +59,17 @@ export default function About() {
         <div className="about-v2-hero-bg" aria-hidden="true" />
 
         <div className="about-v2-container about-v2-hero-inner">
-          <p className="about-v2-eyebrow">About AdGen MCM</p>
+          <p className="about-v2-eyebrow">About ADGen MCM</p>
 
           <h1>
             <span>Building a better way</span>
-            <span>to create advertising.</span>
+            <span>to advertise.</span>
           </h1>
 
           <p className="about-v2-hero-copy">
-            AdGen MCM is an independent software company focused on making the
-            creative process more connected, more useful, and easier for
-            businesses to manage.
+            ADGen MCM is an independent software company focused on making the
+            creative process more connected, more useful, and increasingly informed by
+            real campaign performance.
           </p>
 
           <div className="about-v2-hero-actions">
@@ -93,7 +93,7 @@ export default function About() {
               <div className="about-v2-founder-frame">
                 <img
                   src="/images/professional-headshot.JPG"
-                  alt="Matthew Melio, founder of AdGen MCM"
+                  alt="Matthew Melio, founder of ADGen MCM"
                   className="about-v2-founder-image"
                   loading="eager"
                   decoding="async"
@@ -103,7 +103,7 @@ export default function About() {
               <div className="about-v2-founder-card">
                 <span>Founder</span>
                 <strong>Matthew Melio</strong>
-                <p>Building AdGen MCM in New York City.</p>
+                <p>Building ADGen MCM in New York City.</p>
               </div>
             </div>
           </Reveal>
@@ -115,7 +115,7 @@ export default function About() {
               <h2>Hi, I’m Matthew.</h2>
 
               <p>
-                I built AdGen because I was frustrated with how many disconnected
+                I built ADGen because I was frustrated with how many disconnected
                 tools it took to create a single advertising campaign.
               </p>
 
@@ -127,8 +127,8 @@ export default function About() {
 
               <p>
                 I wanted to build one workspace where everything stayed connected
-                and became more useful over time—something practical enough for
-                real businesses, but ambitious enough to grow with them.
+                and became more useful over time—where campaign results could
+                influence what a business creates next.
               </p>
 
               <p className="about-v2-founder-emphasis">
@@ -174,7 +174,7 @@ export default function About() {
                 number: "03",
                 title: "Results stayed isolated",
                 text:
-                  "Performance data described what happened, but rarely influenced what the team created next.",
+                  "Performance data described what happened, but rarely became reusable guidance for what the team created next.",
               },
               {
                 number: "04",
@@ -196,7 +196,7 @@ export default function About() {
           <Reveal delay={120}>
             <div className="about-v2-context-conclusion">
               <span>That became the product opportunity:</span>
-              <strong>preserve the knowledge around the creative—not just the files.</strong>
+              <strong>preserve the knowledge around the creative—and apply it to what comes next.</strong>
             </div>
           </Reveal>
         </div>
@@ -208,7 +208,7 @@ export default function About() {
             <div className="about-v2-section-head">
               <span className="about-v2-pill">How we think</span>
 
-              <h2>The principles guiding what AdGen becomes.</h2>
+              <h2>The principles guiding what ADGen becomes.</h2>
 
               <p>
                 These ideas shape the product, the customer experience, and the
@@ -241,19 +241,19 @@ export default function About() {
               <span className="about-v2-pill">What we are building</span>
 
               <h2>
-                A platform that grows from creative production into creative intelligence.
+                A platform designed to preserve creative knowledge.
               </h2>
 
               <p>
-                AdGen already brings the core creative workflow together. The
-                long-term opportunity is to make that workflow increasingly
-                informed by brand context, campaign history, and real
-                performance.
+                ADGen brings the core creative workflow together. Performance
+                Intelligence adds a learning layer by turning qualified campaign
+                results into practical guidance for future generations.
               </p>
 
               <p>
                 The goal is not to replace creative judgment. It is to give
-                businesses a stronger system around it.
+                businesses a system that learns from evidence while keeping the
+                marketer in control.
               </p>
             </div>
           </Reveal>
@@ -289,7 +289,7 @@ export default function About() {
                 <h2>Built in New York City.</h2>
 
                 <p>
-                  AdGen MCM is an independent software company being built with
+                  ADGen MCM is an independent software company being built with
                   a close connection to its customers, a long-term product
                   vision, and a focus on solving practical creative problems.
                 </p>
@@ -309,9 +309,9 @@ export default function About() {
             <h2>We’re just getting started.</h2>
 
             <p>
-              AdGen is still early, and that is part of what makes this moment
-              exciting. Every conversation, campaign, and customer experience
-              helps shape what the platform becomes next.
+              ADGen is still early, and that is part of what makes this moment
+              exciting. Every customer conversation and real workflow helps shape
+              what the platform becomes next.
             </p>
 
             <div className="about-v2-final-actions">

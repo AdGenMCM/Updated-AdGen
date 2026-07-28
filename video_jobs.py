@@ -53,6 +53,10 @@ from video_safety import (
     rollback_user_submission_window,
 )
 
+from performance_intelligence.service import (
+    generation_profile as get_intelligence_generation_profile,
+)
+
 
 
 # -----------------------------
@@ -405,6 +409,7 @@ class StartImageVideoRequest(BaseModel):
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    usePerformanceIntelligence: bool = False
 
     # legacy (keep)
     winnerGuidance: Optional[str] = Field(default=None, max_length=1200)
@@ -449,6 +454,7 @@ class StartPromptVideoRequest(BaseModel):
 
     model: str = VIDEO_DEFAULT_TEXT_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    usePerformanceIntelligence: bool = False
 
     # Legacy guidance
     winnerGuidance: Optional[str] = Field(
@@ -772,6 +778,103 @@ def build_image_director_prompt(
 
     return trim_video_prompt(prompt, 1000)
 
+
+def _intelligence_values(
+    profile: Optional[Dict[str, Any]],
+    key: str,
+    limit: int = 2,
+) -> List[str]:
+    items = (profile or {}).get(key) or []
+    values: List[str] = []
+    if not isinstance(items, list):
+        return values
+
+    for item in items[:limit]:
+        value = item.get("value") if isinstance(item, dict) else item
+        cleaned = str(value or "").strip()
+        if cleaned:
+            values.append(cleaned)
+    return values
+
+
+def compact_video_intelligence(
+    intelligence_response: Optional[Dict[str, Any]],
+    *,
+    preserve_source_image: bool,
+    max_chars: int = 180,
+) -> str:
+    """Select only the most useful learned signals for the Runway prompt."""
+    if not intelligence_response:
+        return ""
+
+    profile = intelligence_response.get("profile") or {}
+    if (
+        int(intelligence_response.get("qualifiedCount") or 0) <= 0
+        or int(intelligence_response.get("positiveCount") or 0) <= 0
+        or not profile
+    ):
+        return ""
+
+    parts: List[str] = []
+
+    mappings = [
+        ("top_visual_styles", "style"),
+        ("top_compositions", "composition"),
+        ("top_imagery_types", "imagery"),
+        ("top_emotional_tones", "tone"),
+    ]
+    for key, label in mappings:
+        values = _intelligence_values(profile, key, 1)
+        if values:
+            parts.append(f"{label} {values[0]}")
+
+    if not preserve_source_image:
+        colors = _intelligence_values(profile, "top_colors", 2)
+        if colors:
+            parts.append("colors " + "/".join(colors))
+
+    if not parts:
+        return ""
+
+    prefix = "Performance signals"
+    if preserve_source_image:
+        prefix += ", preserve the source image"
+    prefix += ": "
+
+    return trim_video_prompt(
+        prefix + "; ".join(parts) + ".",
+        max_chars,
+    )
+
+
+def compose_runway_prompt(
+    base_prompt: str,
+    intelligence_guidance: str = "",
+    *,
+    max_chars: int = 1000,
+    guidance_budget: int = 180,
+) -> str:
+    """
+    Reserve a fixed budget for learned guidance before combining it with the
+    main prompt. The final string is always at most max_chars characters.
+    """
+    base = " ".join((base_prompt or "").split())
+    guidance = trim_video_prompt(
+        intelligence_guidance,
+        guidance_budget,
+    )
+
+    if not guidance:
+        return trim_video_prompt(base, max_chars)
+
+    base_budget = max(1, max_chars - len(guidance) - 1)
+    base = trim_video_prompt(base, base_budget)
+    return trim_video_prompt(
+        f"{base} {guidance}",
+        max_chars,
+    )
+
+
 def inject_winners_structured(
     base_text: str,
     winner_profile: Optional[Dict[str, Any]],
@@ -897,6 +1000,7 @@ async def start_image_video(
     # Compact visual Brand Kit direction for Runway.
     tier = None
     status = None
+    intelligence_response: Dict[str, Any] = {}
 
     if not admin:
         tier, status = get_tier_and_status(user_doc)
@@ -926,13 +1030,23 @@ async def start_image_video(
         brand_kit
     )
 
+    if req.usePerformanceIntelligence:
+        try:
+            intelligence_response = (
+                get_intelligence_generation_profile(uid) or {}
+            )
+        except Exception as exc:
+            print("[Video Intelligence Load Failed]", repr(exc))
+            intelligence_response = {}
+
     usage_reservation = None
 
     if not admin:
 
         # Validate premium Winner Profile access before reserving usage.
         if (
-            (req.winnerGuidance or "").strip()
+            req.usePerformanceIntelligence
+            or (req.winnerGuidance or "").strip()
             or req.winnerProfile is not None
         ):
             require_pro_or_business(tier)
@@ -1003,6 +1117,17 @@ async def start_image_video(
         **progress_payload("building_prompt"),
         "progressUpdatedAt": int(time.time()),
 
+        "usePerformanceIntelligence": req.usePerformanceIntelligence,
+        "performanceIntelligence": (
+            {
+                "confidence": intelligence_response.get("confidence", 0),
+                "qualifiedCount": intelligence_response.get("qualifiedCount", 0),
+                "positiveCount": intelligence_response.get("positiveCount", 0),
+            }
+            if req.usePerformanceIntelligence
+            else None
+        ),
+
         # Legacy winner guidance.
         "winnerGuidance": (
             (req.winnerGuidance or "").strip()
@@ -1025,32 +1150,42 @@ async def start_image_video(
         brand_kit_context=brand_direction,
     )
 
-    # Apply structured Winner Profile guidance when selected.
-    if req.winnerProfile is not None:
-        prompt_text = inject_winners_structured(
-            prompt_text,
-            req.winnerProfile,
-            req.winnersApply,
-            req.winnersInfluence,
+    intelligence_guidance = ""
+    if req.usePerformanceIntelligence:
+        intelligence_guidance = compact_video_intelligence(
+            intelligence_response,
+            preserve_source_image=True,
+            max_chars=180,
         )
 
-    # Backward-compatible legacy winner guidance.
-    elif (req.winnerGuidance or "").strip():
-        legacy_guidance = " ".join(
-            (req.winnerGuidance or "").split()
+    # Legacy fallback for older clients.
+    if not intelligence_guidance and req.winnerProfile is not None:
+        intelligence_guidance = trim_video_prompt(
+            inject_winners_structured(
+                "",
+                req.winnerProfile,
+                req.winnersApply,
+                req.winnersInfluence,
+            ),
+            180,
+        )
+    elif (
+        not intelligence_guidance
+        and (req.winnerGuidance or "").strip()
+    ):
+        intelligence_guidance = trim_video_prompt(
+            "Past winning direction, use only when compatible: "
+            + " ".join((req.winnerGuidance or "").split()),
+            180,
         )
 
-        if legacy_guidance:
-            prompt_text = (
-                f"{prompt_text} "
-                "Past winning direction, use only when compatible: "
-                f"{legacy_guidance[:180]}"
-            )
-
-    # Runway promptText has a hard 1,000-character limit.
-    prompt_text = trim_video_prompt(
+    # Reserve up to 180 characters for learned guidance and guarantee the
+    # final Runway prompt remains within the 1,000-character limit.
+    prompt_text = compose_runway_prompt(
         prompt_text,
-        1000,
+        intelligence_guidance,
+        max_chars=1000,
+        guidance_budget=180,
     )
 
     if len(prompt_text) > 800:
@@ -1289,6 +1424,7 @@ async def start_prompt_video(
 
     tier = None
     status = None
+    intelligence_response: Dict[str, Any] = {}
 
     if not admin:
         tier, status = get_tier_and_status(user_doc)
@@ -1318,13 +1454,23 @@ async def start_prompt_video(
         brand_kit
     )
 
+    if req.usePerformanceIntelligence:
+        try:
+            intelligence_response = (
+                get_intelligence_generation_profile(uid) or {}
+            )
+        except Exception as exc:
+            print("[Video Intelligence Load Failed]", repr(exc))
+            intelligence_response = {}
+
     usage_reservation = None
 
     if not admin:
 
         # Validate premium Winner Profile access before reserving usage.
         if (
-            (req.winnerGuidance or "").strip()
+            req.usePerformanceIntelligence
+            or (req.winnerGuidance or "").strip()
             or req.winnerProfile is not None
         ):
             require_pro_or_business(tier)
@@ -1356,32 +1502,42 @@ async def start_prompt_video(
         brand_kit_context=brand_direction,
     )
 
-    # Apply structured Winner Profile guidance when selected.
-    if req.winnerProfile is not None:
-        director_prompt = inject_winners_structured(
-            director_prompt,
-            req.winnerProfile,
-            req.winnersApply,
-            req.winnersInfluence,
+    intelligence_guidance = ""
+    if req.usePerformanceIntelligence:
+        intelligence_guidance = compact_video_intelligence(
+            intelligence_response,
+            preserve_source_image=False,
+            max_chars=180,
         )
 
-    # Backward-compatible legacy winner guidance.
-    elif (req.winnerGuidance or "").strip():
-        legacy_guidance = " ".join(
-            (req.winnerGuidance or "").split()
+    # Legacy fallback for older clients.
+    if not intelligence_guidance and req.winnerProfile is not None:
+        intelligence_guidance = trim_video_prompt(
+            inject_winners_structured(
+                "",
+                req.winnerProfile,
+                req.winnersApply,
+                req.winnersInfluence,
+            ),
+            180,
+        )
+    elif (
+        not intelligence_guidance
+        and (req.winnerGuidance or "").strip()
+    ):
+        intelligence_guidance = trim_video_prompt(
+            "Past winning direction, use only when compatible: "
+            + " ".join((req.winnerGuidance or "").split()),
+            180,
         )
 
-        if legacy_guidance:
-            director_prompt = (
-                f"{director_prompt} "
-                "Past winning direction, use only when compatible: "
-                f"{legacy_guidance[:180]}"
-            )
-
-    # Runway promptText has a hard 1,000-character limit.
-    director_prompt = trim_video_prompt(
+    # Reserve up to 180 characters for learned guidance and guarantee the
+    # final Runway prompt remains within the 1,000-character limit.
+    director_prompt = compose_runway_prompt(
         director_prompt,
-        1000,
+        intelligence_guidance,
+        max_chars=1000,
+        guidance_budget=180,
     )
 
     if len(director_prompt) > 800:
@@ -1464,6 +1620,17 @@ async def start_prompt_video(
         "error": None,
         **progress_payload("building_prompt"),
         "progressUpdatedAt": int(time.time()),
+
+        "usePerformanceIntelligence": req.usePerformanceIntelligence,
+        "performanceIntelligence": (
+            {
+                "confidence": intelligence_response.get("confidence", 0),
+                "qualifiedCount": intelligence_response.get("qualifiedCount", 0),
+                "positiveCount": intelligence_response.get("positiveCount", 0),
+            }
+            if req.usePerformanceIntelligence
+            else None
+        ),
 
         # Legacy winner guidance.
         "winnerGuidance": (

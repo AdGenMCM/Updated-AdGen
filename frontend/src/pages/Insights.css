@@ -604,3 +604,1580 @@
   margin-bottom: 24px;
   color: var(--muted);
 }
+/* Google Ads integration states */
+.ins-sourceCard.available span {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+.ins-sourceCard .ins-sourceButton {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #7c3aed;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ins-sourceCard .ins-sourceButton:hover:not(:disabled) {
+  background: #6d28d9;
+}
+
+.ins-sourceCard .ins-sourceButton.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+
+.ins-sourceCard .ins-sourceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ins-sourceActions {
+  display: grid;
+  gap: 10px;
+}
+
+.ins-sourceError {
+  margin-top: 12px;
+  color: #fca5a5;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.ins-sourceNote {
+  display: block;
+  margin-top: 12px;
+  color: #9ca3af;
+  line-height: 1.45;
+}
+
+
+/* ==========================================
+   Google Ads connected experience
+========================================== */
+
+.ins-googleCard {
+  grid-column: span 1;
+}
+
+.ins-sourceCardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.ins-liveDot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #86efac;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.ins-liveDot::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+.ins-googleDetails {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.ins-googleDetails > div {
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: rgba(15, 23, 42, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ins-googleDetails small,
+.ins-googleMiniStats small {
+  display: block;
+  color: #9ca3af;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ins-googleDetails strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.ins-googleMiniStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.ins-googleMiniStats > div {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.ins-googleMiniStats strong {
+  display: block;
+  margin-top: 6px;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.ins-googlePending {
+  margin-top: 14px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ins-googleActions {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.ins-sourceCard .ins-sourceButton.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.ins-sourceCard .ins-sourceButton.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.ins-accountPicker {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 13px;
+  background: rgba(15, 23, 42, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ins-accountPickerTitle {
+  color: #fff;
+  font-weight: 900;
+  font-size: 0.86rem;
+}
+
+.ins-accountPicker button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  margin: 0;
+  padding: 11px 12px;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(31, 41, 55, 0.8);
+  color: #fff;
+  cursor: pointer;
+}
+
+.ins-accountPicker button:hover:not(:disabled) {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.ins-accountPicker button small {
+  color: #9ca3af;
+}
+
+@media (max-width: 700px) {
+  .ins-googleMiniStats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================
+   Compact Performance Source Hub
+========================================== */
+
+.ins-sourceHub {
+  padding: 26px;
+}
+
+.ins-sourceHubHeader {
+  margin-bottom: 18px;
+}
+
+.ins-sourceHubHeader h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 7px;
+}
+
+.ins-sourceHubHeader p {
+  margin: 0;
+}
+
+.ins-sourceTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ins-sourceTab {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(31, 41, 55, 0.58);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.ins-sourceTab:hover {
+  border-color: rgba(139, 92, 246, 0.42);
+  background: rgba(31, 41, 55, 0.86);
+}
+
+.ins-sourceTab.active {
+  border-color: rgba(139, 92, 246, 0.62);
+  background: rgba(124, 58, 237, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.08);
+}
+
+.ins-sourceTabIcon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.18);
+  color: #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.ins-sourceTabIcon.google {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.ins-sourceTabIcon.meta {
+  background: rgba(99, 102, 241, 0.14);
+  color: #a5b4fc;
+}
+
+.ins-sourceTabCopy {
+  min-width: 0;
+}
+
+.ins-sourceTabCopy strong,
+.ins-sourceTabCopy small {
+  display: block;
+}
+
+.ins-sourceTabCopy strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-sourceTabCopy small {
+  margin-top: 3px;
+  color: #9ca3af;
+  font-size: 0.72rem;
+}
+
+.ins-sourceTabStatus {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ins-sourceTabStatus.connected {
+  background: rgba(34, 197, 94, 0.13);
+  color: #86efac;
+}
+
+.ins-sourceTabStatus.available {
+  background: rgba(59, 130, 246, 0.13);
+  color: #93c5fd;
+}
+
+.ins-sourceTabStatus.coming {
+  background: rgba(124, 58, 237, 0.16);
+  color: #c4b5fd;
+}
+
+.ins-sourceDetail {
+  margin-top: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.ins-sourceDetailInner {
+  padding: 20px;
+}
+
+.ins-sourceDetailIntro,
+.ins-googleConnectCompact,
+.ins-comingCompact,
+.ins-googleSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.ins-sourceDetailIntro h3,
+.ins-googleConnectCompact h3,
+.ins-comingCompact h3,
+.ins-googleSummaryRow h3 {
+  margin: 4px 0 6px;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.ins-sourceDetailIntro p,
+.ins-googleConnectCompact p,
+.ins-comingCompact p,
+.ins-googleSummaryRow p {
+  max-width: 760px;
+  margin: 0;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+.ins-sourceEyebrow {
+  color: #a78bfa;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ins-detailLink {
+  flex: 0 0 auto;
+  padding: 10px 13px;
+  border-radius: 11px;
+  background: rgba(124, 58, 237, 0.14);
+  color: #c4b5fd;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.ins-sourceMetricStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.ins-sourceMetricStrip.google {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ins-sourceMetricStrip > div {
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: 12px;
+  background: rgba(31, 41, 55, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ins-sourceMetricStrip small,
+.ins-googleStatusMeta small {
+  display: block;
+  color: #9ca3af;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-sourceMetricStrip strong,
+.ins-googleStatusMeta strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.98rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-googleIdentity {
+  min-width: 0;
+}
+
+.ins-googleStatusMeta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.ins-googleStatusMeta > div {
+  min-width: 130px;
+  text-align: right;
+}
+
+.ins-googlePending.compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 11px 13px;
+}
+
+.ins-googlePending.compact strong {
+  flex: 0 0 auto;
+}
+
+.ins-googlePending.compact span {
+  color: #fde68a;
+}
+
+.ins-googleCompactActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.ins-compactAction,
+.ins-textAction {
+  border: 0;
+  font-family: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ins-compactAction {
+  padding: 10px 14px;
+  border-radius: 11px;
+}
+
+.ins-compactAction.primary {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.ins-compactAction.primary:hover:not(:disabled) {
+  background: #6d28d9;
+}
+
+.ins-compactAction.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+
+.ins-textAction {
+  margin-left: auto;
+  padding: 9px 3px;
+  background: transparent;
+}
+
+.ins-textAction.danger {
+  color: #fca5a5;
+}
+
+.ins-compactAction:disabled,
+.ins-textAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ins-comingBadge {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.16);
+  color: #c4b5fd;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-accountPicker.compact {
+  margin-top: 14px;
+}
+
+.ins-accountPickerGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 1050px) {
+  .ins-sourceTabs {
+    grid-template-columns: 1fr;
+  }
+
+  .ins-sourceMetricStrip.google {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .ins-sourceHub {
+    padding: 20px;
+  }
+
+  .ins-sourceDetailIntro,
+  .ins-googleConnectCompact,
+  .ins-comingCompact,
+  .ins-googleSummaryRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ins-googleStatusMeta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ins-googleStatusMeta > div {
+    text-align: left;
+  }
+
+  .ins-sourceMetricStrip,
+  .ins-sourceMetricStrip.google {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ins-googlePending.compact {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ins-googleCompactActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ins-textAction {
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .ins-accountPickerGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================
+   Google Ads Phase 3 Reporting
+========================================== */
+
+.ins-sourceMetricStrip.google {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.ins-accountPicker button.manager {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.ins-accountPicker button.manager::after {
+  content: "Choose a client advertiser account";
+  margin-top: 5px;
+  color: #fcd34d;
+  font-size: 0.7rem;
+}
+
+.ins-campaignReport {
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.ins-campaignReportHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ins-campaignReportHeader h4 {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.ins-campaignReportHeader > span {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.ins-campaignTableWrap {
+  overflow-x: auto;
+}
+
+.ins-campaignTable {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+}
+
+.ins-campaignTable th,
+.ins-campaignTable td {
+  padding: 12px 14px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ins-campaignTable th:first-child,
+.ins-campaignTable td:first-child,
+.ins-campaignTable th:nth-child(2),
+.ins-campaignTable td:nth-child(2) {
+  text-align: left;
+}
+
+.ins-campaignTable th {
+  color: #9ca3af;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-campaignTable td {
+  color: #e5e7eb;
+  font-size: 0.82rem;
+}
+
+.ins-campaignTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ins-campaignTable tbody tr:hover {
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.ins-campaignTable td:first-child strong,
+.ins-campaignTable td:first-child small {
+  display: block;
+}
+
+.ins-campaignTable td:first-child strong {
+  max-width: 260px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+}
+
+.ins-campaignTable td:first-child small {
+  margin-top: 3px;
+  color: #6b7280;
+}
+
+.ins-campaignStatus {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ins-campaignStatus.enabled {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.ins-campaignStatus.paused {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+.ins-campaignStatus.removed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.ins-campaignEmpty {
+  padding: 26px 18px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+@media (max-width: 1050px) {
+  .ins-sourceMetricStrip.google {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .ins-sourceMetricStrip.google {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ins-campaignReportHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+/* ==========================================
+   Google Ads UX polish
+========================================== */
+
+.ins-googleKpiGroups {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.ins-googlePrimaryKpis,
+.ins-googleSecondaryKpis {
+  display: grid;
+  gap: 9px;
+}
+
+.ins-googlePrimaryKpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ins-googleSecondaryKpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ins-googleKpi {
+  min-width: 0;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ins-googleKpi.primary {
+  padding: 15px 16px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(124, 58, 237, 0.17),
+      rgba(59, 130, 246, 0.08)
+    );
+  border-color: rgba(139, 92, 246, 0.24);
+}
+
+.ins-googleKpi.secondary {
+  padding: 11px 12px;
+  background: rgba(31, 41, 55, 0.58);
+}
+
+.ins-googleKpi small {
+  display: block;
+  color: #9ca3af;
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-googleKpi strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-googleKpi.primary strong {
+  font-size: 1.18rem;
+}
+
+.ins-googleKpi.secondary strong {
+  font-size: 0.95rem;
+}
+
+.ins-syncSuccess {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.ins-syncSuccess > span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+  font-weight: 900;
+}
+
+.ins-syncSuccess strong,
+.ins-syncSuccess small {
+  display: block;
+}
+
+.ins-syncSuccess strong {
+  color: #bbf7d0;
+  font-size: 0.82rem;
+}
+
+.ins-syncSuccess small {
+  margin-top: 2px;
+  color: #86efac;
+  font-size: 0.74rem;
+}
+
+.ins-buttonLoading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ins-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: insSpin 0.75s linear infinite;
+}
+
+@keyframes insSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ins-campaignReportControls {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.ins-campaignReportControls label {
+  display: grid;
+  gap: 5px;
+}
+
+.ins-campaignReportControls label > span {
+  color: #9ca3af;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-campaignReportControls select {
+  min-width: 145px;
+  padding: 8px 32px 8px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.ins-campaignReportControls > span {
+  padding-bottom: 8px;
+  color: #9ca3af;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.ins-campaignTable.compact {
+  min-width: 900px;
+}
+
+.ins-campaignTable.compact th:last-child,
+.ins-campaignTable.compact td:last-child {
+  width: 48px;
+  padding-left: 6px;
+  padding-right: 10px;
+  text-align: center;
+}
+
+.ins-rowExpand {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: rgba(124, 58, 237, 0.1);
+  color: #c4b5fd;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ins-rowExpand:hover {
+  background: rgba(124, 58, 237, 0.18);
+}
+
+.ins-campaignDetailsRow td {
+  padding: 0 14px 14px;
+  background: rgba(124, 58, 237, 0.035);
+}
+
+.ins-campaignDetails {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  padding: 12px;
+  border-radius: 11px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ins-campaignDetails small,
+.ins-campaignDetails strong {
+  display: block;
+}
+
+.ins-campaignDetails small {
+  color: #9ca3af;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-campaignDetails strong {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1120px) {
+  .ins-googlePrimaryKpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ins-googleSecondaryKpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .ins-googlePrimaryKpis,
+  .ins-googleSecondaryKpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ins-campaignReportControls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ins-campaignReportControls select {
+    width: 100%;
+  }
+
+  .ins-campaignDetails {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* ==========================================
+   Google Ads creative assets
+========================================== */
+
+.ins-googleAssetsPanel {
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.ins-googleAssetsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ins-googleAssetsHeader h4 {
+  margin: 3px 0 5px;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.ins-googleAssetsHeader p {
+  max-width: 680px;
+  margin: 0;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.ins-googleAssetFilters {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(31, 41, 55, 0.72);
+}
+
+.ins-googleAssetFilters button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.ins-googleAssetFilters button.active {
+  background: rgba(124, 58, 237, 0.22);
+  color: #fff;
+}
+
+.ins-googleAssetGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.ins-googleAssetCard {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(31, 41, 55, 0.58);
+}
+
+.ins-googleAssetPreview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(124, 58, 237, 0.22), transparent 48%),
+    #111827;
+}
+
+.ins-googleAssetPreview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.ins-googleTextAsset {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.ins-googleAssetType,
+.ins-assetPerformance {
+  position: absolute;
+  top: 9px;
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.ins-googleAssetType {
+  left: 9px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #e5e7eb;
+}
+
+.ins-assetPerformance {
+  right: 9px;
+  background: rgba(124, 58, 237, 0.78);
+  color: #fff;
+}
+
+.ins-assetPerformance.best {
+  background: rgba(34, 197, 94, 0.82);
+}
+
+.ins-assetPerformance.good {
+  background: rgba(59, 130, 246, 0.82);
+}
+
+.ins-assetPerformance.low {
+  background: rgba(239, 68, 68, 0.82);
+}
+
+.ins-assetPerformance.learning,
+.ins-assetPerformance.pending {
+  background: rgba(245, 158, 11, 0.82);
+}
+
+.ins-googleAssetBody {
+  padding: 13px;
+}
+
+.ins-googleAssetTitle strong,
+.ins-googleAssetTitle small {
+  display: block;
+}
+
+.ins-googleAssetTitle strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-googleAssetTitle small {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-googleAssetStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ins-googleAssetStats > div {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.ins-googleAssetStats small,
+.ins-googleAssetStats strong {
+  display: block;
+}
+
+.ins-googleAssetStats small {
+  color: #6b7280;
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ins-googleAssetStats strong {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ins-googleAssetMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  color: #9ca3af;
+  font-size: 0.68rem;
+}
+
+.ins-googleAssetMeta span,
+.ins-googleAssetMeta a {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ins-googleAssetMeta a {
+  color: #c4b5fd;
+  text-decoration: none;
+}
+
+@media (max-width: 1100px) {
+  .ins-googleAssetGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .ins-googleAssetsHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ins-googleAssetFilters {
+    width: 100%;
+  }
+
+  .ins-googleAssetFilters button {
+    flex: 1;
+  }
+
+  .ins-googleAssetGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================
+   Performance Intelligence source
+========================================== */
+
+.ins-sourceTabIcon.intelligence {
+  background: linear-gradient(
+    145deg,
+    rgba(124, 58, 237, 0.24),
+    rgba(59, 130, 246, 0.16)
+  );
+  color: #ddd6fe;
+}
+
+.ins-sourceTabStatus.intelligence {
+  background: rgba(124, 58, 237, 0.16);
+  color: #c4b5fd;
+}
+
+.ins-intelligenceDetail {
+  padding: 22px;
+}
+
+@media (max-width: 700px) {
+  .ins-intelligenceDetail {
+    padding: 16px;
+  }
+}
+
+
+/* ==========================================
+   Compact source navigation refinement
+========================================== */
+
+.ins-sourceHub {
+  padding: 20px 22px;
+}
+
+.ins-sourceHubHeader {
+  margin-bottom: 13px;
+}
+
+.ins-sourceHubHeader h2 {
+  margin-bottom: 4px;
+}
+
+.ins-sourceHubHeader p {
+  font-size: 0.8rem;
+}
+
+.ins-sourceTabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.ins-sourceTab {
+  flex: 1 0 205px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.ins-sourceTabIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 0.72rem;
+}
+
+.ins-sourceTabCopy strong {
+  font-size: 0.82rem;
+}
+
+.ins-sourceTabCopy small {
+  margin-top: 2px;
+  font-size: 0.64rem;
+}
+
+.ins-sourceTabStatus {
+  padding: 4px 7px;
+  font-size: 0.54rem;
+}
+
+.ins-sourceDetail {
+  margin-top: 9px;
+}
+
+.ins-intelligenceDetail {
+  padding: 18px;
+}
+
+@media (max-width: 700px) {
+  .ins-sourceHub {
+    padding: 18px;
+  }
+
+  .ins-sourceTabs {
+    margin-right: -4px;
+  }
+
+  .ins-sourceTab {
+    flex-basis: 190px;
+  }
+
+  .ins-intelligenceDetail {
+    padding: 14px;
+  }
+}
+
+
+/* ==========================================
+   Pro / Business feature gate
+========================================== */
+
+.ins-sourceTabStatus.locked {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+}
+
+.ins-proGate {
+  display: grid;
+  gap: 18px;
+}
+
+.ins-proGateHero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(124, 58, 237, 0.16),
+      rgba(59, 130, 246, 0.055)
+    );
+}
+
+.ins-proGateEyebrow {
+  display: block;
+  color: #a78bfa;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ins-proGateHero h3 {
+  max-width: 720px;
+  margin: 7px 0 9px;
+  color: #fff;
+  font-size: clamp(1.25rem, 2.1vw, 1.75rem);
+  line-height: 1.15;
+}
+
+.ins-proGateHero p {
+  max-width: 780px;
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.ins-proGateBadge {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.22);
+  color: #ddd6fe;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ins-proGateBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+  gap: 14px;
+}
+
+.ins-proGateBenefits,
+.ins-proGatePlan {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.ins-proGateBenefits {
+  display: grid;
+  gap: 9px;
+  padding: 18px;
+}
+
+.ins-proGateBenefits > div {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 11px 12px;
+  border-radius: 11px;
+  background: rgba(31, 41, 55, 0.54);
+}
+
+.ins-proGateBenefits span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.ins-proGateBenefits p {
+  margin: 2px 0 0;
+  color: #d1d5db;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ins-proGatePlan {
+  padding: 20px;
+}
+
+.ins-proGatePlan > span {
+  color: #9ca3af;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ins-proGatePlan > strong {
+  display: block;
+  margin-top: 7px;
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.ins-proGatePlan > p {
+  margin: 9px 0 17px;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.ins-proGatePlan .ui-button,
+.ins-proGatePlan button {
+  width: 100%;
+}
+
+.ins-proGateNote {
+  padding: 11px 13px;
+  border: 1px solid rgba(245, 158, 11, 0.16);
+  border-radius: 11px;
+  background: rgba(245, 158, 11, 0.065);
+  color: #fcd34d;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 820px) {
+  .ins-proGateHero {
+    flex-direction: column;
+  }
+
+  .ins-proGateBody {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Keep locked Manual Tracking preview visually self-contained. */
+.ins-sourceDetailInner .ins-proGate {
+  width: 100%;
+}
+
+.ins-sourceDetailInner .ins-proGateHero,
+.ins-sourceDetailInner .ins-proGateBody,
+.ins-sourceDetailInner .ins-proGateNote {
+  position: relative;
+  z-index: 1;
+}
