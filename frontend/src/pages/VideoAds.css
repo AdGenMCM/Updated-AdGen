@@ -1042,3 +1042,39 @@
   box-sizing: border-box;
   overflow-wrap: anywhere;
 }
+
+/* Video template starter spacing */
+.videoAds .video-template-starter {
+  margin-top: 40px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .videoAds .video-template-starter {
+    margin-top: 30px;
+  }
+}
+
+/* Larger primary video creation actions */
+.videoAds button[type="submit"],
+.videoAds .videoPrimaryBtn,
+.videoAds .videoGenerateBtn {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+@media (max-width: 700px) {
+  .videoAds .video-template-starter {
+    margin-top: 22px;
+  }
+}
+
+
+/* Keep guided-scroll destinations comfortably below the fixed app header. */
+.template-scroll-target {
+  scroll-margin-top: 118px;
+}
+
+.video-settings-scroll-target {
+  scroll-margin-top: 108px;
+}

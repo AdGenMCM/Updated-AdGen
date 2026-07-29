@@ -52,12 +52,202 @@ const STYLE_MAP = {
 
 const MAX_REFERENCE_IMAGES = 3;
 
+const IMAGE_TEMPLATES = [
+  {
+    id: "skincare",
+    icon: "🧴",
+    name: "Skincare & Beauty",
+    description: "Beauty, skincare, cosmetics, and self-care products",
+    values: {
+      companyName: "Luma Skin",
+      product_name: "Vitamin C Glow Serum",
+      description: "A lightweight vitamin C serum that brightens dull skin, supports an even-looking complexion, and leaves skin with a healthy glow.",
+      audience: "Skincare shoppers looking for brighter, healthier-looking skin",
+      tone: "Premium, confident, and reassuring",
+      platform: "Instagram / Meta Feed",
+      imageSize: "1024x1024",
+      offer: "20% off your first order",
+      cta: "Shop Now",
+      headline: "Reveal Your Natural Glow",
+      primaryText: "Brighter-looking skin starts with one simple daily step.",
+      goal: "Sales",
+      campaignObjective: "Product Launch",
+      stylePreset: "Premium",
+      productType: "Skincare / Beauty",
+    },
+  },
+  {
+    id: "food-beverage",
+    icon: "☕",
+    name: "Food & Beverage",
+    description: "Restaurants, coffee, snacks, drinks, and food brands",
+    values: {
+      companyName: "Roast House",
+      product_name: "Small-Batch Cold Brew",
+      description: "A smooth small-batch cold brew made with premium beans for a rich, refreshing taste and an easy energy boost.",
+      audience: "Busy professionals, students, and coffee lovers",
+      tone: "Warm, energetic, and inviting",
+      platform: "Instagram / Meta Feed",
+      imageSize: "1024x1024",
+      offer: "Buy one, get one 50% off",
+      cta: "Order Now",
+      headline: "Bold Flavor. Smooth Finish.",
+      primaryText: "Your new go-to cold brew is ready when you are.",
+      goal: "Sales",
+      campaignObjective: "Limited-Time Offer",
+      stylePreset: "Lifestyle",
+      productType: "Beverage / Food",
+    },
+  },
+  {
+    id: "fashion",
+    icon: "👕",
+    name: "Fashion & Apparel",
+    description: "Clothing, accessories, footwear, and fashion brands",
+    values: {
+      companyName: "Northline",
+      product_name: "Everyday Performance Hoodie",
+      description: "A modern premium hoodie designed with soft stretch fabric, a clean tailored fit, and all-day comfort for work, travel, or weekends.",
+      audience: "Style-conscious shoppers who value comfort and versatility",
+      tone: "Modern, bold, and confident",
+      platform: "Instagram / Meta Feed",
+      imageSize: "1024x1792",
+      offer: "Free shipping this week",
+      cta: "Shop the Drop",
+      headline: "Built for Every Day",
+      primaryText: "Premium comfort meets a clean, modern fit.",
+      goal: "Sales",
+      campaignObjective: "Product Launch",
+      stylePreset: "Lifestyle",
+      productType: "Apparel",
+    },
+  },
+  {
+    id: "fitness",
+    icon: "🏋️",
+    name: "Fitness & Wellness",
+    description: "Gyms, supplements, coaching, and wellness services",
+    values: {
+      companyName: "Peak Method",
+      product_name: "30-Day Strength Program",
+      description: "A structured 30-day training program with guided workouts, progress tracking, and practical coaching for building strength and consistency.",
+      audience: "Busy adults who want a clear and sustainable fitness plan",
+      tone: "Motivational, direct, and encouraging",
+      platform: "Instagram / Meta Feed",
+      imageSize: "1024x1792",
+      offer: "Start your first week free",
+      cta: "Start Training",
+      headline: "Your Stronger Start",
+      primaryText: "A simple plan. Real progress. One month to build momentum.",
+      goal: "Leads",
+      campaignObjective: "Lead Generation",
+      stylePreset: "Bold",
+      productType: "Service",
+    },
+  },
+  {
+    id: "saas",
+    icon: "💻",
+    name: "Software & SaaS",
+    description: "Apps, software platforms, AI tools, and B2B services",
+    values: {
+      companyName: "FlowPilot",
+      product_name: "Workflow Automation Platform",
+      description: "A simple workflow automation platform that helps small teams organize repetitive tasks, reduce manual work, and keep projects moving.",
+      audience: "Small business owners, operations teams, and growing startups",
+      tone: "Clear, professional, and helpful",
+      platform: "LinkedIn",
+      imageSize: "1792x1024",
+      offer: "14-day free trial",
+      cta: "Start Free Trial",
+      headline: "Automate the Busywork",
+      primaryText: "Give your team more time for the work that actually matters.",
+      goal: "Leads",
+      campaignObjective: "Lead Generation",
+      stylePreset: "Minimal",
+      productType: "App / Software",
+    },
+  },
+  {
+    id: "ecommerce",
+    icon: "🛍️",
+    name: "Retail & Ecommerce",
+    description: "Online stores, consumer products, gifts, and marketplaces",
+    values: {
+      companyName: "Modern Market",
+      product_name: "Portable LED Desk Lamp",
+      description: "A compact rechargeable LED desk lamp with adjustable brightness, a clean modern design, and flexible lighting for work, reading, or travel.",
+      audience: "Online shoppers, students, remote workers, and home office buyers",
+      tone: "Practical, polished, and persuasive",
+      platform: "Meta Feed",
+      imageSize: "1024x1024",
+      offer: "Save 15% today",
+      cta: "Get Offer",
+      headline: "Better Light, Anywhere",
+      primaryText: "Portable, rechargeable, and ready for every workspace.",
+      goal: "Sales",
+      campaignObjective: "Evergreen",
+      stylePreset: "Minimal",
+      productType: "Electronics / Device",
+    },
+  },
+  {
+    id: "real-estate",
+    icon: "🏠",
+    name: "Real Estate",
+    description: "Agents, brokerages, rentals, developments, and property services",
+    values: {
+      companyName: "Harbor & Key Realty",
+      product_name: "Modern Downtown Residence",
+      description: "A bright modern residence with open living spaces, premium finishes, natural light, and convenient access to dining, shopping, and transportation.",
+      audience: "Homebuyers and renters searching for a modern, well-located property",
+      tone: "Polished, trustworthy, and aspirational",
+      platform: "Instagram / Meta Feed",
+      imageSize: "1024x1792",
+      offer: "Schedule a private tour",
+      cta: "Book a Tour",
+      headline: "Your Next Address Awaits",
+      primaryText: "Modern living, thoughtful details, and a location that keeps you connected.",
+      goal: "Leads",
+      campaignObjective: "Lead Generation",
+      stylePreset: "Premium",
+      productType: "Real Estate",
+    },
+  },
+  {
+    id: "professional-services",
+    icon: "💼",
+    name: "Professional Services",
+    description: "Agencies, consultants, finance, legal, and local services",
+    values: {
+      companyName: "Northstar Advisory",
+      product_name: "Business Growth Consultation",
+      description: "A practical strategy consultation that helps growing businesses identify priorities, improve operations, and build a clear plan for sustainable growth.",
+      audience: "Business owners and decision-makers looking for experienced guidance",
+      tone: "Professional, credible, and approachable",
+      platform: "LinkedIn",
+      imageSize: "1792x1024",
+      offer: "Free 30-minute consultation",
+      cta: "Book a Call",
+      headline: "Build Your Next Stage",
+      primaryText: "Clear strategy and practical guidance for your business's next move.",
+      goal: "Leads",
+      campaignObjective: "Lead Generation",
+      stylePreset: "Minimal",
+      productType: "Service",
+    },
+  },
+];
+
 
 function AdGenerator() {
   const navigate = useNavigate();
   const referenceInputRef = useRef(null);
+  const firstWorkspaceSectionRef = useRef(null);
 
   const [form, setForm] = useState(INITIAL_FORM);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
@@ -185,6 +375,48 @@ function AdGenerator() {
       [name]: value,
     }));
   };
+
+  const moveToFirstWorkspaceSection = () => {
+    setTemplatesOpen(false);
+
+    // Let the template panel collapse before moving the viewport. This keeps
+    // the transition from feeling like the page is jumping in two directions.
+    window.setTimeout(() => {
+      firstWorkspaceSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 280);
+  };
+
+  const applyImageTemplate = (template) => {
+    setSelectedTemplateId(template.id);
+    setUiError(null);
+    setResult(null);
+
+    setForm((previous) => ({
+      ...previous,
+      ...template.values,
+    }));
+
+    brandKitAppliedFieldsRef.current = {};
+    setBrandKitAppliedFields({});
+    moveToFirstWorkspaceSection();
+  };
+
+  const startImageFromScratch = () => {
+    setSelectedTemplateId("scratch");
+    setUiError(null);
+    setResult(null);
+    setForm(INITIAL_FORM);
+    brandKitAppliedFieldsRef.current = {};
+    setBrandKitAppliedFields({});
+    moveToFirstWorkspaceSection();
+  };
+
+  const selectedImageTemplate = IMAGE_TEMPLATES.find(
+    (template) => template.id === selectedTemplateId
+  );
 
   const safeDetailMessage = (detail) => {
     if (!detail) return null;
@@ -578,7 +810,91 @@ function AdGenerator() {
           />
           )}
 
+          <section className={`template-starter ${templatesOpen ? "is-open" : "is-collapsed"}`} aria-labelledby="image-template-title">
+            <button
+              type="button"
+              className="template-starter-toggle"
+              onClick={() => setTemplatesOpen((open) => !open)}
+              aria-expanded={templatesOpen}
+              aria-controls="image-template-options"
+            >
+              <span className="template-starter-heading">
+                <span>
+                  <span className="template-eyebrow">Need inspiration?</span>
+                  <span id="image-template-title" className="template-title">Start with a Template</span>
+                  <span className="template-description">
+                    Choose an industry and ADGen will prepare the workspace for you. 8 templates available.
+                  </span>
+                </span>
+
+                <span className="template-heading-actions">
+                  {selectedTemplateId && (
+                    <span className="template-loaded-pill">
+                      {selectedTemplateId === "scratch"
+                        ? "Blank setup selected"
+                        : `✓ ${selectedImageTemplate?.name || "Template"} template`}
+                    </span>
+                  )}
+                  <span className="template-chevron" aria-hidden="true">⌄</span>
+                </span>
+              </span>
+            </button>
+
+            <div id="image-template-options" className="template-options" hidden={!templatesOpen}>
+            <div className="template-card-grid">
+              {IMAGE_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className={`template-card ${
+                    selectedTemplateId === template.id ? "selected" : ""
+                  }`}
+                  onClick={() => applyImageTemplate(template)}
+                  disabled={loading || referenceUploading}
+                  aria-pressed={selectedTemplateId === template.id}
+                >
+                  <span className="template-card-icon" aria-hidden="true">
+                    {template.icon}
+                  </span>
+                  <span className="template-card-copy">
+                    <strong>{template.name}</strong>
+                    <small>{template.description}</small>
+                  </span>
+                  <span className="template-card-action">
+                    Use template
+                  </span>
+                </button>
+              ))}
+
+              <button
+                type="button"
+                className={`template-card template-card-scratch ${
+                  selectedTemplateId === "scratch" ? "selected" : ""
+                }`}
+                onClick={startImageFromScratch}
+                disabled={loading || referenceUploading}
+                aria-pressed={selectedTemplateId === "scratch"}
+              >
+                <span className="template-card-icon" aria-hidden="true">✨</span>
+                <span className="template-card-copy">
+                  <strong>Start From Scratch</strong>
+                  <small>Open a blank setup and build your creative your way.</small>
+                </span>
+                <span className="template-card-action">
+                  {selectedTemplateId === "scratch" ? "Selected ✓" : "Use blank setup"}
+                </span>
+              </button>
+            </div>
+
+            <div className="template-helper-note">
+              <span aria-hidden="true">✨</span>
+              <span>Templates prefill the workspace only. Brand Kit, reference images, Performance Intelligence, and every current field remain available.</span>
+            </div>
+            </div>
+          </section>
+
           <form className="adgen-form" onSubmit={handleSubmit}>
+            <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
             <StepSection
               step="1"
               title="Product & Audience"
@@ -640,6 +956,7 @@ function AdGenerator() {
                 </div>
               </div>
             </StepSection>
+            </div>
 
             <StepSection
               step="2"
@@ -912,7 +1229,7 @@ function AdGenerator() {
 
             <div className="button-row">
               <button type="submit" disabled={loading || referenceUploading}>
-                {loading ? "Generating..." : referenceUploading ? "Uploading..." : "✨ Generate Ad"}
+                {loading ? "Creating..." : referenceUploading ? "Uploading..." : "✨ Create My Ad"}
               </button>
             </div>
           </form>

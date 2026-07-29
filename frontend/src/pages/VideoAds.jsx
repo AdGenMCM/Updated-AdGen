@@ -52,6 +52,121 @@ const FORMAT_OPTIONS = [
   },
 ];
 
+const VIDEO_TEMPLATES = [
+  {
+    id: "skincare", icon: "🧴", name: "Skincare & Beauty",
+    description: "Beauty, skincare, cosmetics, and self-care products",
+    values: {
+      productName: "Vitamin C Glow Serum",
+      description: "Create a polished skincare commercial showing a premium serum bottle in a bright bathroom setting, close-up product details, smooth application, and healthy glowing skin.",
+      offer: "20% off your first order", audience: "Skincare shoppers seeking brighter, healthier-looking skin",
+      tone: "premium and reassuring", goal: "conversions", hookStyle: "problem solution",
+      sceneStyle: "lifestyle", cameraMotion: "subtle", lightingStyle: "bright clean", pace: "medium",
+      callToAction: "Shop now.", formatId: "tiktok_9x16",
+      promptText: "Subtle cinematic push-in, soft highlights across the serum bottle, gentle hand movement, premium skincare commercial pacing.",
+      voiceoverScript: "Reveal brighter-looking skin with Vitamin C Glow Serum. Shop now.",
+    },
+  },
+  {
+    id: "food-beverage", icon: "☕", name: "Food & Beverage",
+    description: "Restaurants, coffee, snacks, drinks, and food brands",
+    values: {
+      productName: "Small-Batch Cold Brew",
+      description: "Create an energetic beverage ad with cold brew pouring over ice, rich coffee texture, condensation, quick lifestyle cuts, and a refreshing final product shot.",
+      offer: "Buy one, get one 50% off", audience: "Busy professionals, students, and coffee lovers",
+      tone: "warm and energetic", goal: "conversions", hookStyle: "bold claim",
+      sceneStyle: "studio product", cameraMotion: "dynamic", lightingStyle: "high contrast", pace: "fast",
+      callToAction: "Order now.", formatId: "tiktok_9x16",
+      promptText: "Dynamic product reveal, cold brew pouring over ice, condensation details, quick camera push-in, refreshing commercial energy.",
+      voiceoverScript: "Fresh flavor in every sip. Try our cold brew today.",
+    },
+  },
+  {
+    id: "fashion", icon: "👕", name: "Fashion & Apparel",
+    description: "Clothing, accessories, footwear, and fashion brands",
+    values: {
+      productName: "Everyday Performance Hoodie",
+      description: "Create a modern fashion ad showing a premium hoodie in motion across urban and lifestyle settings, with close fabric details and a clean final brand shot.",
+      offer: "Free shipping this week", audience: "Style-conscious shoppers who value comfort and versatility",
+      tone: "modern and confident", goal: "conversions", hookStyle: "bold claim",
+      sceneStyle: "lifestyle", cameraMotion: "dynamic", lightingStyle: "natural", pace: "fast",
+      callToAction: "Shop the drop.", formatId: "tiktok_9x16",
+      promptText: "Smooth fashion camera movement, subtle fabric motion, confident model turn, clean urban lighting, premium apparel commercial.",
+      voiceoverScript: "New styles are here. Find your perfect look today.",
+    },
+  },
+  {
+    id: "fitness", icon: "🏋️", name: "Fitness & Wellness",
+    description: "Gyms, supplements, coaching, and wellness services",
+    values: {
+      productName: "30-Day Strength Program",
+      description: "Create a motivational fitness ad with focused training moments, progress tracking, energetic movement, and a clear invitation to start a structured 30-day program.",
+      offer: "Start your first week free", audience: "Busy adults who want a clear and sustainable fitness plan",
+      tone: "motivational and direct", goal: "leads", hookStyle: "problem solution",
+      sceneStyle: "lifestyle", cameraMotion: "fast cuts", lightingStyle: "dramatic", pace: "fast",
+      callToAction: "Start training.", formatId: "tiktok_9x16",
+      promptText: "Energetic training montage, confident movement, quick close-ups, dramatic gym lighting, motivating final hero pose.",
+      voiceoverScript: "Train smarter, feel stronger, and start your fitness journey today.",
+    },
+  },
+  {
+    id: "saas", icon: "💻", name: "Software & SaaS",
+    description: "Apps, software platforms, AI tools, and B2B services",
+    values: {
+      productName: "Workflow Automation Platform",
+      description: "Create a clean software commercial showing a modern dashboard, automated task flows, team collaboration, and a simple before-and-after story about saving time.",
+      offer: "14-day free trial", audience: "Small business owners, operations teams, and growing startups",
+      tone: "clear and professional", goal: "leads", hookStyle: "problem solution",
+      sceneStyle: "minimal abstract", cameraMotion: "subtle", lightingStyle: "bright clean", pace: "medium",
+      callToAction: "Start your free trial.", formatId: "youtube_16x9",
+      promptText: "Smooth interface animation, subtle camera movement across a software dashboard, clean transitions, polished modern SaaS commercial.",
+      voiceoverScript: "Save time, work smarter, and grow with our platform.",
+    },
+  },
+  {
+    id: "ecommerce", icon: "🛍️", name: "Retail & Ecommerce",
+    description: "Online stores, consumer products, gifts, and marketplaces",
+    values: {
+      productName: "Portable LED Desk Lamp",
+      description: "Create a conversion-focused ecommerce ad showing a compact rechargeable desk lamp used at a desk, bedside, and while traveling, with clear feature highlights.",
+      offer: "Save 15% today", audience: "Online shoppers, students, remote workers, and home office buyers",
+      tone: "polished and persuasive", goal: "conversions", hookStyle: "before after",
+      sceneStyle: "studio product", cameraMotion: "dynamic", lightingStyle: "bright clean", pace: "fast",
+      callToAction: "Get the offer.", formatId: "meta_portrait",
+      promptText: "Clean product rotation, light turning on, quick lifestyle transitions, crisp detail shots, ecommerce product commercial.",
+      voiceoverScript: "Better light anywhere. Portable, rechargeable, and ready to work.",
+    },
+  },
+  {
+    id: "real-estate", icon: "🏠", name: "Real Estate",
+    description: "Agents, brokerages, rentals, developments, and property services",
+    values: {
+      productName: "Modern Downtown Residence",
+      description: "Create an aspirational real estate video with bright interior walkthrough shots, premium details, neighborhood moments, and a clear invitation to schedule a tour.",
+      offer: "Schedule a private tour", audience: "Homebuyers and renters seeking a modern, well-located property",
+      tone: "polished and trustworthy", goal: "leads", hookStyle: "bold claim",
+      sceneStyle: "lifestyle", cameraMotion: "smooth pan", lightingStyle: "natural", pace: "medium",
+      callToAction: "Book a tour.", formatId: "tiktok_9x16",
+      promptText: "Smooth property walkthrough, bright natural light, premium interior details, neighborhood lifestyle cuts, elegant real estate commercial.",
+      voiceoverScript: "Discover modern living. Schedule your private tour today.",
+    },
+  },
+  {
+    id: "professional-services", icon: "💼", name: "Professional Services",
+    description: "Agencies, consultants, finance, legal, and local services",
+    values: {
+      productName: "Business Growth Consultation",
+      description: "Create a credible professional services video showing focused consultation, collaborative planning, clear strategy visuals, and a confident invitation to book a call.",
+      offer: "Free 30-minute consultation", audience: "Business owners and decision-makers seeking experienced guidance",
+      tone: "professional and approachable", goal: "leads", hookStyle: "problem solution",
+      sceneStyle: "lifestyle", cameraMotion: "subtle", lightingStyle: "bright clean", pace: "medium",
+      callToAction: "Book a call.", formatId: "youtube_16x9",
+      promptText: "Professional consultation scenes, strategic planning details, polished office environment, subtle camera motion, credible service commercial.",
+      voiceoverScript: "Clear strategy starts here. Book your consultation today.",
+    },
+  },
+];
+
 // Handles: detail as string, detail as {message}, detail as nested objects, etc.
 function safeDetailMessage(detail) {
   if (!detail) return null;
@@ -87,10 +202,14 @@ function estimateSpeechSeconds(text) {
 
 export default function VideoAds() {
   const navigate = useNavigate();
+  const firstWorkspaceSectionRef = useRef(null);
+  const videoSettingsSectionRef = useRef(null);
 
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
 
   const [tab, setTab] = useState("image"); // "image" | "prompt"
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -274,6 +393,71 @@ export default function VideoAds() {
       }, 50);
     }
   }, [finalVideoUrl, error]);
+
+  const moveToWorkspaceSection = (targetRef) => {
+    setTemplatesOpen(false);
+
+    // Wait for the collapsible template panel to close before scrolling so
+    // the movement feels intentional instead of abrupt.
+    window.setTimeout(() => {
+      targetRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 300);
+  };
+
+  const applyVideoTemplate = (template) => {
+    const values = template.values;
+
+    resetJob();
+    setSelectedTemplateId(template.id);
+    setProductName(values.productName);
+    setDescription(values.description);
+    setOffer(values.offer);
+    setAudience(values.audience);
+    setTone(values.tone);
+    setGoal(values.goal);
+    setHookStyle(values.hookStyle);
+    setSceneStyle(values.sceneStyle);
+    setCameraMotion(values.cameraMotion);
+    setLightingStyle(values.lightingStyle);
+    setPace(values.pace);
+    setCallToAction(values.callToAction);
+    setFormatId(values.formatId);
+    setPromptText(values.promptText);
+    setVoiceoverScript(values.voiceoverScript);
+    setFullCreativeDirection("");
+    setUserPrompt("");
+    moveToWorkspaceSection(videoSettingsSectionRef);
+  };
+
+  const startVideoFromScratch = () => {
+    resetJob();
+    setSelectedTemplateId("scratch");
+    setProductName("");
+    setDescription("");
+    setOffer("");
+    setAudience("");
+    setTone("confident");
+    setGoal("conversions");
+    setHookStyle("bold claim");
+    setSceneStyle("studio product");
+    setCameraMotion("subtle");
+    setLightingStyle("bright clean");
+    setPace("fast");
+    setCallToAction("Tap to learn more.");
+    setFormatId(FORMAT_OPTIONS[0].id);
+    setPromptText("Subtle cinematic camera movement, product showcase");
+    setVoiceoverScript("");
+    setFullCreativeDirection("");
+    setUserPrompt("");
+    moveToWorkspaceSection(firstWorkspaceSectionRef);
+  };
+
+  const selectedVideoTemplate = VIDEO_TEMPLATES.find(
+    (template) => template.id === selectedTemplateId
+  );
 
   const resetJob = () => {
     setJobId(null);
@@ -728,7 +912,91 @@ return (
           </div>
         )}
 
+        <section className={`template-starter video-template-starter ${templatesOpen ? "is-open" : "is-collapsed"}`} aria-labelledby="video-template-title">
+          <button
+            type="button"
+            className="template-starter-toggle"
+            onClick={() => setTemplatesOpen((open) => !open)}
+            aria-expanded={templatesOpen}
+            aria-controls="video-template-options"
+          >
+            <span className="template-starter-heading">
+              <span>
+                <span className="template-eyebrow">Need inspiration?</span>
+                <span id="video-template-title" className="template-title">Start with a Template</span>
+                <span className="template-description">
+                  Choose an industry and ADGen will prepare the workspace for you. 8 templates available.
+                </span>
+              </span>
+
+              <span className="template-heading-actions">
+                {selectedTemplateId && (
+                  <span className="template-loaded-pill">
+                    {selectedTemplateId === "scratch"
+                      ? "Blank setup selected"
+                      : `✓ ${selectedVideoTemplate?.name || "Template"} template`}
+                  </span>
+                )}
+                <span className="template-chevron" aria-hidden="true">⌄</span>
+              </span>
+            </span>
+          </button>
+
+          <div id="video-template-options" className="template-options" hidden={!templatesOpen}>
+          <div className="template-card-grid">
+            {VIDEO_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                className={`template-card ${
+                  selectedTemplateId === template.id ? "selected" : ""
+                }`}
+                onClick={() => applyVideoTemplate(template)}
+                disabled={isGenerating}
+                aria-pressed={selectedTemplateId === template.id}
+              >
+                <span className="template-card-icon" aria-hidden="true">
+                  {template.icon}
+                </span>
+                <span className="template-card-copy">
+                  <strong>{template.name}</strong>
+                  <small>{template.description}</small>
+                </span>
+                <span className="template-card-action">
+                  Use template
+                </span>
+              </button>
+            ))}
+
+            <button
+              type="button"
+              className={`template-card template-card-scratch ${
+                selectedTemplateId === "scratch" ? "selected" : ""
+              }`}
+              onClick={startVideoFromScratch}
+              disabled={isGenerating}
+              aria-pressed={selectedTemplateId === "scratch"}
+            >
+              <span className="template-card-icon" aria-hidden="true">✨</span>
+              <span className="template-card-copy">
+                <strong>Start From Scratch</strong>
+                <small>Clear the guided setup and configure the video yourself.</small>
+              </span>
+              <span className="template-card-action">
+                {selectedTemplateId === "scratch" ? "Selected ✓" : "Use blank setup"}
+              </span>
+            </button>
+          </div>
+
+          <div className="template-helper-note">
+            <span aria-hidden="true">✨</span>
+            <span>Templates prefill your current controls only. Creation modes, Brand Kit, voiceover, Performance Intelligence, uploads, and every existing integration stay unchanged.</span>
+          </div>
+          </div>
+        </section>
+
         <div className="videoAdsForm">
+        <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
         <StepSection
           step="1"
           title="Creation Mode"
@@ -760,7 +1028,9 @@ return (
             </button>
           </div>
         </StepSection>
+        </div>
 
+        <div ref={videoSettingsSectionRef} className="video-settings-scroll-target">
         <StepSection
           step="2"
           title="Video Settings"
@@ -981,6 +1251,7 @@ return (
             )}
           </div>
         </StepSection>
+        </div>
                 <StepSection
           step="3"
           title={tab === "image" ? "Image to Video" : "Prompt to Video"}
@@ -1083,7 +1354,7 @@ return (
                 }}
                 title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
               >
-                {isGenerating ? "Generating..." : "Generate Video"}
+                {isGenerating ? "Creating..." : "Create My Video"}
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
@@ -1339,7 +1610,7 @@ return (
                 }}
                 title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
               >
-                {isGenerating ? "Generating..." : "Generate Video"}
+                {isGenerating ? "Creating..." : "Create My Video"}
               </button>
 
               <div className="hint" style={{ marginTop: 8 }}>
