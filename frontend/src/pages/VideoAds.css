@@ -974,3 +974,71 @@
   position: relative;
   z-index: 2;
 }
+
+/* =========================================================
+   Video enhancement card layout correction
+   ========================================================= */
+
+.videoAds .videoEnhancementGrid {
+  align-items: start;
+}
+
+.videoAds .videoEnhancementCard {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+}
+
+/* Performance Intelligence contains both the toggle and preview,
+   so its contents must stack vertically. */
+.videoAds .videoIntelligenceCard {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 18px;
+  min-width: 0;
+  overflow: visible !important;
+}
+
+/* Keep the toggle area full width. */
+.videoAds .videoIntelligenceCard > .videoToggle,
+.videoAds .videoIntelligenceCard > .videoToggleCopy {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Prevent the expandable preview from becoming a narrow side column. */
+.videoAds .videoIntelligenceCard > .pi-preview {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Allow the title to wrap safely inside the card. */
+.videoAds .videoIntelligenceCard .videoToggleTitle {
+  width: 100% !important;
+  min-width: 0;
+  white-space: normal !important;
+}
+
+/* Brand Kit should remain compact instead of stretching
+   to match the expanded intelligence card. */
+.videoAds .videoEnhancementGrid > .videoEnhancementCard:not(
+    .videoIntelligenceCard
+  ) {
+  align-self: start;
+}
+
+/* Keep preview content from forcing horizontal overflow. */
+.videoAds .videoIntelligenceCard .pi-preview,
+.videoAds .videoIntelligenceCard .pi-preview * {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
