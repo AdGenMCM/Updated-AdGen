@@ -2936,6 +2936,8 @@ async def generate_ad(
     if (winner_guidance or winner_profile) and not admin:
         require_pro_or_business(tier)
 
+    image_usage_reservation = None
+
     if not admin:
         allowed_statuses = {"active", "trialing"}
         if status not in allowed_statuses and tier not in (None, "trial_monthly"):
@@ -2970,6 +2972,8 @@ async def generate_ad(
                     "upgradePath": "/account",
                 },
             )
+
+        image_usage_reservation = cap_result
 
         create_usage_notifications(
             db,
@@ -3445,111 +3449,138 @@ It should be visually impressive enough to appear in a professional design portf
                 status_code=502, detail=f"GPT Image generation failed: {e}"
             )
 
-    set_generation_progress(db, "image", progress_job_id, "generating_creative")
-    copy_obj, image_asset = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
-    image_url = image_asset["url"]
-
-    set_generation_progress(db, "image", progress_job_id, "saving_library")
-    image_job_id = uuid.uuid4().hex
     try:
-        db.collection("image_jobs").document(image_job_id).set(
-            {
-                "uid": uid,
-                "createdAt": int(time.time()),
-                "status": "succeeded",
-                "source": "ad_generator",
-                "productName": product_name,
-                "description": description,
-                "audience": audience,
-                "tone": tone,
-                "platform": platform,
-                "goal": goal,
-                "offer": offer,
-                "stylePreset": style,
-                "productType": product_type,
-                "aspectRatio": aspect_ratio,
-                "campaignObjective": campaign_objective,
-                "referenceImageUrls": reference_image_urls,
-                "referenceImageMode": reference_image_mode,
-                "referenceImageCount": len(reference_image_urls),
-                "useBrandKit": effective_use_brand_kit,
-                "brandKitId": (
-                    getattr(payload, "brandKitId", None)
-                    if effective_use_brand_kit
-                    else None
-                ),
-                "brandKitUsed": bool(brand_kit_context),
-                "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
-                "useMyWinners": bool(winner_profile),
-                "visualPrompt": visual_prompt,
-                "imageUrl": image_url,
-                "storagePath": image_asset.get("storagePath"),
-                "fileSizeBytes": image_asset.get("fileSizeBytes"),
-                "contentType": image_asset.get("contentType"),
-                "storageState": "active",
-                "copy": copy_obj,
-                "error": None,
-                "usage": {
-                    "used": cap_result.get("used"),
-                    "cap": cap_result.get("cap"),
-                    "month": cap_result.get("month"),
-                    "remaining": max(
-                        0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
+        set_generation_progress(db, "image", progress_job_id, "generating_creative")
+        copy_obj, image_asset = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
+        image_url = image_asset["url"]
+
+        set_generation_progress(db, "image", progress_job_id, "saving_library")
+        image_job_id = uuid.uuid4().hex
+        try:
+            db.collection("image_jobs").document(image_job_id).set(
+                {
+                    "uid": uid,
+                    "createdAt": int(time.time()),
+                    "status": "succeeded",
+                    "source": "ad_generator",
+                    "productName": product_name,
+                    "description": description,
+                    "audience": audience,
+                    "tone": tone,
+                    "platform": platform,
+                    "goal": goal,
+                    "offer": offer,
+                    "stylePreset": style,
+                    "productType": product_type,
+                    "aspectRatio": aspect_ratio,
+                    "campaignObjective": campaign_objective,
+                    "referenceImageUrls": reference_image_urls,
+                    "referenceImageMode": reference_image_mode,
+                    "referenceImageCount": len(reference_image_urls),
+                    "useBrandKit": effective_use_brand_kit,
+                    "brandKitId": (
+                        getattr(payload, "brandKitId", None)
+                        if effective_use_brand_kit
+                        else None
                     ),
-                },
-                "usePerformanceIntelligence": use_performance_intelligence,
-                "performanceIntelligence": (
-                    {
-                        "confidence": intelligence_response.get("confidence", 0),
-                        "evidenceCount": intelligence_response.get("evidenceCount", 0),
-                        "qualifiedCount": intelligence_response.get("qualifiedCount", 0),
-                        "positiveCount": intelligence_response.get("positiveCount", 0),
-                    }
-                    if use_performance_intelligence
-                    else None
+                    "brandKitUsed": bool(brand_kit_context),
+                    "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+                    "useMyWinners": bool(winner_profile),
+                    "visualPrompt": visual_prompt,
+                    "imageUrl": image_url,
+                    "storagePath": image_asset.get("storagePath"),
+                    "fileSizeBytes": image_asset.get("fileSizeBytes"),
+                    "contentType": image_asset.get("contentType"),
+                    "storageState": "active",
+                    "copy": copy_obj,
+                    "error": None,
+                    "usage": {
+                        "used": cap_result.get("used"),
+                        "cap": cap_result.get("cap"),
+                        "month": cap_result.get("month"),
+                        "remaining": max(
+                            0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
+                        ),
+                    },
+                    "usePerformanceIntelligence": use_performance_intelligence,
+                    "performanceIntelligence": (
+                        {
+                            "confidence": intelligence_response.get("confidence", 0),
+                            "evidenceCount": intelligence_response.get("evidenceCount", 0),
+                            "qualifiedCount": intelligence_response.get("qualifiedCount", 0),
+                            "positiveCount": intelligence_response.get("positiveCount", 0),
+                        }
+                        if use_performance_intelligence
+                        else None
+                    ),
+                    "winnerProfile": winner_profile or None,
+                    "winnersApply": winners_apply or None,
+                    "winnersInfluence": (
+                        winners_influence if winners_influence is not None else None
+                    ),
+                    "winnerGuidance": winner_guidance or None,
+                    "model": OPENAI_IMAGE_MODEL,
+                }
+            )
+        except Exception:
+            pass
+
+        legacy_text = (
+            f"{copy_obj.get('headline','')}\n\n"
+            f"{copy_obj.get('primary_text','')}\n\n"
+            f"CTA: {copy_obj.get('cta','')}"
+        ).strip()
+
+        return {
+            "text": legacy_text,
+            "copy": copy_obj,
+            "imageUrl": image_url,
+            "imageJobId": image_job_id,
+            "meta": {
+                "goal": goal,
+                "stylePreset": style,
+                "offer": offer,
+                "productType": product_type,
+            },
+            "usage": {
+                "used": cap_result.get("used"),
+                "cap": cap_result.get("cap"),
+                "month": cap_result.get("month"),
+                "remaining": max(
+                    0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
                 ),
-                "winnerProfile": winner_profile or None,
-                "winnersApply": winners_apply or None,
-                "winnersInfluence": (
-                    winners_influence if winners_influence is not None else None
-                ),
-                "winnerGuidance": winner_guidance or None,
-                "model": OPENAI_IMAGE_MODEL,
-            }
+            },
+        }
+
+    except HTTPException:
+        if not admin and image_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "images",
+                image_usage_reservation.get("periodKey")
+                or image_usage_reservation.get("month"),
+                1,
+            )
+        raise
+
+    except Exception as exc:
+        if not admin and image_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "images",
+                image_usage_reservation.get("periodKey")
+                or image_usage_reservation.get("month"),
+                1,
+            )
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Image generation failed: {exc}",
         )
-    except Exception:
-        pass
-
-    legacy_text = (
-        f"{copy_obj.get('headline','')}\n\n"
-        f"{copy_obj.get('primary_text','')}\n\n"
-        f"CTA: {copy_obj.get('cta','')}"
-    ).strip()
-
-    return {
-        "text": legacy_text,
-        "copy": copy_obj,
-        "imageUrl": image_url,
-        "imageJobId": image_job_id,
-        "meta": {
-            "goal": goal,
-            "stylePreset": style,
-            "offer": offer,
-            "productType": product_type,
-        },
-        "usage": {
-            "used": cap_result.get("used"),
-            "cap": cap_result.get("cap"),
-            "month": cap_result.get("month"),
-            "remaining": max(
-                0, (cap_result.get("cap") or 0) - (cap_result.get("used") or 0)
-            ),
-        },
-    }
 
 
-# ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
-# ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 # ---------------- Optimize Ad (Pro/Business only, CONSUMES optimizer usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
 async def optimize_ad(
@@ -3998,6 +4029,8 @@ async def generate_from_optimizer(
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
+    image_usage_reservation = None
+
     if not admin:
         allowed_statuses = {"active", "trialing"}
 
@@ -4032,6 +4065,8 @@ async def generate_from_optimizer(
                     "upgradePath": "/account",
                 },
             )
+
+        image_usage_reservation = cap_result
 
         create_usage_notifications(
             db,
@@ -4368,9 +4403,32 @@ Improve it.
         }
 
     except HTTPException:
+        if not admin and image_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "images",
+                image_usage_reservation.get("periodKey")
+                or image_usage_reservation.get("month"),
+                1,
+            )
         raise
+
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GPT Image generation failed: {e}")
+        if not admin and image_usage_reservation:
+            rollback_resource(
+                db,
+                uid,
+                "images",
+                image_usage_reservation.get("periodKey")
+                or image_usage_reservation.get("month"),
+                1,
+            )
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"GPT Image generation failed: {e}",
+        )
 
 
 # ---------------- Creation of Admin Page Routes ----------------
