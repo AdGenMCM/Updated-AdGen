@@ -102,12 +102,16 @@ from campaign_backend.routes import router as campaign_router
 from line_items.routes import router as line_items_router
 from campaign_assets.routes import router as campaign_assets_router
 
-#Google ADs Integration
+#Google & Meta ADs Integration
 from integrations.google_ads.routes import router as google_ads_router
+from integrations.meta_ads.routes import router as meta_ads_router
 
 #Performance Intelligence 
 from performance_intelligence.routes import router as performance_intelligence_router
 from performance_intelligence.service import generation_profile as get_intelligence_generation_profile
+
+#Reporting 
+from reporting_engine import router as reporting_router
 
 load_dotenv(override=True)
 
@@ -121,7 +125,10 @@ app.include_router(brand_kits_router)
 
 
 app.include_router(google_ads_router)
+app.include_router(meta_ads_router)
 app.include_router(performance_intelligence_router)
+
+app.include_router(reporting_router)
 
 
 class AdminRequestTierBody(BaseModel):
@@ -3543,28 +3550,31 @@ It should be visually impressive enough to appear in a professional design portf
 
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
 # ---------------- Optimize Ad (Pro/Business only, DOES NOT consume usage) ----------------
+# ---------------- Optimize Ad (Pro/Business only, CONSUMES optimizer usage) ----------------
 @app.post("/optimize-ad", response_model=OptimizeAdResponse)
 async def optimize_ad(
     payload: OptimizeAdRequest,
     authorization: str | None = Header(default=None),
     progress_job_id: Optional[str] = None,
 ):
+    """
+    Creative Performance Optimizer.
+
+    Existing access and usage behavior is intentionally preserved:
+    - Pro and Business only
+    - Admin bypass
+    - One optimizer_runs unit reserved per analysis
+    - Failed analyses roll the reserved unit back
+    - No image credit is consumed here
+    """
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
     db = get_db()
     set_generation_progress(db, "optimizer", progress_job_id, "validated")
+
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
-
-    set_generation_progress(db, "optimizer", progress_job_id, "loading_brand_kit")
-    brand_kit = (
-        resolve_brand_kit(db, uid, getattr(payload, "brandKitId", None), user_doc)
-        if getattr(payload, "useBrandKit", True)
-        else {}
-    )
-    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
-
     tier, status = get_tier_and_status(user_doc)
 
     if not admin:
@@ -3577,7 +3587,6 @@ async def optimize_ad(
         require_pro_or_business(tier)
 
     optimizer_usage_reservation = None
-
     if not admin:
         optimizer_usage_reservation = check_and_increment_resource(
             db,
@@ -3600,7 +3609,6 @@ async def optimize_ad(
                 ),
                 link="/optimizer",
             )
-
             raise HTTPException(
                 status_code=429,
                 detail={
@@ -3626,6 +3634,14 @@ async def optimize_ad(
             link="/optimizer",
         )
 
+    set_generation_progress(db, "optimizer", progress_job_id, "loading_brand_kit")
+    brand_kit = (
+        resolve_brand_kit(db, uid, getattr(payload, "brandKitId", None), user_doc)
+        if getattr(payload, "useBrandKit", True)
+        else {}
+    )
+    brand_kit_context = build_brand_kit_prompt_context(brand_kit)
+
     product_name = (payload.product_name or "").strip()[:80]
     description = (payload.description or "").strip()[:800]
     audience = (payload.audience or "").strip()[:120]
@@ -3633,16 +3649,23 @@ async def optimize_ad(
     offer = (payload.offer or "").strip()[:80]
     goal = (payload.goal or "Sales").strip()[:30]
     platform = (payload.platform or "meta").strip()[:20]
+    analysis_source = (getattr(payload, "analysis_source", None) or "manual").strip()
+    source_label = (getattr(payload, "source_label", None) or "").strip()[:160]
 
-    metrics = payload.metrics.dict() if payload.metrics else {}
-
+    metrics = payload.metrics.model_dump() if payload.metrics else {}
     creative_urls = payload.creative_image_urls or []
+
     set_generation_progress(db, "optimizer", progress_job_id, "analyzing_creative")
     creative_analysis = (
         await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
     )
 
     extra = {
+        "analysis_source": analysis_source,
+        "source_label": source_label,
+        "source_campaign_id": getattr(payload, "source_campaign_id", None),
+        "source_ad_id": getattr(payload, "source_ad_id", None),
+        "source_creative_id": getattr(payload, "source_creative_id", None),
         "flight_start": payload.flight_start,
         "flight_end": payload.flight_end,
         "placements": payload.placements,
@@ -3657,50 +3680,21 @@ async def optimize_ad(
     set_generation_progress(db, "optimizer", progress_job_id, "evaluating_performance")
 
     optimizer_prompt = f"""
-You are a senior direct-response creative strategist and performance marketing analyst.
+You are ADGen's Creative Performance Optimizer.
 
-Your job is to analyze the current ad, uploaded creative, campaign context, and metrics, then produce:
-1. A concise diagnosis
-2. Specific creative recommendations
-3. Improved ad copy
-4. A production-ready image prompt for generating a stronger finished advertisement
+Analyze ONE selected creative or advertisement and answer:
+"What should the advertiser change right now?"
 
-RULES:
-- Output ONLY valid JSON.
-- Do not include markdown.
-- Do not include commentary outside the JSON object.
-- likely_issues must be an array of strings.
-- recommended_changes must be an array of strings.
-- confidence must be exactly one of: low, medium, high.
-- improved_headline <= 40 characters.
-- improved_primary_text <= 150 characters.
-- improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer, Download, Contact Us, Book Now.
-- improved_image_prompt should describe a complete, polished advertisement, not just a product photo.
-- The improved image prompt should encourage clean readable typography, correct spelling, strong product focus, clear CTA, and professional ad layout.
-- Do not recommend misleading claims, unrealistic guarantees, or unsupported performance claims.
+This is not a historical pattern report. Do not recreate Performance Intelligence.
+Performance Intelligence may support ADGen elsewhere, but this analysis must stay
+focused on the selected creative, its current copy, context, visual execution,
+and available performance metrics.
 
-==================================================
-PRIORITY ORDER
-==================================================
+Return ONLY valid JSON. Do not include markdown or commentary.
 
-When analyzing this advertisement and generating improvements, follow these priorities in order:
-
-1. Preserve the advertiser's core product, offer, campaign objective, and messaging.
-   Improvements should strengthen the existing campaign—not create a completely different one.
-
-2. Maintain the Established Brand Identity.
-   Use the Brand Kit to preserve branding, colors, typography, messaging, voice,
-   personality, and overall creative direction.
-   Only apply Brand Kit fields that are present.
-   Never recommend changes that conflict with the Brand Kit.
-
-3. Use the uploaded creative analysis and performance metrics to identify the
-   highest-impact opportunities for improvement.
-   Recommendations should improve performance while remaining consistent with the brand.
-
-4. Follow modern advertising and conversion best practices.
-   Focus on stronger hooks, better visual hierarchy, clearer messaging,
-   improved readability, stronger CTAs, and higher commercial quality.
+SOURCE:
+analysis_source: {analysis_source}
+source_label: {source_label or "Not provided"}
 
 CAMPAIGN CONTEXT:
 product_name: {product_name}
@@ -3715,19 +3709,11 @@ notes: {payload.notes or ""}
 
 {brand_kit_context}
 
-When Brand Kit information is provided:
-• Treat it as the established visual identity.
-• Only use colors, fonts, logo, voice, and rules that are present.
-• If colors or fonts are blank, ignore them completely.
-• Do not invent missing brand colors or fonts.
-• Use supplied brand colors for accents, CTA buttons, badges, highlights, and supporting design elements.
-• Use supplied fonts or close visual matches for headline, body, and CTA typography.
-
 EXTRA CONTEXT JSON:
 {json.dumps(extra)}
 
-CREATIVE ANALYSIS FROM UPLOADED IMAGES:
-{creative_analysis or "No uploaded creatives."}
+CREATIVE ANALYSIS:
+{creative_analysis or "No uploaded creative was available. Analyze the supplied copy and context."}
 
 CURRENT CREATIVE:
 headline: {payload.current_headline or ""}
@@ -3738,30 +3724,41 @@ image_prompt_or_notes: {payload.current_image_prompt or ""}
 PERFORMANCE METRICS JSON:
 {json.dumps(metrics)}
 
-ANALYSIS GUIDANCE:
-- If CTR is low, focus on hook strength, visual stopping power, headline clarity, contrast, and audience-message fit.
-- If CPC is high, focus on relevance, clarity, stronger offer framing, and reducing friction.
-- If CPA is high, focus on trust, offer strength, CTA clarity, objections, and conversion intent.
-- If CPM is high, mention audience/placement competitiveness only if relevant, but focus creative recommendations on improving efficiency.
-- If ROAS is low, focus on stronger purchase intent, clearer value proposition, better offer presentation, and reducing wasted clicks.
-- If metrics are incomplete, state that confidence is medium or low and base recommendations on creative fundamentals.
+ANALYSIS RULES:
+- Diagnose this specific creative, not the account as a whole.
+- Use metrics when supplied. If metrics are missing, perform a creative audit.
+- Focus recommendations on creative variables: hook, visual hierarchy, offer
+  clarity, readability, product prominence, CTA visibility, brand consistency,
+  audience-message fit, and platform suitability.
+- Do not recommend bid, budget, keyword, or campaign-structure changes unless
+  needed to explain why a metric alone cannot prove a creative issue.
+- Never invent historical winner data or expected lift percentages.
+- Do not make unsupported claims or guarantees.
+- If Brand Kit data exists, evaluate consistency against only the supplied fields.
+- improved_headline must be 40 characters or fewer.
+- improved_primary_text must be 150 characters or fewer.
+- improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer,
+  Download, Contact Us, Book Now.
+- confidence must be exactly low, medium, or high.
+- overall_score must be an integer from 0 through 100.
+- audit_dimensions must contain exactly these six dimensions:
+  Attention, Message Clarity, Visual Hierarchy, CTA & Offer,
+  Brand Consistency, Platform Fit.
+- Each audit dimension must include:
+  name, score (0-100), status (strong, watch, or weak), finding.
+- priority_recommendations must contain exactly three items ordered by impact.
+- Each priority recommendation must include:
+  title, reason, action, impact (low, medium, or high).
+- likely_issues and recommended_changes remain concise arrays for compatibility.
+- improved_image_prompt must describe a complete, publish-ready advertisement
+  and preserve the same product and campaign intent.
 
-IMPROVED IMAGE PROMPT REQUIREMENTS:
-The improved_image_prompt should instruct the image model to create a finished paid social advertisement with:
-- Hero product or product scene
-- Professional commercial photography
-- Clean readable English typography
-- One clear headline
-- Optional short supporting line
-- Clear CTA button
-- Offer badge if an offer exists
-- Strong visual hierarchy
-- Balanced spacing
-- Platform-appropriate layout
-- Premium, realistic, publish-ready design
-
-Return JSON with exactly these keys:
+Return exactly these keys:
 summary,
+overall_score,
+biggest_opportunity,
+audit_dimensions,
+priority_recommendations,
 likely_issues,
 recommended_changes,
 improved_headline,
@@ -3773,8 +3770,12 @@ confidence
 
     try:
         set_generation_progress(
-            db, "optimizer", progress_job_id, "building_recommendations"
+            db,
+            "optimizer",
+            progress_job_id,
+            "building_recommendations",
         )
+
         resp = await asyncio.to_thread(
             lambda: client.chat.completions.create(
                 model=OPENAI_TEXT_MODEL,
@@ -3783,17 +3784,13 @@ confidence
                     {
                         "role": "system",
                         "content": (
-                            "You output only valid JSON. "
-                            "Return arrays where arrays are requested. "
-                            "Return confidence as lowercase: low, medium, or high."
+                            "Return only valid JSON. Diagnose one creative and provide "
+                            "specific, prioritized creative actions."
                         ),
                     },
-                    {
-                        "role": "user",
-                        "content": optimizer_prompt,
-                    },
+                    {"role": "user", "content": optimizer_prompt},
                 ],
-                max_completion_tokens=750,
+                max_completion_tokens=1250,
             )
         )
 
@@ -3802,56 +3799,123 @@ confidence
 
         if not obj or "improved_headline" not in obj:
             raise HTTPException(
-                status_code=502, detail="Optimizer returned invalid JSON."
+                status_code=502,
+                detail="Optimizer returned invalid JSON.",
             )
 
         obj.setdefault(
             "summary",
-            "Here are recommended improvements based on the metrics provided.",
+            "ADGen identified the most important creative changes to test next.",
         )
 
-        # Normalize likely_issues
-        issues = obj.get("likely_issues", [])
+        try:
+            obj["overall_score"] = max(
+                0,
+                min(100, int(obj.get("overall_score", 70))),
+            )
+        except (TypeError, ValueError):
+            obj["overall_score"] = 70
 
-        if isinstance(issues, dict):
-            issues = list(issues.values())
-        elif isinstance(issues, str):
-            issues = [issues]
-        elif not isinstance(issues, list):
-            issues = []
+        obj["biggest_opportunity"] = str(
+            obj.get("biggest_opportunity") or "Creative clarity"
+        ).strip()[:120]
 
-        obj["likely_issues"] = [str(x).strip() for x in issues if str(x).strip()]
+        allowed_dimension_names = [
+            "Attention",
+            "Message Clarity",
+            "Visual Hierarchy",
+            "CTA & Offer",
+            "Brand Consistency",
+            "Platform Fit",
+        ]
+        raw_dimensions = obj.get("audit_dimensions")
+        if not isinstance(raw_dimensions, list):
+            raw_dimensions = []
 
-        # Normalize recommended_changes
-        changes = obj.get("recommended_changes", [])
+        dimension_map = {}
+        for item in raw_dimensions:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if name not in allowed_dimension_names:
+                continue
+            try:
+                score = max(0, min(100, int(item.get("score", 70))))
+            except (TypeError, ValueError):
+                score = 70
+            status_value = str(item.get("status") or "").strip().lower()
+            if status_value not in {"strong", "watch", "weak"}:
+                status_value = "strong" if score >= 80 else "watch" if score >= 60 else "weak"
+            dimension_map[name] = {
+                "name": name,
+                "score": score,
+                "status": status_value,
+                "finding": str(item.get("finding") or "Review this area before the next test.").strip()[:260],
+            }
 
-        if isinstance(changes, dict):
-            changes = list(changes.values())
-        elif isinstance(changes, str):
-            changes = [changes]
-        elif not isinstance(changes, list):
-            changes = []
+        obj["audit_dimensions"] = [
+            dimension_map.get(
+                name,
+                {
+                    "name": name,
+                    "score": 70,
+                    "status": "watch",
+                    "finding": "Review this area before the next test.",
+                },
+            )
+            for name in allowed_dimension_names
+        ]
 
-        obj["recommended_changes"] = [str(x).strip() for x in changes if str(x).strip()]
+        raw_priorities = obj.get("priority_recommendations")
+        if not isinstance(raw_priorities, list):
+            raw_priorities = []
 
-        # Normalize headline
+        priorities = []
+        for item in raw_priorities[:3]:
+            if not isinstance(item, dict):
+                continue
+            impact = str(item.get("impact") or "medium").strip().lower()
+            if impact not in {"low", "medium", "high"}:
+                impact = "medium"
+            priorities.append(
+                {
+                    "title": str(item.get("title") or "Improve creative clarity").strip()[:100],
+                    "reason": str(item.get("reason") or "This is limiting the creative's effectiveness.").strip()[:260],
+                    "action": str(item.get("action") or "Create a clearer Version 2.").strip()[:300],
+                    "impact": impact,
+                }
+            )
+
+        while len(priorities) < 3:
+            priorities.append(
+                {
+                    "title": "Strengthen the next test",
+                    "reason": "The current creative has an opportunity for clearer execution.",
+                    "action": "Apply one focused creative change and compare it against the current version.",
+                    "impact": "medium",
+                }
+            )
+        obj["priority_recommendations"] = priorities
+
+        for field_name in ("likely_issues", "recommended_changes"):
+            value = obj.get(field_name, [])
+            if isinstance(value, dict):
+                value = list(value.values())
+            elif isinstance(value, str):
+                value = [value]
+            elif not isinstance(value, list):
+                value = []
+            obj[field_name] = [str(x).strip() for x in value if str(x).strip()][:8]
+
         obj["improved_headline"] = str(
-            obj.get("improved_headline") or product_name or "Better Results"
-        ).strip()[:80]
+            obj.get("improved_headline") or product_name or "A Stronger Version"
+        ).strip()[:40]
 
-        # Normalize primary text
         obj["improved_primary_text"] = str(
             obj.get("improved_primary_text")
-            or "Discover a clearer, stronger offer designed to drive action."
-        ).strip()[:250]
+            or "A clearer message and stronger reason to act."
+        ).strip()[:150]
 
-        # Normalize image prompt
-        obj["improved_image_prompt"] = str(
-            obj.get("improved_image_prompt")
-            or "Create a premium, professional paid social advertisement with strong product focus, clean typography, clear CTA, balanced spacing, and modern commercial design."
-        ).strip()
-
-        # Normalize CTA
         allowed_ctas = {
             "Shop Now",
             "Learn More",
@@ -3861,23 +3925,27 @@ confidence
             "Contact Us",
             "Book Now",
         }
+        cta = str(obj.get("improved_cta") or "Learn More").strip()
+        obj["improved_cta"] = cta if cta in allowed_ctas else "Learn More"
 
-        cta = str(obj.get("improved_cta", "Learn More")).strip()
+        obj["improved_image_prompt"] = str(
+            obj.get("improved_image_prompt")
+            or (
+                "Create a polished paid-social advertisement that preserves the "
+                "same product and campaign intent while improving clarity, hierarchy, "
+                "readability, CTA visibility, and commercial quality."
+            )
+        ).strip()
 
-        if cta not in allowed_ctas:
-            cta = "Learn More"
+        confidence = str(obj.get("confidence") or "medium").strip().lower()
+        obj["confidence"] = confidence if confidence in {"low", "medium", "high"} else "medium"
 
-        obj["improved_cta"] = cta
-
-        # Normalize confidence
-        confidence = str(obj.get("confidence", "medium")).strip().lower()
-
-        if confidence not in {"low", "medium", "high"}:
-            confidence = "medium"
-
-        obj["confidence"] = confidence
-
-        set_generation_progress(db, "optimizer", progress_job_id, "saving_results")
+        set_generation_progress(
+            db,
+            "optimizer",
+            progress_job_id,
+            "saving_results",
+        )
         return OptimizeAdResponse(**obj)
 
     except HTTPException:
@@ -3890,7 +3958,7 @@ confidence
                 1,
             )
         raise
-    except Exception as e:
+    except Exception as exc:
         if not admin and optimizer_usage_reservation:
             rollback_resource(
                 db,
@@ -3899,7 +3967,10 @@ confidence
                 optimizer_usage_reservation.get("periodKey"),
                 1,
             )
-        raise HTTPException(status_code=502, detail=f"Optimization failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Optimization failed: {exc}",
+        )
 
 
 # ---------------- Generate New Creative from Optimizer (Pro/Business only, CONSUMES usage) ----------------

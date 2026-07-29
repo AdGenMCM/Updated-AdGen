@@ -97,8 +97,9 @@ const TIERS = [
       "Everything in Starter",
       "Creative Optimizer",
       "Performance Intelligence",
-      "Manual tracking and Google Ads",
+      "Manual tracking, Google Ads, Meta Ads",
       "Creative DNA",
+      "Unified Campaign Reporting",
       "Future generation guidance",
       "Multiple Brand Kits",
     ],
@@ -142,10 +143,10 @@ const COMPARISON_ROWS = [
   ["Brand Kit", false, true, true, true, true],
   ["Manual performance tracking", false, false, false, true, true],
   ["Google Ads integration", false, false, false, true, true],
+  ["Meta Ads integration", false, false, false, true, true],
   ["Performance Intelligence", false, false, false, true, true],
+  ["Unified Campaign Reporting", false, false, false, true, true],
   ["Creative DNA", false, false, false, true, true],
-  ["Applies learning to image generation", false, false, false, true, true],
-  ["Applies learning to video generation", false, false, false, true, true],
   ["Priority generation", false, false, false, false, true],
 ];
 
@@ -154,6 +155,11 @@ const FAQS = [
     question: "What is Performance Intelligence?",
     answer:
       "Performance Intelligence is available on Pro and Business. It uses qualified manual tracking and Google Ads results to build Creative DNA and guide future image and video generations.",
+  },
+  {
+    question: "How does Performance Intelligence work?",
+    answer:
+      "Performance Intelligence combines data from your Creative Library, manual tracking, Google Ads, and Meta Ads to identify successful creative patterns. Those insights become your Creative DNA, helping guide future image and video generations.",
   },
   {
     question: "What counts as a video credit?",

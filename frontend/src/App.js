@@ -12,6 +12,7 @@ import MyAccount from "./pages/MyAccount";
 import VideoAds from "./pages/VideoAds";
 import Library from "./pages/Library";
 import Insights from "./pages/Insights";
+import Reports from "./pages/Reports";
 import BrandKit from "./pages/BrandKit";
 import Dashboard from "./pages/Dashboard";
 import CreativeStudio from "./pages/CreativeStudio";
@@ -71,6 +72,7 @@ function ConditionalNavbar() {
     "/optimizer",
     "/library",
     "/insights",
+    "/reports",
     "/brand-kit",
     "/campaigns",
     "/account",
@@ -131,6 +133,7 @@ export default function App() {
               <Route path="/optimizer" element={<Optimizer />} />
               <Route path="/library" element={<Library />} />
               <Route path="/insights" element={<Insights />} />
+              <Route path="/reports" element={<Reports />} />
             </Route>
           </Route>
 

@@ -102,6 +102,14 @@
   line-height: 1.75;
 }
 
+.adgen-marketing-hero-description-small {
+  max-width: 900px;
+  margin: 34px auto 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
 .adgen-marketing-hero-actions {
   display: flex;
   flex-wrap: wrap;

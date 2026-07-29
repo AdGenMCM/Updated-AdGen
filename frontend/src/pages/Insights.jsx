@@ -8,6 +8,7 @@ import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import FieldLabel from "../components/ui/FieldLabel";
 import GoogleAdsInsightsPanel from "../components/GoogleAdsInsightsPanel";
+import MetaAdsInsightsPanel from "../components/MetaAdsInsightsPanel";
 import PerformanceIntelligencePanel from "../components/PerformanceIntelligencePanel";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
@@ -483,9 +484,9 @@ export default function Insights() {
             <span className="ins-sourceTabIcon meta">M</span>
             <span className="ins-sourceTabCopy">
               <strong>Meta Ads</strong>
-              <small>Not yet available</small>
+              <small>{canUsePerformanceFeatures ? "Campaign account connection" : "Available on Pro & Business"}</small>
             </span>
-            <span className="ins-sourceTabStatus coming">Soon</span>
+            <span className={`ins-sourceTabStatus ${canUsePerformanceFeatures ? "available" : "locked"}`}>{canUsePerformanceFeatures ? "Open" : "Pro"}</span>
           </button>
         </div>
 
@@ -592,18 +593,22 @@ export default function Insights() {
 
           {activeSource === "meta" && (
             <div className="ins-sourceDetailInner">
-              <div className="ins-comingCompact">
-                <div>
-                  <div className="ins-sourceEyebrow">Meta Ads</div>
-                  <h3>Automatic Meta performance syncing is coming later</h3>
-                  <p>
-                    The future integration will import campaigns, creatives,
-                    impressions, clicks, spend, and conversions into this same
-                    Insights workspace.
-                  </p>
-                </div>
-                <span className="ins-comingBadge">Coming Soon</span>
-              </div>
+              {canUsePerformanceFeatures ? (
+                <MetaAdsInsightsPanel />
+              ) : (
+                renderLockedFeature({
+                  eyebrow: "Meta Ads Integration",
+                  title: "Connect Meta campaign results directly to ADGen",
+                  description:
+                    "Pro and Business users can connect a Meta advertiser account before campaign and creative performance syncing is enabled.",
+                  benefits: [
+                    "Connect Meta using secure, read-only advertising access.",
+                    "Choose the advertiser account ADGen should analyze.",
+                    "Prepare campaign and creative performance for Insights.",
+                    "Use Meta results to strengthen Performance Intelligence.",
+                  ],
+                })
+              )}
             </div>
           )}
         </div>

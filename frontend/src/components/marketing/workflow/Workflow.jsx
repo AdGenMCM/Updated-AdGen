@@ -29,16 +29,16 @@ const steps = [
   {
     number: "04",
     title: "Learn",
-    label: "Understand what earns attention",
+    label: "Analyze real campaign performance",
     description:
-      "Bring in manual tracking or Google Ads results and identify reliable performance signals.",
+      "Bring in manual tracking, Google, or Meta Ads results and identify reliable performance signals.",
   },
   {
     number: "05",
     title: "Improve",
     label: "Make every next campaign stronger",
     description:
-      "Use Creative DNA to guide future image and video generations without starting from zero.",
+      "Use Creative DNA and pull Reporting to guide future image and video generations without starting from zero.",
   },
 ];
 

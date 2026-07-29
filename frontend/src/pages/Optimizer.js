@@ -10,16 +10,91 @@ import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
+import {
+  getGoogleAdsAssets,
+  getGoogleAdsStatus,
+  syncGoogleAds,
+} from "../services/googleAdsService";
+import {
+  getMetaAdsCreatives,
+  getMetaAdsStatus,
+  syncMetaAds,
+  syncMetaAdsCreatives,
+} from "../services/metaAdsService";
 
 
+const SOURCE_DATE_RANGE = "LAST_30_DAYS";
+
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function cleanNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(parsed) : "";
+}
+
+function normalizePlatform(value, fallback = "other") {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("meta") || normalized.includes("facebook") || normalized.includes("instagram")) return "meta";
+  if (normalized.includes("google") || normalized.includes("youtube") || normalized.includes("display")) return "google";
+  if (normalized.includes("tiktok")) return "tiktok";
+  if (normalized.includes("linkedin")) return "linkedin";
+  return fallback;
+}
 
 
+function metaCreativeTitle(item) {
+  return item.headline || item.adName || "Meta ad";
+}
 
 export default function Optimizer() {
   const navigate = useNavigate();
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
+  const [analysisSource, setAnalysisSource] = useState("manual");
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState("");
+  const [sourceItems, setSourceItems] = useState([]);
+  const [sourceSearch, setSourceSearch] = useState("");
+  const [sourceSelection, setSourceSelection] = useState(null);
+  const [sourceStatus, setSourceStatus] = useState(null);
+
+  const analysisSources = [
+    {
+      id: "google_ads",
+      name: "Google Ads",
+      description: "Select a synced campaign asset and import its reporting context.",
+      badge: "Connected source",
+      enabled: true,
+    },
+    {
+      id: "meta_ads",
+      name: "Meta Ads",
+      description: "Select a synced ad and import its copy, creative, and performance.",
+      badge: "Connected source",
+      enabled: true,
+    },
+    {
+      id: "library",
+      name: "Library Creative",
+      description: "Select a saved creative and import its copy and tracked performance.",
+      badge: "AdGen source",
+      enabled: true,
+    },
+    {
+      id: "manual",
+      name: "Manual Upload",
+      description: "Upload a creative, paste its copy, and add any metrics available.",
+      badge: "Available",
+      enabled: true,
+    },
+  ];
 
   const [form, setForm] = useState({
     product_name: "",
@@ -134,6 +209,298 @@ const [progress, setProgress] = useState({
 
     run();
   }, [apiBase]);
+
+  const getToken = async () => {
+    const user = auth.currentUser;
+    if (!user) throw new Error("You must be logged in.");
+    return user.getIdToken(true);
+  };
+
+  const resetImportedSource = () => {
+    setSourceSelection(null);
+    setSourceItems([]);
+    setSourceSearch("");
+    setSourceError("");
+    setSourceStatus(null);
+    setUploadedUrls([]);
+    setSelectedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const loadLibrarySource = async () => {
+    const token = await getToken();
+    const imageResponse = await fetch(`${apiBase}/image/jobs?limit=100`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const imageData = await readJson(imageResponse);
+
+    if (!imageResponse.ok) {
+      throw new Error(
+        safeDetailMessage(imageData?.detail) || "Could not load Library images."
+      );
+    }
+
+    const images = (Array.isArray(imageData?.items) ? imageData.items : [])
+      .filter((item) => item.status === "succeeded" && item.imageUrl)
+      .map((item) => ({
+        sourceType: "library",
+        mediaType: "image",
+        id: item.id,
+        externalId: item.id,
+        title: item.productName ? `Image: ${item.productName}` : "Image Ad",
+        previewUrl: item.imageUrl,
+        creativeUrl: item.imageUrl,
+        productName: item.productName || "",
+        prompt: item.visualPrompt || "",
+        copy: item.copy || {},
+        performance: item.performance || {},
+        platform: normalizePlatform(item.platform || item.copy?.platform),
+        raw: item,
+      }));
+
+    setSourceStatus({
+      label: "Creative Library",
+      detail: `${images.length} image creative${images.length === 1 ? "" : "s"}`,
+    });
+    setSourceItems(images);
+  };
+
+  const loadGoogleSource = async () => {
+    let status = await getGoogleAdsStatus();
+    if (!status?.connected) {
+      setSourceStatus({ label: "Google Ads", detail: "Not connected" });
+      setSourceItems([]);
+      throw new Error("Connect Google Ads from Insights before selecting a creative.");
+    }
+    if (!status?.selectedCustomerId) {
+      setSourceStatus({ label: "Google Ads", detail: "No advertiser account selected" });
+      setSourceItems([]);
+      throw new Error("Choose a Google Ads advertiser account from Insights first.");
+    }
+
+    let result = await getGoogleAdsAssets(SOURCE_DATE_RANGE);
+    let assets = Array.isArray(result?.assets) ? result.assets : [];
+    if (!assets.length) {
+      await syncGoogleAds(SOURCE_DATE_RANGE);
+      status = await getGoogleAdsStatus();
+      result = await getGoogleAdsAssets(SOURCE_DATE_RANGE);
+      assets = Array.isArray(result?.assets) ? result.assets : [];
+    }
+
+    const imageAssets = assets.filter(
+      (asset) => asset.assetType === "IMAGE" && asset.previewUrl
+    );
+
+    setSourceStatus({
+      label: status.selectedCustomerName || "Google Ads Account",
+      detail: `Previous 30 days · ${imageAssets.length} image creative${
+        imageAssets.length === 1 ? "" : "s"
+      }`,
+    });
+
+    setSourceItems(
+      imageAssets.map((asset, index) => ({
+        sourceType: "google_ads",
+        mediaType: "image",
+        id: `${asset.campaignId || "campaign"}:${asset.assetId || index}`,
+        externalId: String(asset.assetId || index),
+        title: asset.name || asset.campaignName || "Google Ads image",
+        previewUrl: asset.previewUrl,
+        creativeUrl: asset.previewUrl,
+        productName: asset.campaignName || "",
+        prompt: asset.name || asset.fieldType || "",
+        copy: {},
+        performance: {
+          impressions: asset.impressions,
+          clicks: asset.clicks,
+          ctr: asset.ctr,
+          conversions: asset.conversions,
+          spend: asset.spend,
+          cpc: asset.averageCpc || asset.cpc,
+          cpa: asset.costPerConversion || asset.cpa,
+          cpm: asset.cpm,
+          roas: asset.roas,
+        },
+        platform: "google",
+        campaignId: asset.campaignId || null,
+        adId: asset.adId || null,
+        campaignName: asset.campaignName || "",
+        raw: asset,
+      }))
+    );
+  };
+
+  const loadMetaSource = async () => {
+    let status = await getMetaAdsStatus();
+    if (!status?.connected) {
+      setSourceStatus({ label: "Meta Ads", detail: "Not connected" });
+      setSourceItems([]);
+      throw new Error("Connect Meta Ads from Insights before selecting a creative.");
+    }
+    if (!status?.selectedAdAccountId) {
+      setSourceStatus({ label: "Meta Ads", detail: "No advertiser account selected" });
+      setSourceItems([]);
+      throw new Error("Choose a Meta advertiser account from Insights first.");
+    }
+
+    let result = await getMetaAdsCreatives(500);
+    let creatives = Array.isArray(result?.creatives) ? result.creatives : [];
+    if (!creatives.length) {
+      await syncMetaAds(SOURCE_DATE_RANGE);
+      result = await syncMetaAdsCreatives(SOURCE_DATE_RANGE);
+      creatives = Array.isArray(result?.creatives)
+        ? result.creatives
+        : (await getMetaAdsCreatives(500))?.creatives || [];
+      status = await getMetaAdsStatus();
+    }
+
+    const imageCreatives = creatives.filter((item) => {
+      const mediaType = String(item.mediaType || "").toLowerCase();
+      return mediaType === "image" && (item.thumbnailUrl || item.imageUrl);
+    });
+
+    setSourceStatus({
+      label: status.selectedAdAccountName || "Meta ad account",
+      detail: `Previous 30 days · ${imageCreatives.length} image creative${
+        imageCreatives.length === 1 ? "" : "s"
+      }`,
+    });
+
+    setSourceItems(
+      imageCreatives.map((item, index) => ({
+        sourceType: "meta_ads",
+        mediaType: "image",
+        id: String(item.adId || item.id || index),
+        externalId: String(item.adId || item.id || index),
+        title: metaCreativeTitle(item),
+        previewUrl: item.thumbnailUrl || item.imageUrl,
+        creativeUrl: item.imageUrl || item.thumbnailUrl,
+        productName: item.campaignName || "",
+        prompt: item.adName || "",
+        copy: {
+          headline: item.headline || "",
+          primary_text: item.primaryText || "",
+          cta: item.ctaType ? String(item.ctaType).replaceAll("_", " ") : "",
+        },
+        performance: {
+          impressions: item.impressions,
+          clicks: item.clicks,
+          ctr: item.ctr,
+          conversions: item.conversions,
+          spend: item.spend,
+          cpc: item.cpc,
+          cpa: item.cpa,
+          cpm: item.cpm,
+          roas: item.roas,
+          frequency: item.frequency,
+        },
+        platform: "meta",
+        campaignId: item.campaignId || null,
+        adId: item.adId || item.id || null,
+        campaignName: item.campaignName || "",
+        adSetName: item.adSetName || "",
+        objective: item.objective || "",
+        placements: item.placements || "",
+        raw: item,
+      }))
+    );
+  };
+
+  const loadAnalysisSource = async (sourceId) => {
+    if (sourceId === "manual") {
+      resetImportedSource();
+      setAnalysisSource("manual");
+      return;
+    }
+
+    setAnalysisSource(sourceId);
+    setSourceLoading(true);
+    setSourceError("");
+    setSourceSelection(null);
+    setSourceItems([]);
+    setUploadedUrls([]);
+    setSelectedFiles([]);
+
+    try {
+      if (sourceId === "library") await loadLibrarySource();
+      if (sourceId === "google_ads") await loadGoogleSource();
+      if (sourceId === "meta_ads") await loadMetaSource();
+    } catch (error) {
+      setSourceError(error?.message || "Could not load this source.");
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  const selectImportedCreative = (item) => {
+    const copy = item.copy || {};
+    const performance = item.performance || {};
+
+    setSourceSelection(item);
+    setUploadedUrls(item.creativeUrl ? [item.creativeUrl] : []);
+    setSelectedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    setForm((current) => ({
+      ...current,
+      product_name: item.productName || current.product_name,
+      platform: item.platform || current.platform,
+      objective: item.objective || current.objective,
+      placements:
+        typeof item.placements === "string"
+          ? item.placements
+          : Array.isArray(item.placements)
+          ? item.placements.join(", ")
+          : current.placements,
+      current_headline:
+        copy.headline || copy.title || current.current_headline,
+      current_primary_text:
+        copy.primary_text ||
+        copy.primaryText ||
+        copy.body ||
+        current.current_primary_text,
+      current_cta: copy.cta || current.current_cta,
+      current_image_prompt: item.prompt || current.current_image_prompt,
+      impressions: cleanNumber(performance.impressions),
+      clicks: cleanNumber(performance.clicks),
+      conversions: cleanNumber(performance.conversions),
+      ctr: cleanNumber(performance.ctr),
+      cpc: cleanNumber(performance.cpc),
+      cpa: cleanNumber(performance.cpa),
+      cpm: cleanNumber(performance.cpm),
+      spend: cleanNumber(performance.spend),
+      roas: cleanNumber(performance.roas),
+      frequency: cleanNumber(performance.frequency),
+      notes: [
+        current.notes,
+        item.campaignName ? `Campaign: ${item.campaignName}` : "",
+        item.adSetName ? `Ad set: ${item.adSetName}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    }));
+  };
+
+  const filteredSourceItems = useMemo(() => {
+    const query = sourceSearch.trim().toLowerCase();
+    if (!query) return sourceItems;
+    return sourceItems.filter((item) =>
+      [
+        item.title,
+        item.productName,
+        item.campaignName,
+        item.adSetName,
+        item.mediaType,
+        item.copy?.headline,
+        item.copy?.primary_text,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [sourceItems, sourceSearch]);
 
   // --- Selected-option explanations (dynamic) ---
   const platformHelpMap = useMemo(
@@ -308,6 +675,11 @@ const [progress, setProgress] = useState({
       return;
     }
 
+    if (analysisSource !== "manual" && !sourceSelection) {
+      setErr("Choose a creative from the selected source before running the audit.");
+      return;
+    }
+
     setLoading(true);
     setProgress({
       type: "optimizer",
@@ -332,6 +704,14 @@ const [progress, setProgress] = useState({
       const token = await user.getIdToken(true);
 
       const payload = {
+        analysis_source: analysisSource,
+        source_label:
+          analysisSource === "manual"
+            ? "Manual Upload"
+            : sourceStatus?.label || sourceSelection?.title || analysisSource,
+        source_campaign_id: sourceSelection?.campaignId || null,
+        source_ad_id: sourceSelection?.adId || null,
+        source_creative_id: sourceSelection?.externalId || sourceSelection?.id || null,
         useBrandKit,
         brandKitId,
         product_name: form.product_name,
@@ -622,9 +1002,9 @@ const [progress, setProgress] = useState({
     <div className="opt-shell">
       <main className="opt-main">
         <PageHeader
-          eyebrow="AI CREATIVE STUDIO"
-          title="Optimize Ad"
-          description="Analyze an existing ad, identify weak points, and generate stronger copy, creative direction, and performance-focused recommendations."
+          eyebrow="CREATIVE PERFORMANCE OPTIMIZER"
+          title="What should you improve next?"
+          description="Diagnose one creative, identify its highest-impact opportunities, and create a stronger Version 2 without changing the rest of your campaign."
         />
 
         {auth.currentUser && canUseOptimizer && (
@@ -669,11 +1049,126 @@ const [progress, setProgress] = useState({
           </Card>
         ) : (
           <form className="adgen-form opt-form" onSubmit={handleOptimize}>
+            <Card className="opt-sourcePanel">
+              <div className="opt-sourceHeader">
+                <div>
+                  <p className="opt-miniKicker">ANALYSIS SOURCE</p>
+                  <h2>Choose where this creative lives</h2>
+                  <p>
+                    Every source leads to the same focused audit. Connected sources
+                    will automatically populate the creative and its context.
+                  </p>
+                </div>
+                <span className="opt-planPill">Pro & Business</span>
+              </div>
+
+              <div className="opt-sourceGrid">
+                {analysisSources.map((source) => {
+                  const selected = analysisSource === source.id;
+                  return (
+                    <button
+                      key={source.id}
+                      type="button"
+                      className={`opt-sourceCard ${selected ? "selected" : ""} ${
+                        !source.enabled ? "disabled" : ""
+                      }`}
+                      onClick={() => source.enabled && loadAnalysisSource(source.id)}
+                      disabled={!source.enabled || loading || regenLoading}
+                    >
+                      <div className="opt-sourceTop">
+                        <span className="opt-sourceRadio" aria-hidden="true">
+                          {selected ? "●" : "○"}
+                        </span>
+                        <span className={`opt-sourceBadge ${source.enabled ? "live" : ""}`}>
+                          {source.badge}
+                        </span>
+                      </div>
+                      <strong>{source.name}</strong>
+                      <p>{source.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {analysisSource === "manual" ? (
+                <div className="opt-sourceNotice">
+                  Upload a creative below and enter any campaign context or metrics you have.
+                </div>
+              ) : (
+                <div className="opt-sourceBrowser">
+                  <div className="opt-sourceBrowserHeader">
+                    <div>
+                      <strong>{sourceStatus?.label || "Select a creative"}</strong>
+                      <span>{sourceStatus?.detail || "Loading source data"}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      className="opt-secondaryBtn"
+                      onClick={() => loadAnalysisSource(analysisSource)}
+                      disabled={sourceLoading}
+                    >
+                      {sourceLoading ? "Loading..." : "Refresh Source"}
+                    </Button>
+                  </div>
+
+                  {sourceError && <p className="opt-error">{sourceError}</p>}
+
+                  {!sourceLoading && sourceItems.length > 0 && (
+                    <>
+                      <input
+                        className="opt-sourceSearch"
+                        value={sourceSearch}
+                        onChange={(event) => setSourceSearch(event.target.value)}
+                        placeholder="Search image creatives by campaign, ad, or product..."
+                      />
+
+                      <div className="opt-sourceItems">
+                        {filteredSourceItems.map((item) => {
+                          const selected = sourceSelection?.id === item.id;
+                          return (
+                            <button
+                              key={`${item.sourceType}-${item.id}`}
+                              type="button"
+                              className={`opt-sourceItem ${selected ? "selected" : ""}`}
+                              onClick={() => selectImportedCreative(item)}
+                              aria-pressed={selected}
+                            >
+                              <div className="opt-sourcePreview">
+                                <img src={item.previewUrl} alt={item.title || "Creative image"} />
+                                <span className="opt-sourceSelectState">
+                                  {selected ? "Selected" : "Select"}
+                                </span>
+                              </div>
+                              <div className="opt-sourceItemBody">
+                                <span className="opt-sourceType">Image</span>
+                                <strong>{item.title}</strong>
+                                <small>
+                                  {[item.campaignName, item.adSetName]
+                                    .filter(Boolean)
+                                    .join(" · ") || "AdGen Library"}
+                                </small>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {!sourceLoading && !sourceError && !sourceItems.length && (
+                    <div className="opt-sourceEmpty">
+                      No image creatives are available from this source yet.
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+
             <StepSection
               step="1"
               title={
                 <>
-                  Campaign Details
+                  Creative Context
                   <InfoTip text="Add product, audience, offer, platform, and campaign goal so AdGen can diagnose the ad accurately." />
                 </>
               }
@@ -765,33 +1260,48 @@ const [progress, setProgress] = useState({
               step="2"
               title={
                 <>
-                  Current Creative
+                  Creative to Diagnose
                   <InfoTip text="Upload the actual ad creative or paste current copy so AdGen can find what may be hurting performance." />
                 </>
               }
               description="Upload the creative you are running or paste the existing ad copy."
             >
-              <div className="opt-uploadBox">
-                <input
-                  ref={fileInputRef}
-                  className="opt-file"
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  multiple
-                  onChange={onPickFiles}
-                />
+              {analysisSource === "manual" ? (
+                <>
+                  <div className="opt-uploadBox">
+                    <input
+                      ref={fileInputRef}
+                      className="opt-file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      multiple
+                      onChange={onPickFiles}
+                    />
 
-                <Button
-                  type="button"
-                  className="opt-secondaryBtn"
-                  onClick={uploadCreatives}
-                  disabled={uploading || !selectedFiles.length}
-                >
-                  {uploading ? "Uploading..." : "Upload Creatives"}
-                </Button>
-              </div>
+                    <Button
+                      type="button"
+                      className="opt-secondaryBtn"
+                      onClick={uploadCreatives}
+                      disabled={uploading || !selectedFiles.length}
+                    >
+                      {uploading ? "Uploading..." : "Upload Creatives"}
+                    </Button>
+                  </div>
 
-              {uploadErr && <p className="opt-error">{uploadErr}</p>}
+                  {uploadErr && <p className="opt-error">{uploadErr}</p>}
+                </>
+              ) : (
+                <div className="opt-importedCreative">
+                  <strong>
+                    {sourceSelection
+                      ? `Imported: ${sourceSelection.title}`
+                      : "Choose a creative from the source selector above."}
+                  </strong>
+                  <span>
+                    Imported fields remain editable before the audit runs.
+                  </span>
+                </div>
+              )}
 
               {uploadedUrls.length > 0 && (
                 <div className="opt-thumbGrid">
@@ -821,7 +1331,7 @@ const [progress, setProgress] = useState({
               step="3"
               title={
                 <>
-                  Performance Metrics
+                  Performance Evidence
                   <InfoTip text="CTR, CPM, CPC, CPA, ROAS, impressions, clicks, and conversions help AdGen make stronger recommendations." />
                 </>
               }
@@ -845,11 +1355,11 @@ const [progress, setProgress] = useState({
               step="4"
               title={
                 <>
-                  AI Enhancements
+                  Brand Context
                   <InfoTip text="Brand Kit lets AdGen use your saved logo, colors, fonts, voice, audience, and brand rules during optimization." />
                 </>
               }
-              description="Choose which intelligence layers AdGen should use during optimization."
+              description="Apply the selected Brand Kit as a constraint. Existing Performance Intelligence remains unchanged in the background."
             >
 
               <div className="opt-enhancementGrid">
@@ -871,7 +1381,7 @@ const [progress, setProgress] = useState({
             </StepSection>
 
             <Button className="opt-mainCta" type="submit" disabled={loading}>
-              {loading ? "Analyzing..." : "✨ Analyze & Improve"}
+              {loading ? "Analyzing..." : "Run Creative Audit"}
             </Button>
 
             {err && <p className="opt-error">{err}</p>}
@@ -882,54 +1392,101 @@ const [progress, setProgress] = useState({
                   <span className="step-badge">5</span>
                   <div>
                     <h2>
-                      Optimization Results
+                      Creative Audit Results
                       <InfoTip text="These results include diagnosis, recommendations, improved copy, and a stronger image prompt." />
                     </h2>
-                    <p>Review AdGen’s diagnosis, recommendations, and improved creative direction.</p>
+                    <p>Review the strongest opportunities, prioritized changes, and Version 2 direction.</p>
                   </div>
                 </div>
 
-                <div className="opt-resultGrid">
-                  <Card className="opt-resultCard opt-resultWide">
-                    <h3>Executive Summary</h3>
+                <div className="opt-scoreHero">
+                  <div className="opt-scoreRing">
+                    <strong>{result.overall_score ?? 70}</strong>
+                    <span>/ 100</span>
+                  </div>
+                  <div className="opt-scoreCopy">
+                    <p className="opt-miniKicker">CREATIVE AUDIT</p>
+                    <h3>{result.biggest_opportunity || "Creative clarity"}</h3>
                     <p>{result.summary}</p>
-                  </Card>
+                    <div className="opt-confidenceRow">
+                      <span>Confidence: {String(result.confidence || "medium")}</span>
+                      <span>Source: {sourceStatus?.label || (analysisSource === "manual" ? "Manual Upload" : analysisSource)}</span>
+                      <span>Performance Intelligence: unchanged</span>
+                    </div>
+                  </div>
+                </div>
 
-                  <Card className="opt-resultCard">
-                    <h3>Likely Issues</h3>
-                    <ul>
-                      {result.likely_issues?.map((x, i) => <li key={i}>{x}</li>)}
-                    </ul>
-                  </Card>
+                <div className="opt-auditGrid">
+                  {(result.audit_dimensions || []).map((dimension) => (
+                    <Card className="opt-auditCard" key={dimension.name}>
+                      <div className="opt-auditTop">
+                        <h3>{dimension.name}</h3>
+                        <span className={`opt-statusPill ${dimension.status}`}>
+                          {dimension.status}
+                        </span>
+                      </div>
+                      <strong className="opt-dimensionScore">{dimension.score}</strong>
+                      <div className="opt-scoreTrack">
+                        <span style={{ width: `${Math.max(0, Math.min(100, dimension.score || 0))}%` }} />
+                      </div>
+                      <p>{dimension.finding}</p>
+                    </Card>
+                  ))}
+                </div>
 
-                  <Card className="opt-resultCard">
-                    <h3>AI Recommendations</h3>
-                    <ul>
-                      {result.recommended_changes?.map((x, i) => <li key={i}>{x}</li>)}
-                    </ul>
-                  </Card>
+                <div className="opt-prioritySection">
+                  <div className="opt-sectionTitle">
+                    <p className="opt-miniKicker">WHAT TO CHANGE NOW</p>
+                    <h3>Three prioritized actions</h3>
+                  </div>
+                  <div className="opt-priorityList">
+                    {(result.priority_recommendations || []).map((item, index) => (
+                      <Card className="opt-priorityCard" key={`${item.title}-${index}`}>
+                        <div className="opt-priorityNumber">{index + 1}</div>
+                        <div className="opt-priorityBody">
+                          <div className="opt-priorityHeading">
+                            <h4>{item.title}</h4>
+                            <span className={`opt-impactPill ${item.impact}`}>
+                              {item.impact} impact
+                            </span>
+                          </div>
+                          <p>{item.reason}</p>
+                          <div className="opt-actionBox">
+                            <span>Recommended action</span>
+                            <strong>{item.action}</strong>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
 
-                  <Card className="opt-resultCard opt-resultWide">
-                    <h3>Improved Copy</h3>
-                    <div className="opt-copyBlock">
+                <Card className="opt-versionCard">
+                  <div className="opt-versionHeader">
+                    <div>
+                      <p className="opt-miniKicker">VERSION 2 DIRECTION</p>
+                      <h3>Improved creative</h3>
+                    </div>
+                  </div>
+                  <div className="opt-updatedCopyGrid">
+                    <div>
                       <span>Headline</span>
                       <p>{result.improved_headline}</p>
                     </div>
-                    <div className="opt-copyBlock">
-                      <span>Primary Text</span>
-                      <p>{result.improved_primary_text}</p>
-                    </div>
-                    <div className="opt-copyBlock">
+                    <div>
                       <span>CTA</span>
                       <p>{result.improved_cta}</p>
                     </div>
-                  </Card>
-
-                  <Card className="opt-resultCard opt-resultWide">
-                    <h3>Optimized Image Prompt</h3>
+                    <div className="opt-copyWide">
+                      <span>Primary Text</span>
+                      <p>{result.improved_primary_text}</p>
+                    </div>
+                  </div>
+                  <details className="opt-promptDetails">
+                    <summary>View optimized image direction</summary>
                     <p>{result.improved_image_prompt}</p>
-                  </Card>
-                </div>
+                  </details>
+                </Card>
 
                 {uploadedUrls.length > 0 ? (
                   <Card className="opt-generatePanel">

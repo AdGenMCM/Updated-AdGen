@@ -6,7 +6,7 @@ from integrations.google_ads.store import get_connection
 from ..extractors import analyze_copy, analyze_image, analyze_video_metadata
 from ..models import CreativeFeatures, PerformanceEvidence
 from ..qualification import qualify_evidence
-from ..store import get_thresholds, save_evidence, stable_creative_id
+from ..store import get_thresholds, stable_creative_id, upsert_evidence
 
 
 def _num(value: Any, default: float = 0.0) -> float:
@@ -110,6 +110,8 @@ def google_asset_to_evidence(
         source_account_id=customer_id,
         campaign_id=campaign_id or None,
         campaign_name=asset.get("campaignName"),
+        ad_group_id=str(asset.get("adGroupId") or asset.get("assetGroupId") or "") or None,
+        performance_unit_id="google_ads:" + ":".join(filter(None, [customer_id, campaign_id, str(asset.get("adId") or asset.get("assetGroupId") or asset.get("adGroupId") or "campaign")])),
         external_asset_id=external_asset_id,
         creative_id=stable_creative_id(
             "google_ads",
@@ -157,6 +159,9 @@ def google_asset_to_evidence(
             "googleAssetType": asset.get("assetType"),
             "googleFieldType": asset.get("fieldType"),
             "googleSource": asset.get("source"),
+            "adId": asset.get("adId"),
+            "adGroupId": asset.get("adGroupId"),
+            "assetGroupId": asset.get("assetGroupId"),
             "previewUrlUsedForAnalysis": bool(
                 asset.get("previewUrl")
             ),
@@ -173,6 +178,8 @@ def ingest_google_ads(
     *,
     uid: str,
     date_range: str = "LAST_30_DAYS",
+    start_date: str | None = None,
+    end_date: str | None = None,
     analyze_media: bool = True,
 ) -> dict[str, Any]:
     connection = get_connection(uid) or {}
@@ -190,9 +197,14 @@ def ingest_google_ads(
         customer_id=customer_id,
         login_customer_id=connection.get("loginCustomerId"),
         date_range=date_range,
+        start_date=start_date,
+        end_date=end_date,
     )
 
     imported = 0
+    added = 0
+    updated = 0
+    unchanged = 0
     skipped = 0
     failures = []
 
@@ -204,7 +216,13 @@ def ingest_google_ads(
                 asset=asset,
                 analyze_media=analyze_media,
             )
-            save_evidence(uid, evidence)
+            _evidence_id, change = upsert_evidence(uid, evidence)
+            if change == "added":
+                added += 1
+            elif change == "updated":
+                updated += 1
+            else:
+                unchanged += 1
             imported += 1
         except Exception as exc:
             failures.append(
@@ -217,6 +235,9 @@ def ingest_google_ads(
 
     return {
         "imported": imported,
+        "added": added,
+        "updated": updated,
+        "unchanged": unchanged,
         "skipped": skipped,
         "failures": failures[:25],
         "customerId": customer_id,

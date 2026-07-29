@@ -16,13 +16,11 @@ EvidenceStatus = Literal[
 class QualificationThresholds(BaseModel):
     min_impressions: int = Field(default=250, ge=0)
     min_clicks: int = Field(default=10, ge=0)
-    min_conversions: float = Field(default=1.0, ge=0)
+    min_conversions: float = Field(default=2.0, ge=0)
     min_spend: float = Field(default=5.0, ge=0)
-
     winner_min_roas: float = Field(default=2.0, ge=0)
     strong_min_roas: float = Field(default=1.25, ge=0)
     underperformer_max_roas: float = Field(default=0.75, ge=0)
-
     winner_min_ctr_percent: float = Field(default=3.0, ge=0)
     strong_min_ctr_percent: float = Field(default=1.5, ge=0)
 
@@ -43,6 +41,8 @@ class PerformanceEvidence(BaseModel):
     external_asset_id: str | None = None
     creative_id: str
     deployment_id: str | None = None
+    performance_unit_id: str | None = None
+    learning_weight: float = Field(default=1.0, ge=0, le=1)
     kind: Literal["image", "video", "copy", "mixed"]
     asset_role: str | None = None
 
@@ -68,8 +68,15 @@ class PerformanceEvidence(BaseModel):
 class RebuildRequest(BaseModel):
     include_manual: bool = True
     include_google_ads: bool = True
-    google_date_range: str = "LAST_30_DAYS"
-    analyze_media: bool = True
+    include_meta_ads: bool = True
+    google_date_range: str = "MAXIMUM"
+    google_start_date: str | None = None
+    google_end_date: str | None = None
+    meta_date_range: str = "MAXIMUM"
+    meta_start_date: str | None = None
+    meta_end_date: str | None = None
+    sync_sources: bool = True
+    analyze_media: bool = False
 
 
 class AnalyzeCreativeRequest(BaseModel):

@@ -77,10 +77,11 @@ const sections = [
     text:
       "Analyze an existing ad alongside its campaign context and performance metrics to identify weaknesses and generate stronger recommendations.",
     points: [
-      "Diagnose likely creative weaknesses",
-      "Receive actionable recommendations",
-      "Generate improved campaign copy",
-      "Create stronger visual directions",
+      "Import creatives directly from your Library",
+      "Analyze Google Ads creative",
+      "Analyze Meta Ads creative",
+      "Identify performance weaknesses",
+      "Generate optimized replacements",
     ],
     image: "/screenshots/optimizer.png",
     imageAlt:
@@ -110,11 +111,33 @@ const sections = [
   },
   {
     number: "06",
-    eyebrow: "PERFORMANCE INTELLIGENCE",
+    eyebrow: "CAMPAIGN REPORTING",
+    title: "Understand campaign performance in one place.",
+    outcome: "Connect your advertising accounts and monitor creative performance without switching between platforms.",
+    text:
+      "Track campaign performance with Google Ads and Meta Ads integrations, compare creative results, monitor key metrics, and keep reporting connected to the rest of your creative workflow.",
+    points: [
+      "Connect Google Ads",
+      "Connect Meta Ads",
+      "Unified reporting dashboard",
+      "Monitor campaign metrics",
+      "Compare creative performance",
+      "Refresh live reporting",
+    ],
+    image: "/screenshots/reporting.png",
+    imageAlt:
+      "ADGen MCM Creative Library showing generated image assets, video counts, performance tracking, filters, and winner labels",
+    callouts: ["Searchable assets", "Performance data", "Winner tracking"],
+     reverse: true,
+    visualTone: "violet",
+  },
+  {
+    number: "07",
+    eyebrow: "PERFORMANCE INTELLIGENCE & Insights",
     title: "Turn qualified results into future creative guidance.",
     outcome: "Build a reusable Creative DNA profile for your brand.",
     text:
-      "Performance Intelligence learns from manual tracking and Google Ads, identifies qualified creative patterns, and makes those insights available to future image and video generations.",
+      "Performance Intelligence combines your Creative Library, Google Ads, Meta Ads, and manual performance tracking to build Creative DNA that continuously improves future image and video generations.",
     points: [
       "Connect Google Ads or add performance manually",
       "Qualify reliable winners and underperformers",
@@ -125,11 +148,10 @@ const sections = [
     imageAlt:
       "ADGen MCM Insights showing performance sources, creative intelligence score, weighted ROAS, CTR, and tracked creative",
     callouts: ["Creative DNA", "Qualified signals", "Generation guidance"],
-    reverse: true,
     visualTone: "blue",
   },
   {
-    number: "07",
+    number: "08",
     eyebrow: "CREATIVE STUDIO",
     title: "Perfect every creative before launch.",
     outcome: "Make final edits without leaving the platform.",
@@ -146,6 +168,7 @@ const sections = [
       "ADGen MCM Creative Studio showing a skincare ad canvas, editable text, typography controls, safe-area guides, and PNG export",
     callouts: ["Editable layers", "Safe-area guides", "Export ready"],
     featured: true,
+    reverse: true,
     visualTone: "violet",
   },
 ];

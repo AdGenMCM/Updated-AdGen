@@ -9,7 +9,12 @@ from .auth import require_google_ads_user
 from .config import get_settings
 from .models import OAuthStartResponse, SelectCustomerBody
 from .oauth import authorization_url, build_flow
-from .service import list_accessible_customers, fetch_campaign_summary, fetch_creative_assets
+from .service import (
+    list_accessible_customers,
+    fetch_campaign_summary,
+    fetch_daily_campaign_history,
+    fetch_creative_assets,
+)
 from .store import (
     consume_oauth_state,
     create_oauth_state,
@@ -18,6 +23,7 @@ from .store import (
     save_connection,
     save_selected_customer,
     save_sync_summary,
+    save_daily_campaign_performance,
 )
 
 
@@ -65,6 +71,7 @@ def google_ads_status(user=Depends(require_google_ads_user)):
         "campaignCount": int(connection.get("campaignCount") or 0),
         "summary": connection.get("summary") or {},
         "campaigns": connection.get("campaigns") or [],
+        "lastSyncDateRange": connection.get("lastSyncDateRange"),
         "oauthConfigured": settings.oauth_ready,
         "apiConfigured": settings.api_ready,
         "developerTokenConfigured": bool(settings.developer_token),
@@ -76,6 +83,8 @@ def start_google_ads_oauth(user=Depends(require_google_ads_user)):
     try:
         state = create_oauth_state(user["uid"])
         return {"authorizationUrl": authorization_url(state)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -200,6 +209,8 @@ def choose_google_ads_customer(
 @router.get("/assets")
 def get_google_ads_assets(
     date_range: str = Query(default="LAST_30_DAYS"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     user=Depends(require_google_ads_user),
 ):
     """Fetch Google Ads creative assets live.
@@ -215,20 +226,7 @@ def get_google_ads_assets(
             detail="Choose a Google Ads advertiser account first.",
         )
 
-    allowed_ranges = {
-        "TODAY",
-        "YESTERDAY",
-        "LAST_7_DAYS",
-        "LAST_30_DAYS",
-        "THIS_MONTH",
-        "LAST_MONTH",
-    }
-    normalized_range = str(date_range or "").strip().upper()
-    if normalized_range not in allowed_ranges:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported Google Ads date range.",
-        )
+    normalized_range = str(date_range or "LAST_30_DAYS").strip().upper()
 
     try:
         assets = fetch_creative_assets(
@@ -236,15 +234,19 @@ def get_google_ads_assets(
             customer_id=customer_id,
             login_customer_id=connection.get("loginCustomerId"),
             date_range=normalized_range,
+            start_date=start_date,
+            end_date=end_date,
         )
         return {
             "assets": assets,
             "assetCount": len(assets),
-            "dateRange": normalized_range,
+            "dateRange": (f"{start_date}:{end_date}" if normalized_range == "CUSTOM" else normalized_range),
             "storageMode": "live_only",
         }
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         print("GOOGLE ADS LIVE ASSET FETCH FAILED:", repr(exc), flush=True)
         raise HTTPException(
@@ -256,6 +258,8 @@ def get_google_ads_assets(
 @router.post("/sync")
 def sync_google_ads(
     date_range: str = Query(default="LAST_30_DAYS"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     user=Depends(require_google_ads_user),
 ):
     settings = get_settings()
@@ -279,20 +283,7 @@ def sync_google_ads(
             detail="Choose a Google Ads account before refreshing data.",
         )
 
-    allowed_ranges = {
-        "TODAY",
-        "YESTERDAY",
-        "LAST_7_DAYS",
-        "LAST_30_DAYS",
-        "THIS_MONTH",
-        "LAST_MONTH",
-    }
-    normalized_range = str(date_range or "").strip().upper()
-    if normalized_range not in allowed_ranges:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported Google Ads date range.",
-        )
+    normalized_range = str(date_range or "LAST_30_DAYS").strip().upper()
 
     try:
         report = fetch_campaign_summary(
@@ -300,6 +291,16 @@ def sync_google_ads(
             customer_id=customer_id,
             login_customer_id=connection.get("loginCustomerId"),
             start_date=normalized_range,
+            custom_start_date=start_date,
+            custom_end_date=end_date,
+        )
+        daily_report = fetch_daily_campaign_history(
+            user["uid"],
+            customer_id=customer_id,
+            login_customer_id=connection.get("loginCustomerId"),
+            start_date=normalized_range,
+            custom_start_date=start_date,
+            custom_end_date=end_date,
         )
         synced_at = int(time.time())
 
@@ -308,12 +309,22 @@ def sync_google_ads(
             summary=report.get("summary") or {},
             campaigns=report.get("campaigns") or [],
             synced_at=synced_at,
+            date_range=report.get("dateRange") or normalized_range,
+        )
+        save_daily_campaign_performance(
+            user["uid"],
+            account_id=customer_id,
+            rows=daily_report.get("dailyCampaignPerformance") or [],
+            synced_at=synced_at,
         )
 
         return {
             "ok": True,
             "lastSyncAt": synced_at,
-            "dateRange": normalized_range,
+            "dateRange": report.get("dateRange") or normalized_range,
+            "dailyHistoryRowCount": len(
+                daily_report.get("dailyCampaignPerformance") or []
+            ),
             **report,
         }
     except RuntimeError as exc:

@@ -1,4 +1,5 @@
 from typing import Any
+from datetime import date, datetime
 
 import requests
 from google.oauth2.credentials import Credentials
@@ -9,6 +10,41 @@ from .store import get_connection
 
 
 ADS_API_VERSION = "v22"
+
+
+def _validated_iso_date(value: str | None, label: str) -> str:
+    cleaned = str(value or "").strip()
+    try:
+        parsed = datetime.strptime(cleaned, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError(f"{label} must use YYYY-MM-DD.") from exc
+    if parsed > date.today():
+        raise ValueError(f"{label} cannot be in the future.")
+    return parsed.isoformat()
+
+
+def _date_condition(
+    date_range: str,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> tuple[str, str]:
+    requested = str(date_range or "LAST_30_DAYS").strip().upper()
+    allowed_presets = {
+        "TODAY", "YESTERDAY", "LAST_7_DAYS", "LAST_14_DAYS",
+        "LAST_30_DAYS", "LAST_90_DAYS", "THIS_MONTH", "LAST_MONTH",
+    }
+    if requested == "CUSTOM":
+        since = _validated_iso_date(start_date, "Start date")
+        until = _validated_iso_date(end_date, "End date")
+        if since > until:
+            raise ValueError("Start date must be on or before end date.")
+        return f"segments.date BETWEEN '{since}' AND '{until}'", f"{since}:{until}"
+    if requested == "MAXIMUM":
+        return f"segments.date BETWEEN '2000-01-01' AND '{date.today().isoformat()}'", "MAXIMUM"
+    if requested not in allowed_presets:
+        raise ValueError("Unsupported Google Ads date range.")
+    return f"segments.date DURING {requested}", requested
 
 
 def _clean_customer_id(value: str | None) -> str:
@@ -237,6 +273,8 @@ def fetch_campaign_summary(
     customer_id: str,
     login_customer_id: str | None = None,
     start_date: str = "LAST_30_DAYS",
+    custom_start_date: str | None = None,
+    custom_end_date: str | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     if not settings.developer_token:
@@ -247,6 +285,9 @@ def fetch_campaign_summary(
         raise RuntimeError("A Google Ads customer account must be selected.")
 
     credentials = _credentials_for(uid)
+    date_condition, normalized_range = _date_condition(
+        start_date, start_date=custom_start_date, end_date=custom_end_date
+    )
 
     query = f"""
         SELECT
@@ -261,7 +302,7 @@ def fetch_campaign_summary(
           metrics.conversions_value,
           metrics.cost_per_conversion
         FROM campaign
-        WHERE segments.date DURING {start_date}
+        WHERE {date_condition}
         ORDER BY metrics.cost_micros DESC
     """.strip()
 
@@ -351,6 +392,111 @@ def fetch_campaign_summary(
             "roas": roas,
         },
         "campaigns": campaigns,
+        "dateRange": normalized_range,
+    }
+
+
+
+def fetch_daily_campaign_history(
+    uid: str,
+    *,
+    customer_id: str,
+    login_customer_id: str | None = None,
+    start_date: str = "LAST_30_DAYS",
+    custom_start_date: str | None = None,
+    custom_end_date: str | None = None,
+) -> dict[str, Any]:
+    """Fetch one truthful Google Ads performance row per campaign per day.
+
+    These rows are stored separately for Reports and must never replace the
+    aggregate campaign snapshot used by Insights.
+    """
+    settings = get_settings()
+    if not settings.developer_token:
+        raise RuntimeError("Google Ads developer token is not configured yet.")
+
+    clean_customer_id = _clean_customer_id(customer_id)
+    if not clean_customer_id:
+        raise RuntimeError("A Google Ads customer account must be selected.")
+
+    credentials = _credentials_for(uid)
+    date_condition, normalized_range = _date_condition(
+        start_date,
+        start_date=custom_start_date,
+        end_date=custom_end_date,
+    )
+
+    query = f"""
+        SELECT
+          campaign.id,
+          campaign.name,
+          campaign.status,
+          segments.date,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.conversions,
+          metrics.conversions_value
+        FROM campaign
+        WHERE {date_condition}
+        ORDER BY segments.date ASC
+    """.strip()
+
+    rows = _search(
+        customer_id=clean_customer_id,
+        access_token=credentials.token,
+        query=query,
+        login_customer_id=login_customer_id,
+    )
+
+    daily_rows: list[dict[str, Any]] = []
+    campaign_groups: dict[str, list[dict[str, Any]]] = {}
+    campaign_meta: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        campaign = row.get("campaign") or {}
+        metrics = row.get("metrics") or {}
+        segments = row.get("segments") or {}
+        campaign_id = str(campaign.get("id") or "")
+        report_date = str(segments.get("date") or "")
+        if not campaign_id or not report_date:
+            continue
+
+        impressions = int(metrics.get("impressions") or 0)
+        clicks = int(metrics.get("clicks") or 0)
+        spend = float(metrics.get("costMicros") or 0) / 1_000_000
+        conversions = float(metrics.get("conversions") or 0)
+        conversion_value = float(metrics.get("conversionsValue") or 0)
+
+        daily = {
+            "id": campaign_id,
+            "campaignId": campaign_id,
+            "name": campaign.get("name") or "Untitled campaign",
+            "campaignName": campaign.get("name") or "Untitled campaign",
+            "status": campaign.get("status") or "UNKNOWN",
+            "date": report_date,
+            "reportDate": report_date,
+            "impressions": impressions,
+            "clicks": clicks,
+            "spend": round(spend, 6),
+            "conversions": round(conversions, 4),
+            "conversionValue": round(conversion_value, 4),
+            "ctr": round((clicks / impressions) * 100, 4) if impressions else 0,
+            "averageCpc": round(spend / clicks, 6) if clicks else 0,
+            "costPerConversion": round(spend / conversions, 6) if conversions else 0,
+            "roas": round(conversion_value / spend, 6) if spend else 0,
+        }
+        daily_rows.append(daily)
+        campaign_groups.setdefault(campaign_id, []).append(daily)
+        campaign_meta[campaign_id] = {
+            "id": campaign_id,
+            "name": daily["campaignName"],
+            "status": daily["status"],
+        }
+
+    return {
+        "dailyCampaignPerformance": daily_rows,
+        "dateRange": normalized_range,
     }
 
 
@@ -473,12 +619,17 @@ def fetch_creative_assets(
     customer_id: str,
     login_customer_id: str | None = None,
     date_range: str = "LAST_30_DAYS",
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     if not settings.developer_token:
         raise RuntimeError("Google Ads developer token is not configured yet.")
 
     credentials = _credentials_for(uid)
+    date_condition, _normalized_range = _date_condition(
+        date_range, start_date=start_date, end_date=end_date
+    )
     metadata = _asset_metadata(
         customer_id=customer_id,
         access_token=credentials.token,
@@ -506,7 +657,7 @@ def fetch_creative_assets(
                   metrics.conversions,
                   metrics.conversions_value
                 FROM ad_group_ad_asset_view
-                WHERE segments.date DURING {date_range}
+                WHERE {date_condition}
             """.strip(),
         ),
         (
@@ -523,7 +674,7 @@ def fetch_creative_assets(
                   metrics.conversions,
                   metrics.conversions_value
                 FROM campaign_asset
-                WHERE segments.date DURING {date_range}
+                WHERE {date_condition}
             """.strip(),
         ),
         (
@@ -541,7 +692,7 @@ def fetch_creative_assets(
                   metrics.conversions,
                   metrics.conversions_value
                 FROM ad_group_asset
-                WHERE segments.date DURING {date_range}
+                WHERE {date_condition}
             """.strip(),
         ),
         (
@@ -559,7 +710,7 @@ def fetch_creative_assets(
                   metrics.conversions,
                   metrics.conversions_value
                 FROM asset_group_asset
-                WHERE segments.date DURING {date_range}
+                WHERE {date_condition}
                   AND asset_group_asset.status != 'REMOVED'
             """.strip(),
         ),

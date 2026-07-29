@@ -1,0 +1,767 @@
+.mai-panel {
+  display: grid;
+  gap: 14px
+}
+
+.mai-panel button {
+  font: inherit
+}
+
+.mai-connect, .mai-accountHeader, .mai-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px
+}
+
+.mai-eyebrow {
+  display: block;
+  color: #a5b4fc;
+  font-size: .66rem;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase
+}
+
+.mai-connect h3, .mai-accountHeader h3 {
+  margin: 5px 0;
+  color: #fff
+}
+
+.mai-connect p, .mai-accountHeader p {
+  max-width: 720px;
+  margin: 0;
+  color: #9ca3af;
+  font-size: .82rem;
+  line-height: 1.5
+}
+
+.mai-primary, .mai-secondary, .mai-danger {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer
+}
+
+.mai-primary {
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff
+}
+
+.mai-secondary {
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(31,41,55,.78);
+  color: #e5e7eb
+}
+
+.mai-danger {
+  border: 1px solid rgba(239,68,68,.25);
+  background: rgba(239,68,68,.08);
+  color: #fca5a5
+}
+
+.mai-primary:disabled, .mai-secondary:disabled {
+  opacity: .55;
+  cursor: not-allowed
+}
+
+.mai-error, .mai-success {
+  padding: 11px 13px;
+  border-radius: 11px;
+  font-size: .8rem;
+  font-weight: 800
+}
+
+.mai-error {
+  border: 1px solid rgba(239,68,68,.22);
+  background: rgba(239,68,68,.08);
+  color: #fca5a5
+}
+
+.mai-success {
+  border: 1px solid rgba(34,197,94,.22);
+  background: rgba(34,197,94,.08);
+  color: #86efac
+}
+
+.mai-state, .mai-empty {
+  padding: 24px;
+  color: #9ca3af;
+  text-align: center
+}
+
+.mai-identityGrid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 9px
+}
+
+.mai-identityGrid>div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  background: rgba(31,41,55,.58)
+}
+
+.mai-identityGrid small, .mai-identityGrid strong {
+  display: block
+}
+
+.mai-identityGrid small {
+  color: #9ca3af;
+  font-size: .6rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase
+}
+
+.mai-identityGrid strong {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.mai-selectionNote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid rgba(99,102,241,.2);
+  border-radius: 11px;
+  background: rgba(99,102,241,.08);
+  color: #c7d2fe;
+  font-size: .78rem
+}
+
+.mai-selectionNote strong {
+  flex: 0 0 auto;
+  color: #a5b4fc
+}
+
+.mai-accountPicker {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: rgba(15,23,42,.5)
+}
+
+.mai-pickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.07)
+}
+
+.mai-pickerHeader strong, .mai-pickerHeader small {
+  display: block
+}
+
+.mai-pickerHeader strong {
+  color: #fff
+}
+
+.mai-pickerHeader small {
+  margin-top: 3px;
+  color: #9ca3af
+}
+
+.mai-pickerHeader>span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(99,102,241,.15);
+  color: #a5b4fc;
+  font-weight: 900
+}
+
+.mai-accountList {
+  display: grid;
+  gap: 7px;
+  padding: 12px
+}
+
+.mai-accountList button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(31,41,55,.55);
+  color: #fff;
+  text-align: left;
+  cursor: pointer
+}
+
+.mai-accountList button:hover:not(:disabled) {
+  border-color: rgba(99,102,241,.48);
+  background: rgba(99,102,241,.1)
+}
+
+.mai-accountList button span:first-child {
+  min-width: 0
+}
+
+.mai-accountList button strong, .mai-accountList button small {
+  display: block
+}
+
+.mai-accountList button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.mai-accountList button small, .mai-accountList button span:last-child {
+  color: #9ca3af;
+  font-size: .7rem
+}
+
+.mai-empty {
+  border: 1px dashed rgba(255,255,255,.1);
+  border-radius: 13px
+}
+
+.mai-empty h4 {
+  margin: 0 0 5px;
+  color: #fff
+}
+
+.mai-empty p {
+  margin: 0 0 14px
+}
+
+.mai-footer {
+  align-items: center
+}
+
+.mai-footer span {
+  color: #6b7280;
+  font-size: .72rem
+}
+
+@media(max-width:900px) {
+  .mai-identityGrid {
+    grid-template-columns: repeat(2,minmax(0,1fr))
+  }
+
+}
+
+@media(max-width:700px) {
+  .mai-connect, .mai-accountHeader, .mai-footer, .mai-accountList button {
+    align-items: stretch;
+    flex-direction: column
+  }
+
+  .mai-primary, .mai-secondary {
+    width: 100%
+  }
+
+  .mai-identityGrid {
+    grid-template-columns: 1fr
+  }
+
+  .mai-selectionNote {
+    align-items: flex-start;
+    flex-direction: column
+  }
+
+}
+
+/* Phase 3 campaign reporting */
+
+.mai-syncBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 16px;
+  padding: 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.mai-syncBar > div small, .mai-syncBar > div strong, .mai-syncBar > div span, .mai-syncBar label span {
+  display: block;
+}
+
+.mai-syncBar > div small, .mai-syncBar label span {
+  color: #9ca3af;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mai-syncBar > div strong {
+  margin-top: 4px;
+  color: #fff;
+}
+
+.mai-syncBar > div span {
+  margin-top: 3px;
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+.mai-syncBar label {
+  display: grid;
+  gap: 6px;
+}
+
+.mai-syncBar select {
+  min-width: 170px;
+  padding: 10px 34px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.mai-kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.mai-kpiGrid > div {
+  min-width: 0;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.mai-kpiGrid small, .mai-kpiGrid strong {
+  display: block;
+}
+
+.mai-kpiGrid small {
+  color: #9ca3af;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mai-kpiGrid strong {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mai-campaignPanel {
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.mai-campaignHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.mai-campaignHeader h4 {
+  margin: 3px 0 0;
+  color: #fff;
+}
+
+.mai-campaignHeader > span {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.mai-campaignEmpty {
+  padding: 28px 18px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.mai-tableWrap {
+  overflow-x: auto;
+}
+
+.mai-table {
+  width: 100%;
+  min-width: 1050px;
+  border-collapse: collapse;
+}
+
+.mai-table th, .mai-table td {
+  padding: 12px 14px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mai-table th:first-child, .mai-table td:first-child, .mai-table th:nth-child(2), .mai-table td:nth-child(2) {
+  text-align: left;
+}
+
+.mai-table th {
+  color: #9ca3af;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mai-table td {
+  color: #e5e7eb;
+  font-size: 0.8rem;
+}
+
+.mai-table tbody tr:hover {
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.mai-table td:first-child strong, .mai-table td:first-child small {
+  display: block;
+}
+
+.mai-table td:first-child strong {
+  max-width: 260px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+}
+
+.mai-table td:first-child small {
+  max-width: 260px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #6b7280;
+  text-overflow: ellipsis;
+}
+
+.mai-status {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mai-status.active {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.mai-status.paused, .mai-status.campaign_paused {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+.mai-status.deleted, .mai-status.archived, .mai-status.disapproved {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+@media (max-width: 1050px) {
+  .mai-syncBar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mai-syncBar > div {
+    grid-column: 1 / -1;
+  }
+
+  .mai-kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+@media (max-width: 700px) {
+  .mai-syncBar {
+    grid-template-columns: 1fr;
+  }
+
+  .mai-syncBar > div {
+    grid-column: auto;
+  }
+
+  .mai-syncBar select {
+    width: 100%;
+  }
+
+  .mai-kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mai-campaignHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+}
+
+/* Phase 4 creative browser */
+
+.mai-creativePanel {
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(15,23,42,.55);
+}
+
+.mai-creativeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.mai-creativeHeader h4 {
+  margin: 3px 0 5px;
+  color: #fff;
+}
+
+.mai-creativeHeader p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: .8rem;
+}
+
+.mai-creativeFilters {
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(31,41,55,.72);
+}
+
+.mai-creativeFilters button {
+  border: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 900;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.mai-creativeFilters button.active {
+  background: rgba(124,58,237,.24);
+  color: #fff;
+}
+
+.mai-creativeGrid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.mai-creativeCard {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.07);
+  background: rgba(31,41,55,.58);
+}
+
+.mai-creativePreview {
+  position: relative;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  background: #111827;
+}
+
+.mai-creativePreview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.mai-textPreview {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  color: #fff;
+  font-weight: 900;
+  text-align: center;
+}
+
+.mai-mediaType {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15,23,42,.82);
+  color: #e5e7eb;
+  font-size: .6rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.mai-creativeBody {
+  padding: 13px;
+}
+
+.mai-creativeBody > small {
+  display: block;
+  overflow: hidden;
+  color: #9ca3af;
+  font-size: .68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mai-creativeBody h5 {
+  margin: 7px 0 5px;
+  overflow: hidden;
+  color: #fff;
+  font-size: .9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mai-creativeBody p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  line-clamp: 3;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.mai-creativeMeta {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.mai-creativeMeta span, .mai-creativeMeta a {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
+  color: #c4b5fd;
+  font-size: .65rem;
+  text-decoration: none;
+  text-transform: capitalize;
+}
+
+.mai-creativeStats {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.mai-creativeStats > div {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(15,23,42,.62);
+}
+
+.mai-creativeStats small, .mai-creativeStats strong {
+  display: block;
+}
+
+.mai-creativeStats small {
+  color: #6b7280;
+  font-size: .53rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.mai-creativeStats strong {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #fff;
+  font-size: .74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media(max-width:1100px) {
+  .mai-creativeGrid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+}
+
+@media(max-width:700px) {
+  .mai-creativeHeader {
+    align-items: flex-start;
+    flex-direction: column
+  }
+
+  .mai-creativeFilters {
+    width: 100%
+  }
+
+  .mai-creativeFilters button {
+    flex: 1
+  }
+
+  .mai-creativeGrid {
+    grid-template-columns: 1fr
+  }
+
+}
+
+/* Google-matched refresh feedback */
+
+.mai-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mai-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: maiSpin 0.75s linear infinite;
+}
+
+@keyframes maiSpin {
+  to {
+    transform: rotate(360deg);
+  }
+
+}

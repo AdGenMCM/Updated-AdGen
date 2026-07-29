@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   getGenerationProfile,
+  getLearningTimeline,
   getPerformanceIntelligence,
-  rebuildPerformanceIntelligence,
-  recalculatePerformanceIntelligence,
 } from "../services/performanceIntelligenceService";
+import PerformanceLearningManager from "./PerformanceLearningManager";
+import LearningUpdateSummary from "./LearningUpdateSummary";
 import "./PerformanceIntelligencePanel.css";
 
 function percent(value, digits = 0) {
@@ -45,7 +46,8 @@ function learningStatus(confidence, evidenceCount, qualifiedCount) {
   if (!evidenceCount) {
     return {
       label: "Waiting for data",
-      detail: "Add performance data or connect Google Ads to begin learning.",
+      detail:
+        "Add performance data or connect Google Ads or Meta Ads to begin learning.",
       className: "waiting",
     };
   }
@@ -81,20 +83,24 @@ export default function PerformanceIntelligencePanel() {
   const [summary, setSummary] = useState(null);
   const [profileResponse, setProfileResponse] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [latestRefresh, setLatestRefresh] = useState(null);
+  const [learningTimeline, setLearningTimeline] = useState([]);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const [summaryResult, profileResult] = await Promise.all([
+      const [summaryResult, profileResult, timelineResult] = await Promise.all([
         getPerformanceIntelligence(),
         getGenerationProfile(),
+        getLearningTimeline(12),
       ]);
       setSummary(summaryResult || {});
       setProfileResponse(profileResult || {});
+      setLatestRefresh(summaryResult?.latestRefresh || null);
+      setLearningTimeline(timelineResult?.sessions || []);
     } catch (err) {
       setError(err?.message || "Could not load Performance Intelligence.");
       setSummary(null);
@@ -108,39 +114,20 @@ export default function PerformanceIntelligencePanel() {
     load();
   }, []);
 
-  const refreshLearning = async () => {
-    setRebuilding(true);
-    setError("");
-    setSuccess("");
 
-    try {
-      const result = await rebuildPerformanceIntelligence({
-        includeManual: true,
-        includeGoogleAds: true,
-        googleDateRange: "LAST_30_DAYS",
-        analyzeMedia: false,
-      });
-
-      const nextSummary =
-        result?.summary || (await recalculatePerformanceIntelligence());
-      const nextProfile = await getGenerationProfile();
-
-      setSummary(nextSummary || {});
-      setProfileResponse(nextProfile || {});
-
-      const manualImported = Number(result?.manual?.imported || 0);
-      const googleImported = Number(result?.googleAds?.imported || 0);
-      setSuccess(
-        `Learning refreshed from ${manualImported + googleImported} creative ${
-          manualImported + googleImported === 1 ? "record" : "records"
-        }.`
-      );
-      window.setTimeout(() => setSuccess(""), 4000);
-    } catch (err) {
-      setError(err?.message || "Could not refresh Performance Intelligence.");
-    } finally {
-      setRebuilding(false);
-    }
+  const handleLearningComplete = async (result) => {
+    const nextSummary = result?.summary || {};
+    const nextProfile = await getGenerationProfile();
+    setSummary(nextSummary);
+    setProfileResponse(nextProfile || {});
+    setLatestRefresh(result?.latestRefresh || nextSummary?.latestRefresh || null);
+    setLearningTimeline((current) => {
+      const newest = result?.latestRefresh;
+      if (!newest?.id) return current;
+      return [newest, ...current.filter((item) => item.id !== newest.id)].slice(0, 12);
+    });
+    setSuccess("Learning refreshed successfully.");
+    window.setTimeout(() => setSuccess(""), 4000);
   };
 
   const profile = useMemo(
@@ -249,7 +236,7 @@ export default function PerformanceIntelligencePanel() {
     if (!items.length) {
       return [
         "Add impressions, clicks, conversions, spend, and revenue to Library creatives.",
-        "Refresh Google Ads data so ADGen can collect campaign evidence.",
+        "Refresh Google Ads and Meta Ads so ADGen can collect campaign evidence.",
         "Mark successful creatives to strengthen the learning signal.",
       ];
     }
@@ -260,6 +247,67 @@ export default function PerformanceIntelligencePanel() {
   const sourceEntries = Object.entries(
     profileResponse?.sources || summary?.sources || {}
   );
+
+  const sourceStats =
+    summary?.sourceStats ||
+    profileResponse?.sourceStats ||
+    {};
+
+  const sourceCards = [
+    {
+      key: "manual",
+      label: "Manual Tracking",
+      connected: true,
+    },
+    {
+      key: "google_ads",
+      label: "Google Ads",
+      connected:
+        Number(sourceStats?.google_ads?.evidenceCount || 0) > 0,
+    },
+    {
+      key: "meta_ads",
+      label: "Meta Ads",
+      connected:
+        Number(sourceStats?.meta_ads?.evidenceCount || 0) > 0,
+    },
+  ].map((source) => {
+    const stats = sourceStats?.[source.key] || {};
+    const evidence = Number(
+      stats.evidenceCount ??
+        (profileResponse?.sources || summary?.sources || {})[
+          source.key
+        ] ??
+        0
+    );
+    const qualified = Number(stats.qualifiedCount || 0);
+    const positive = Number(stats.positiveCount || 0);
+    const learning = Number(stats.learningCount || 0);
+
+    let state = "Waiting";
+    let className = "waiting";
+
+    if (positive > 0) {
+      state = "Qualified";
+      className = "qualified";
+    } else if (qualified > 0) {
+      state = "Qualified";
+      className = "qualified";
+    } else if (evidence > 0 || learning > 0) {
+      state = "Learning";
+      className = "learning";
+    }
+
+    return {
+      ...source,
+      evidence,
+      qualified,
+      positive,
+      learning,
+      state,
+      className,
+    };
+  });
 
   if (loading) {
     return (
@@ -280,26 +328,17 @@ export default function PerformanceIntelligencePanel() {
             patterns into practical guidance for future generations.
           </p>
         </div>
-
-        <button
-          type="button"
-          className="pi-refresh"
-          onClick={refreshLearning}
-          disabled={rebuilding}
-        >
-          {rebuilding ? (
-            <span className="pi-loading">
-              <span className="pi-spinner" />
-              Refreshing learning
-            </span>
-          ) : (
-            "Refresh Learning"
-          )}
-        </button>
       </header>
 
       {error && <div className="pi-error">{error}</div>}
       {success && <div className="pi-success">✓ {success}</div>}
+
+      <PerformanceLearningManager onComplete={handleLearningComplete} />
+
+      <LearningUpdateSummary
+        refresh={latestRefresh || summary?.latestRefresh}
+        timeline={learningTimeline}
+      />
 
       <div className="pi-statGrid">
         <article className="pi-statCard confidence">
@@ -412,6 +451,53 @@ export default function PerformanceIntelligencePanel() {
         </article>
       </div>
 
+      <article className="pi-card pi-sourceCard">
+        <div className="pi-cardTitle">
+          <div>
+            <span className="pi-eyebrow">Evidence sources</span>
+            <h3>Learning Contribution</h3>
+          </div>
+          <p>
+            See which connected sources are contributing qualified evidence
+            to ADGen's learning profile.
+          </p>
+        </div>
+
+        <div className="pi-sourceGrid">
+          {sourceCards.map((source) => (
+            <div className="pi-sourceItem" key={source.key}>
+              <div className="pi-sourceHeader">
+                <div>
+                  <strong>{source.label}</strong>
+                  <small>
+                    {source.evidence} creative
+                    {source.evidence === 1 ? "" : "s"} imported
+                  </small>
+                </div>
+                <span className={`pi-sourceState ${source.className}`}>
+                  {source.state}
+                </span>
+              </div>
+
+              <div className="pi-sourceMetrics">
+                <div>
+                  <span>Evidence</span>
+                  <strong>{source.evidence}</strong>
+                </div>
+                <div>
+                  <span>Qualified</span>
+                  <strong>{source.qualified}</strong>
+                </div>
+                <div>
+                  <span>Positive</span>
+                  <strong>{source.positive}</strong>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </article>
+
       <article className="pi-card pi-dnaCard">
         <div className="pi-cardTitle">
           <div>
@@ -471,6 +557,7 @@ export default function PerformanceIntelligencePanel() {
           </div>
         </div>
       </article>
+
 
       <article className="pi-card pi-progressCard">
         <div className="pi-cardTitle">

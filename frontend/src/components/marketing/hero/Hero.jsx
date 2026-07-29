@@ -35,8 +35,11 @@ export default function Hero() {
         </h1>
 
         <p className="adgen-marketing-hero-description">
-          Most AI creative tools generate an ad and stop there. 
-          ADGen learns from what performs, helping future image and video generations start from what already works.
+          Most AI creative tools generate an ad and stop there. ADGen helps you generate, track campaign performance, optimize creatives, and improve every future campaign.
+        </p>
+
+        <p className="adgen-marketing-hero-description-small">
+          Now analyzes campaign data from Google Ads, Meta Ads, and your Creative Library to improve future assets (Pro and Business plans).
         </p>
 
         <div className="adgen-marketing-hero-actions">

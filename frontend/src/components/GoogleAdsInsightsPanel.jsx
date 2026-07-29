@@ -13,8 +13,8 @@ import "./GoogleAdsInsightsPanel.css";
 const DATE_OPTIONS = [
   { value: "TODAY", label: "Today" },
   { value: "YESTERDAY", label: "Yesterday" },
-  { value: "LAST_7_DAYS", label: "Last 7 days" },
-  { value: "LAST_30_DAYS", label: "Last 30 days" },
+  { value: "LAST_7_DAYS", label: "Previous 7 days" },
+  { value: "LAST_30_DAYS", label: "Previous 30 days" },
   { value: "THIS_MONTH", label: "This month" },
   { value: "LAST_MONTH", label: "Last month" },
 ];
@@ -312,7 +312,7 @@ export default function GoogleAdsInsightsPanel() {
   };
 
   const disconnect = async () => {
-    if (!window.confirm("Disconnect Google Ads from ADGen MCM?")) return;
+    if (!window.confirm("Disconnect Google Ads from AdGen MCM?")) return;
     setLoading(true);
     setError("");
     try {
@@ -551,8 +551,7 @@ export default function GoogleAdsInsightsPanel() {
                 <h4>Creative assets by campaign</h4>
                 <p>
                   Review each campaign's headlines, descriptions, sitelinks,
-                  images, and videos in one place. Assets are fetched live and
-                  are not copied to Firestore or Firebase Storage.
+                  images, and videos in one place.
                 </p>
               </div>
 
@@ -595,10 +594,10 @@ export default function GoogleAdsInsightsPanel() {
 
                 {campaignAssetGroups.length ? (
                   <div className="gai-campaignAssetList">
-                    {campaignAssetGroups.map((group, groupIndex) => {
-                      const isOpen =
-                        expandedAssetCampaigns[group.campaignId] ??
-                        groupIndex === 0;
+                    {campaignAssetGroups.map((group) => {
+                      const isOpen = Boolean(
+                        expandedAssetCampaigns[group.campaignId]
+                      );
 
                       const filteredMedia = group.media.filter((asset) => {
                         if (assetType === "ALL") return true;
@@ -627,10 +626,11 @@ export default function GoogleAdsInsightsPanel() {
                             type="button"
                             className="gai-campaignAssetHeader"
                             onClick={() =>
-                              setExpandedAssetCampaigns((current) => ({
-                                ...current,
-                                [group.campaignId]: !isOpen,
-                              }))
+                              setExpandedAssetCampaigns((current) =>
+                                current[group.campaignId]
+                                  ? {}
+                                  : { [group.campaignId]: true }
+                              )
                             }
                             aria-expanded={isOpen}
                           >
@@ -942,7 +942,7 @@ export default function GoogleAdsInsightsPanel() {
         <button type="button" className="gai-danger" onClick={disconnect}>
           Disconnect Google Ads
         </button>
-        <span>Creative previews are live-only and are not stored by ADGen.</span>
+        <span>Creative previews are live-only and are not stored by AdGen.</span>
       </footer>
     </section>
   );

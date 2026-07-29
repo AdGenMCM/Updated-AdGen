@@ -7,9 +7,9 @@ import TiltCard from "../../motion/TiltCard";
 
 const metrics = [
   {
-    value: "Signals",
+    value: "Connected Sources",
     title: "Qualified Performance",
-    text: "Separate meaningful results from low-volume or incomplete data.",
+    text: "Google & Meta Ads. Creative Library & Manual Tracking",
   },
   {
     value: "DNA",

@@ -24,8 +24,8 @@ const connectedBenefits = [
     title: "Images, video, copy, and editing stay connected.",
   },
   {
-    label: "One Creative History",
-    title: "Past work remains organized and ready to reuse.",
+    label: "Campaign Reporting",
+    title: "Pull Reporing on Google, Meta, and Maunal Ads",
   },
   {
     label: "Performance Intelligence",

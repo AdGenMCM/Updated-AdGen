@@ -11,6 +11,8 @@ from .security import encrypt_secret, decrypt_secret
 CONNECTIONS = "google_ads_connections"
 OAUTH_STATES = "google_ads_oauth_states"
 STATE_TTL_SECONDS = 10 * 60
+DAILY_HISTORY = "google_ads_daily_history"
+DAILY_ITEMS = "items"
 
 
 def connection_ref(uid: str):
@@ -142,6 +144,7 @@ def save_selected_customer(
             "campaignCount": 0,
             "summary": {},
             "campaigns": [],
+            "lastSyncDateRange": None,
             "updatedAt": int(time.time()),
         },
         merge=True,
@@ -154,6 +157,7 @@ def save_sync_summary(
     summary: dict[str, Any],
     campaigns: list[dict[str, Any]],
     synced_at: int,
+    date_range: str | None = None,
 ) -> None:
     connection_ref(uid).set(
         {
@@ -161,7 +165,53 @@ def save_sync_summary(
             "campaignCount": len(campaigns),
             "summary": summary or {},
             "campaigns": campaigns or [],
+            "lastSyncDateRange": date_range,
             "updatedAt": int(time.time()),
         },
         merge=True,
     )
+
+
+def _daily_parent(uid: str):
+    return get_db().collection(DAILY_HISTORY).document(uid)
+
+
+def save_daily_campaign_performance(
+    uid: str,
+    *,
+    account_id: str,
+    rows: list[dict[str, Any]],
+    synced_at: int,
+) -> None:
+    """Upsert daily rows with deterministic IDs; never add metrics together."""
+    db = get_db()
+    parent = _daily_parent(uid)
+    writes: list[tuple[Any, dict[str, Any]]] = []
+    clean_account = "".join(ch for ch in str(account_id or "") if ch.isdigit())
+    for row in rows or []:
+        campaign_id = str(row.get("campaignId") or row.get("id") or "").strip()
+        report_date = str(row.get("date") or row.get("reportDate") or "").strip()
+        if not clean_account or not campaign_id or not report_date:
+            continue
+        doc_id = f"{clean_account}_{campaign_id}_{report_date}"
+        payload = {**row, "uid": uid, "accountId": clean_account, "syncedAt": int(synced_at)}
+        writes.append((parent.collection(DAILY_ITEMS).document(doc_id), payload))
+
+    for start in range(0, len(writes), 450):
+        batch = db.batch()
+        for ref, payload in writes[start:start + 450]:
+            batch.set(ref, payload, merge=True)
+        if writes[start:start + 450]:
+            batch.commit()
+
+    parent.set({"uid": uid, "accountId": clean_account, "rowCountLastSync": len(writes), "lastSyncAt": int(synced_at)}, merge=True)
+
+
+def list_daily_campaign_performance(uid: str, *, account_id: str | None = None, limit: int = 20000) -> list[dict[str, Any]]:
+    query = _daily_parent(uid).collection(DAILY_ITEMS)
+    clean_account = "".join(ch for ch in str(account_id or "") if ch.isdigit())
+    if clean_account:
+        query = query.where("accountId", "==", clean_account)
+    rows = [{"historyId": snap.id, **(snap.to_dict() or {})} for snap in query.limit(max(1, min(limit, 20000))).stream()]
+    rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("campaignName") or "")))
+    return rows

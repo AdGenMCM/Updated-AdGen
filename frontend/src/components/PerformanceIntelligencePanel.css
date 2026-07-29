@@ -587,3 +587,121 @@
     grid-column: 2;
   }
 }
+
+/* ==========================================
+   Phase 5 source contribution
+========================================== */
+
+.pi-sourceGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pi-sourceItem {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  background: rgba(31, 41, 55, 0.5);
+}
+
+.pi-sourceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pi-sourceHeader > div {
+  min-width: 0;
+}
+
+.pi-sourceHeader strong,
+.pi-sourceHeader small {
+  display: block;
+}
+
+.pi-sourceHeader strong {
+  color: #fff;
+  font-size: 0.88rem;
+}
+
+.pi-sourceHeader small {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.68rem;
+}
+
+.pi-sourceState {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(107, 114, 128, 0.15);
+  color: #d1d5db;
+  font-size: 0.57rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pi-sourceState.qualified {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.pi-sourceState.learning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+.pi-sourceState.waiting {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+}
+
+.pi-sourceMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.pi-sourceMetrics > div {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.pi-sourceMetrics span,
+.pi-sourceMetrics strong {
+  display: block;
+}
+
+.pi-sourceMetrics span {
+  color: #6b7280;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pi-sourceMetrics strong {
+  margin-top: 4px;
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 960px) {
+  .pi-sourceGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .pi-sourceMetrics {
+    grid-template-columns: 1fr;
+  }
+}
+

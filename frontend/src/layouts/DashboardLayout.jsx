@@ -35,6 +35,7 @@ import {
   BarChart3,
   Library,
   LineChart,
+  FileBarChart,
   Palette,
   Brush,
   FolderKanban,
@@ -189,6 +190,11 @@ export default function DashboardLayout({ children }) {
           to: "/insights",
           label: "Insights",
           icon: LineChart,
+        },
+        {
+          to: "/reports",
+          label: "Reports",
+          icon: FileBarChart,
         },
         {
           to: "/brand-kit",
