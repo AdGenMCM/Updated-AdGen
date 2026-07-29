@@ -64,6 +64,14 @@ from performance_intelligence.service import (
 # -----------------------------
 VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "10"))
 
+RUNWAY_PROMPT_LIMIT = 1000
+RUNWAY_IMAGE_MOTION_MAX = 400
+RUNWAY_DESCRIPTION_MAX = 400
+RUNWAY_FULL_DIRECTION_MAX = 300
+RUNWAY_EXTRA_DIRECTION_MAX = 200
+RUNWAY_BRAND_BUDGET = 140
+RUNWAY_INTELLIGENCE_BUDGET = 150
+
 # ✅ Separate defaults so you never mix them up
 VIDEO_DEFAULT_IMAGE_MODEL = os.getenv(
     "VIDEO_IMAGE_DEFAULT_MODEL",
@@ -403,7 +411,7 @@ class StartImageVideoRequest(BaseModel):
     promptImageUrl: str
     duration: Literal[6, 10]
     ratio: VideoRatio = "720:1280"
-    promptText: str = Field(min_length=1, max_length=1000)
+    promptText: str = Field(min_length=1, max_length=RUNWAY_IMAGE_MOTION_MAX)
     useBrandKit: bool = True
     brandKitId: Optional[str] = None
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
@@ -422,7 +430,7 @@ class StartImageVideoRequest(BaseModel):
 
 class StartPromptVideoRequest(BaseModel):
     productName: str = Field(min_length=1, max_length=120)
-    description: str = Field(min_length=1, max_length=800)
+    description: str = Field(min_length=1, max_length=RUNWAY_DESCRIPTION_MAX)
     offer: Optional[str] = Field(default=None, max_length=200)
     audience: Optional[str] = Field(default=None, max_length=200)
     tone: Optional[str] = Field(default=None, max_length=80)
@@ -438,13 +446,16 @@ class StartPromptVideoRequest(BaseModel):
     callToAction: Optional[str] = Field(default=None, max_length=160)
     fullCreativeDirection: Optional[str] = Field(
         default=None,
-        max_length=1000,
+        max_length=RUNWAY_FULL_DIRECTION_MAX,
     )
 
     duration: Literal[6, 10]
     ratio: VideoRatio = "720:1280"
 
-    userPrompt: Optional[str] = Field(default=None, max_length=1000)
+    userPrompt: Optional[str] = Field(
+        default=None,
+        max_length=RUNWAY_EXTRA_DIRECTION_MAX,
+    )
     useBrandKit: bool = True
     brandKitId: Optional[str] = None
     voiceoverScript: Optional[str] = Field(
@@ -626,7 +637,10 @@ def compile_video_brand_direction(
     if not parts:
         return ""
 
-    return "Brand direction: " + "; ".join(parts) + "."
+    return trim_video_prompt(
+        "Brand direction: " + "; ".join(parts) + ".",
+        RUNWAY_BRAND_BUDGET,
+    )
 
 def build_director_prompt(
     req: StartPromptVideoRequest,
@@ -634,49 +648,40 @@ def build_director_prompt(
 ) -> str:
     """
     Compiles the user's structured inputs into a concise,
-    cinematography-focused Runway prompt.
-
-    Target length: approximately 450–700 characters.
+    cinematography-focused Runway prompt while preserving room
+    for Brand Kit and Performance Intelligence guidance.
     """
 
     parts: List[str] = []
 
-    # 1. Product and scene foundation
+    # 1. Product and core request.
+    product_description = trim_video_prompt(
+        req.description,
+        RUNWAY_DESCRIPTION_MAX,
+    )
     parts.append(
         _sentence(
             f"Create a premium commercial for {req.productName}. "
-            f"{req.description}"
+            f"{product_description}"
         )
     )
 
-    # 2. Highest-priority user direction
-    if req.fullCreativeDirection:
-        compact_direction = " ".join(
-            req.fullCreativeDirection.split()
-        )[:350]
+    # 2. Goal and opening hook.
+    goal_direction = GOAL_PROMPTS.get(
+        (req.goal or "").strip().lower(),
+        "",
+    )
+    if goal_direction:
+        parts.append(goal_direction)
 
-        parts.append(
-            _sentence(
-                f"Creative direction: {compact_direction}"
-            )
-        )
+    hook_direction = HOOK_STYLE_PROMPTS.get(
+        (req.hookStyle or "").strip().lower(),
+        "",
+    )
+    if hook_direction:
+        parts.append(hook_direction)
 
-    if req.userPrompt:
-        compact_extra = " ".join(
-            req.userPrompt.split()
-        )[:400]
-
-        parts.append(
-            _sentence(
-                f"Additional direction: {compact_extra}"
-            )
-        )
-
-    # 3. Compact Brand Kit direction
-    if brand_kit_context:
-        parts.append(brand_kit_context)
-
-    # 4. Visible production choices
+    # 3. Visible production choices.
     scene_direction = SCENE_STYLE_PROMPTS.get(
         (req.sceneStyle or "").strip().lower(),
         "",
@@ -705,30 +710,73 @@ def build_director_prompt(
     if pace_direction:
         parts.append(pace_direction)
 
-    # 5. Tone can affect visual presentation without adding marketing metadata
     if req.tone:
         parts.append(
             _sentence(
-                f"Visual tone: {req.tone}"
+                f"Visual tone: {trim_video_prompt(req.tone, 80)}"
             )
         )
 
-    # 6. Short quality instruction
+    # 4. Preserve critical output-quality safeguards before optional direction.
     parts.append(
         "Use photorealistic materials, stable product geometry, "
-        "clean commercial framing, smooth physical motion, "
-        "End on a clean hero view of the product.."
+        "clean commercial framing, smooth physical motion, and end "
+        "on a clean hero view of the product."
     )
-
-    # 7. Short negative safeguards
     parts.append(
         "Avoid jitter, flicker, warping, morphing, duplicate objects, "
         "random lettering, captions, subtitles, and floating graphics."
     )
 
+    # 5. Compact Brand Kit direction.
+    if brand_kit_context:
+        parts.append(
+            trim_video_prompt(
+                brand_kit_context,
+                RUNWAY_BRAND_BUDGET,
+            )
+        )
+
+    # 6. Optional user refinements receive explicit budgets.
+    if req.fullCreativeDirection:
+        compact_direction = trim_video_prompt(
+            req.fullCreativeDirection,
+            RUNWAY_FULL_DIRECTION_MAX,
+        )
+        parts.append(
+            _sentence(
+                f"Creative direction: {compact_direction}"
+            )
+        )
+
+    if req.userPrompt:
+        compact_extra = trim_video_prompt(
+            req.userPrompt,
+            RUNWAY_EXTRA_DIRECTION_MAX,
+        )
+        parts.append(
+            _sentence(
+                f"Additional direction: {compact_extra}"
+            )
+        )
+
+    # Offer and CTA are translated into visual intent because Runway
+    # should not be asked to render exact promotional lettering.
+    if req.offer:
+        parts.append(
+            "Visually communicate a clear promotional opportunity "
+            "without generating written offer text."
+        )
+
+    if req.callToAction:
+        parts.append(
+            "End with a decisive visual action moment suitable for "
+            "adding a call to action in post-production."
+        )
+
     prompt = " ".join(part for part in parts if part)
 
-    return trim_video_prompt(prompt, 1000)
+    return trim_video_prompt(prompt, RUNWAY_PROMPT_LIMIT)
 
 def build_image_director_prompt(
     req: StartImageVideoRequest,
@@ -776,7 +824,7 @@ def build_image_director_prompt(
 
     prompt = " ".join(part for part in parts if part)
 
-    return trim_video_prompt(prompt, 1000)
+    return trim_video_prompt(prompt, RUNWAY_PROMPT_LIMIT)
 
 
 def _intelligence_values(
@@ -801,7 +849,7 @@ def compact_video_intelligence(
     intelligence_response: Optional[Dict[str, Any]],
     *,
     preserve_source_image: bool,
-    max_chars: int = 180,
+    max_chars: int = RUNWAY_INTELLIGENCE_BUDGET,
 ) -> str:
     """Select only the most useful learned signals for the Runway prompt."""
     if not intelligence_response:
@@ -851,8 +899,8 @@ def compose_runway_prompt(
     base_prompt: str,
     intelligence_guidance: str = "",
     *,
-    max_chars: int = 1000,
-    guidance_budget: int = 180,
+    max_chars: int = RUNWAY_PROMPT_LIMIT,
+    guidance_budget: int = RUNWAY_INTELLIGENCE_BUDGET,
 ) -> str:
     """
     Reserve a fixed budget for learned guidance before combining it with the
@@ -1155,7 +1203,7 @@ async def start_image_video(
         intelligence_guidance = compact_video_intelligence(
             intelligence_response,
             preserve_source_image=True,
-            max_chars=180,
+            max_chars=RUNWAY_INTELLIGENCE_BUDGET,
         )
 
     # Legacy fallback for older clients.
@@ -1167,7 +1215,7 @@ async def start_image_video(
                 req.winnersApply,
                 req.winnersInfluence,
             ),
-            180,
+            RUNWAY_INTELLIGENCE_BUDGET,
         )
     elif (
         not intelligence_guidance
@@ -1176,16 +1224,16 @@ async def start_image_video(
         intelligence_guidance = trim_video_prompt(
             "Past winning direction, use only when compatible: "
             + " ".join((req.winnerGuidance or "").split()),
-            180,
+            RUNWAY_INTELLIGENCE_BUDGET,
         )
 
-    # Reserve up to 180 characters for learned guidance and guarantee the
+    # Reserve a compact budget for learned guidance and guarantee the
     # final Runway prompt remains within the 1,000-character limit.
     prompt_text = compose_runway_prompt(
         prompt_text,
         intelligence_guidance,
-        max_chars=1000,
-        guidance_budget=180,
+        max_chars=RUNWAY_PROMPT_LIMIT,
+        guidance_budget=RUNWAY_INTELLIGENCE_BUDGET,
     )
 
     if len(prompt_text) > 800:
@@ -1507,7 +1555,7 @@ async def start_prompt_video(
         intelligence_guidance = compact_video_intelligence(
             intelligence_response,
             preserve_source_image=False,
-            max_chars=180,
+            max_chars=RUNWAY_INTELLIGENCE_BUDGET,
         )
 
     # Legacy fallback for older clients.
@@ -1519,7 +1567,7 @@ async def start_prompt_video(
                 req.winnersApply,
                 req.winnersInfluence,
             ),
-            180,
+            RUNWAY_INTELLIGENCE_BUDGET,
         )
     elif (
         not intelligence_guidance
@@ -1528,16 +1576,16 @@ async def start_prompt_video(
         intelligence_guidance = trim_video_prompt(
             "Past winning direction, use only when compatible: "
             + " ".join((req.winnerGuidance or "").split()),
-            180,
+            RUNWAY_INTELLIGENCE_BUDGET,
         )
 
-    # Reserve up to 180 characters for learned guidance and guarantee the
+    # Reserve a compact budget for learned guidance and guarantee the
     # final Runway prompt remains within the 1,000-character limit.
     director_prompt = compose_runway_prompt(
         director_prompt,
         intelligence_guidance,
-        max_chars=1000,
-        guidance_budget=180,
+        max_chars=RUNWAY_PROMPT_LIMIT,
+        guidance_budget=RUNWAY_INTELLIGENCE_BUDGET,
     )
 
     if len(director_prompt) > 800:

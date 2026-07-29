@@ -11,6 +11,11 @@ import GenerationProgress from "../components/GenerationProgress";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
+const VIDEO_DESCRIPTION_MAX = 400;
+const IMAGE_MOTION_PROMPT_MAX = 400;
+const EXTRA_DIRECTION_MAX = 200;
+const FULL_CREATIVE_DIRECTION_MAX = 300;
+
 const RUNWAY_VOICES = [
   "Maya","Arjun","Serene","Bernard","Billy","Mark","Clint","Mabel","Chad","Leslie",
   "Eleanor","Elias","Elliot","Grungle","Brodie","Sandra","Kirk","Kylie","Lara","Lisa",
@@ -35,15 +40,15 @@ const FORMAT_OPTIONS = [
   },
   {
     id: "meta_square",
-    label: "Meta Feed — Square (960×960)",
+    label: "Meta Feed — Square (1080×1080)",
     platform: "Meta Feed",
-    ratio: "960:960",
+    ratio: "1080:1080",
   },
   {
     id: "meta_portrait",
-    label: "Meta Feed — Portrait (832×1104)",
+    label: "Meta Feed — Portrait (1080×1350)",
     platform: "Meta Feed",
-    ratio: "832:1104",
+    ratio: "1080:1350",
   },
 ];
 
@@ -1054,8 +1059,18 @@ return (
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
                   rows={3}
+                  maxLength={IMAGE_MOTION_PROMPT_MAX}
                   disabled={isGenerating}
                 />
+                <div
+                  className={`videoCharacterCount ${
+                    promptText.length >= IMAGE_MOTION_PROMPT_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {promptText.length}/{IMAGE_MOTION_PROMPT_MAX}
+                </div>
               </div>
 
               <button
@@ -1120,8 +1135,19 @@ return (
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
+                  maxLength={VIDEO_DESCRIPTION_MAX}
                   disabled={isGenerating}
+                  placeholder="Describe the product, setting, action, and desired visual result."
                 />
+                <div
+                  className={`videoCharacterCount ${
+                    description.length >= VIDEO_DESCRIPTION_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {description.length}/{VIDEO_DESCRIPTION_MAX}
+                </div>
               </div>
 
               <div className="grid2">
@@ -1263,9 +1289,19 @@ return (
                   <input
                     value={userPrompt}
                     onChange={(e) => setUserPrompt(e.target.value)}
+                    maxLength={EXTRA_DIRECTION_MAX}
                     placeholder="Optional"
                     disabled={isGenerating}
                   />
+                  <div
+                    className={`videoCharacterCount ${
+                      userPrompt.length >= EXTRA_DIRECTION_MAX * 0.9
+                        ? "nearLimit"
+                        : ""
+                    }`}
+                  >
+                    {userPrompt.length}/{EXTRA_DIRECTION_MAX}
+                  </div>
                 </div>
 
                 <div className="field">
@@ -1276,9 +1312,20 @@ return (
                   <input
                     value={fullCreativeDirection}
                     onChange={(e) => setFullCreativeDirection(e.target.value)}
+                    maxLength={FULL_CREATIVE_DIRECTION_MAX}
                     placeholder="Optional"
                     disabled={isGenerating}
                   />
+                  <div
+                    className={`videoCharacterCount ${
+                      fullCreativeDirection.length >=
+                      FULL_CREATIVE_DIRECTION_MAX * 0.9
+                        ? "nearLimit"
+                        : ""
+                    }`}
+                  >
+                    {fullCreativeDirection.length}/{FULL_CREATIVE_DIRECTION_MAX}
+                  </div>
                 </div>
               </div>
 
