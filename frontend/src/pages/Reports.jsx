@@ -130,7 +130,7 @@ const SPLIT_OPTIONS = [
   ["year", "Year"],
   ["platform", "Platform"],
   ["campaign", "Campaign"],
-  ["ad_group", "Ad group / ad set"],
+  ["ad_group", "Line Item / Ad Group"],
   ["creative", "Creative"],
   ["device", "Device"],
   ["country", "Country"],
