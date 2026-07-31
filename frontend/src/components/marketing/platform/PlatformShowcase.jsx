@@ -31,6 +31,10 @@ const connectedBenefits = [
     label: "Performance Intelligence",
     title: "Qualified results guide future image and video generations.",
   },
+  {
+    label: "Campaign Intelligence",
+    title: "Reviews connected campaigns, prioritizes issues and opportunities, and explains what deserves attention next.",
+  },
 ];
 
 export default function PlatformShowcase() {

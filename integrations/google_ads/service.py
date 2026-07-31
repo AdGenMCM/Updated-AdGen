@@ -267,6 +267,65 @@ def list_accessible_customers(uid: str) -> list[dict[str, Any]]:
     return customers
 
 
+
+
+def _fetch_campaign_context(
+    *,
+    customer_id: str,
+    access_token: str,
+    date_condition: str,
+    login_customer_id: str | None = None,
+) -> tuple[dict[str, dict[str, Any]], str | None]:
+    """Fetch optional campaign-setting context without breaking the stable summary query."""
+    query = f"""
+        SELECT
+          campaign.id,
+          campaign.advertising_channel_type,
+          campaign.bidding_strategy_type,
+          campaign_budget.amount_micros,
+          metrics.search_impression_share,
+          metrics.search_budget_lost_impression_share,
+          metrics.search_rank_lost_impression_share,
+          metrics.conversions_from_interactions_rate
+        FROM campaign
+        WHERE {date_condition}
+    """.strip()
+    try:
+        rows = _search(
+            customer_id=customer_id,
+            access_token=access_token,
+            query=query,
+            login_customer_id=login_customer_id,
+        )
+    except requests.HTTPError as exc:
+        message = "Google campaign-setting context was unavailable; core campaign sync still completed."
+        if exc.response is not None:
+            try:
+                message = str(exc.response.json())[:500]
+            except Exception:
+                pass
+        return {}, message
+
+    context: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        campaign = row.get("campaign") or {}
+        campaign_budget = row.get("campaignBudget") or {}
+        metrics = row.get("metrics") or {}
+        campaign_id = str(campaign.get("id") or "")
+        if not campaign_id:
+            continue
+        context[campaign_id] = {
+            "campaignType": campaign.get("advertisingChannelType") or "UNKNOWN",
+            "biddingStrategyType": campaign.get("biddingStrategyType") or "UNKNOWN",
+            "dailyBudget": round(float(campaign_budget.get("amountMicros") or 0) / 1_000_000, 2),
+            "searchImpressionShare": round(float(metrics.get("searchImpressionShare") or 0) * 100, 2) if metrics.get("searchImpressionShare") is not None else None,
+            "searchBudgetLostImpressionShare": round(float(metrics.get("searchBudgetLostImpressionShare") or 0) * 100, 2) if metrics.get("searchBudgetLostImpressionShare") is not None else None,
+            "searchRankLostImpressionShare": round(float(metrics.get("searchRankLostImpressionShare") or 0) * 100, 2) if metrics.get("searchRankLostImpressionShare") is not None else None,
+            "conversionRate": round(float(metrics.get("conversionsFromInteractionsRate") or 0) * 100, 2) if metrics.get("conversionsFromInteractionsRate") is not None else None,
+        }
+    return context, None
+
+
 def fetch_campaign_summary(
     uid: str,
     *,
@@ -312,6 +371,12 @@ def fetch_campaign_summary(
         query=query,
         login_customer_id=login_customer_id,
     )
+    campaign_context, context_warning = _fetch_campaign_context(
+        customer_id=clean_customer_id,
+        access_token=credentials.token,
+        date_condition=date_condition,
+        login_customer_id=login_customer_id,
+    )
 
     campaigns: list[dict[str, Any]] = []
     for row in rows:
@@ -335,6 +400,8 @@ def fetch_campaign_summary(
                 "id": str(campaign.get("id") or ""),
                 "name": campaign.get("name") or "Untitled campaign",
                 "status": campaign.get("status") or "UNKNOWN",
+                **campaign_context.get(str(campaign.get("id") or ""), {}),
+                "conversionRate": (campaign_context.get(str(campaign.get("id") or ""), {}).get("conversionRate") if campaign_context.get(str(campaign.get("id") or ""), {}).get("conversionRate") is not None else (round((conversions / clicks) * 100, 2) if clicks else 0)),
                 "impressions": impressions,
                 "clicks": clicks,
                 "ctr": round(ctr, 2),
@@ -392,6 +459,7 @@ def fetch_campaign_summary(
             "roas": roas,
         },
         "campaigns": campaigns,
+        "campaignContextWarning": context_warning,
         "dateRange": normalized_range,
     }
 

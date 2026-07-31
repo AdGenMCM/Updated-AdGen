@@ -21,8 +21,7 @@ export default function FinalCTA() {
       <h2>Create, measure, and improve without rebuilding your workflow.</h2>
 
       <p className="adgen-final-copy">
-        Bring your brand, image and video generation, editing, asset
-        management, and Performance Intelligence into one connected platform.
+        Bring your brand, image and video generation, campaign reporting, Campaign Intelligence, and Performance Intelligence into one connected platform.
       </p>
 
       <div className="adgen-final-proof">

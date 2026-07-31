@@ -71,6 +71,7 @@ def google_ads_status(user=Depends(require_google_ads_user)):
         "campaignCount": int(connection.get("campaignCount") or 0),
         "summary": connection.get("summary") or {},
         "campaigns": connection.get("campaigns") or [],
+        "campaignContextWarning": connection.get("campaignContextWarning"),
         "lastSyncDateRange": connection.get("lastSyncDateRange"),
         "oauthConfigured": settings.oauth_ready,
         "apiConfigured": settings.api_ready,
@@ -310,6 +311,7 @@ def sync_google_ads(
             campaigns=report.get("campaigns") or [],
             synced_at=synced_at,
             date_range=report.get("dateRange") or normalized_range,
+            campaign_context_warning=report.get("campaignContextWarning"),
         )
         save_daily_campaign_performance(
             user["uid"],

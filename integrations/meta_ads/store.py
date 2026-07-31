@@ -151,6 +151,8 @@ def save_campaign_sync(
     date_range: str,
     summary: dict[str, Any],
     campaigns: list[dict[str, Any]],
+    ad_sets: list[dict[str, Any]] | None = None,
+    ad_set_context_warning: str | None = None,
 ) -> None:
     now = int(time.time())
     connection_ref(uid).set(
@@ -160,6 +162,9 @@ def save_campaign_sync(
             "campaignCount": len(campaigns),
             "summary": summary or {},
             "campaigns": (campaigns or [])[:200],
+            "adSetCount": len(ad_sets or []),
+            "adSets": (ad_sets or [])[:1000],
+            "adSetContextWarning": ad_set_context_warning,
             "lastSyncError": None,
             "updatedAt": now,
         },

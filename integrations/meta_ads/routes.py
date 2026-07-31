@@ -87,6 +87,9 @@ def meta_ads_status(user=Depends(require_meta_ads_user)):
         "campaignCount": int(connection.get("campaignCount") or 0),
         "summary": connection.get("summary") or {},
         "campaigns": connection.get("campaigns") or [],
+        "adSetCount": int(connection.get("adSetCount") or 0),
+        "adSets": connection.get("adSets") or [],
+        "adSetContextWarning": connection.get("adSetContextWarning"),
         "creativeCount": int(connection.get("creativeCount") or 0),
         "lastCreativeSyncAt": connection.get("lastCreativeSyncAt"),
         "oauthConfigured": settings.oauth_ready,
@@ -249,6 +252,8 @@ def sync_meta_ads_campaigns(
             date_range=result["dateRange"],
             summary=result["summary"],
             campaigns=result["campaigns"],
+            ad_sets=result.get("adSets") or [],
+            ad_set_context_warning=result.get("adSetContextWarning"),
         )
         save_daily_campaign_performance(
             user["uid"],

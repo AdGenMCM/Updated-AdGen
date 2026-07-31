@@ -29,16 +29,16 @@ const steps = [
   {
     number: "04",
     title: "Learn",
-    label: "Analyze real campaign performance",
+    label: "Campaign Intelligence finds what deserves attention",
     description:
-      "Bring in manual tracking, Google, or Meta Ads results and identify reliable performance signals.",
+      "Connect Google Ads and Meta to identify campaign-level issues, opportunities, positive trends, budget constraints, creative fatigue, and performance changes.",
   },
   {
     number: "05",
     title: "Improve",
-    label: "Make every next campaign stronger",
+    label: "Act on clear, evidence-backed recommendations",
     description:
-      "Use Creative DNA and pull Reporting to guide future image and video generations without starting from zero.",
+      "Review prioritized findings, understand why they matter, and use Performance Intelligence, the Optimizer, or generation tools to improve what comes next.",
   },
 ];
 

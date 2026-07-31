@@ -153,6 +153,148 @@ def _base_finding(
     }
 
 
+
+
+def _context_finding(
+    *, platform: str, platform_label: str, campaign_id: str, campaign_name: str,
+    signal: str, category: str, severity: str, confidence: str,
+    title: str, summary: str, why: str, interpretation: str,
+    review_items: list[str], evidence: list[dict[str, str]],
+    current: dict[str, Any], previous: dict[str, Any],
+) -> dict[str, Any]:
+    return _base_finding(
+        platform=platform,
+        platform_label=platform_label,
+        campaign_id=campaign_id,
+        campaign_name=campaign_name,
+        category=category,
+        severity=severity,
+        confidence=confidence,
+        signal=signal,
+        title=title,
+        summary=summary,
+        why=why,
+        interpretation=interpretation,
+        review_items=review_items,
+        evidence=evidence,
+        current=current,
+        previous=previous,
+    )
+
+
+def _campaign_context_findings(
+    *, platform: str, platform_label: str, campaign_id: str, campaign_name: str,
+    current: dict[str, Any], previous: dict[str, Any], connection: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Generate read-only findings from the richer platform context saved at sync time."""
+    findings: list[dict[str, Any]] = []
+    confidence = _confidence(current, previous)
+    campaign_rows = connection.get("campaigns") or []
+    campaign = next((row for row in campaign_rows if str(row.get("id") or row.get("campaignId") or "") == campaign_id), {})
+
+    if platform == "google_ads" and campaign:
+        impression_share = campaign.get("searchImpressionShare")
+        budget_lost = campaign.get("searchBudgetLostImpressionShare")
+        rank_lost = campaign.get("searchRankLostImpressionShare")
+        budget = campaign.get("dailyBudget")
+        bid = campaign.get("biddingStrategyType")
+        campaign_type = campaign.get("campaignType")
+        conversion_rate = campaign.get("conversionRate")
+
+        if _num(budget_lost) >= 20 and _integer(current.get("impressions")) >= MIN_IMPRESSIONS:
+            findings.append(_context_finding(
+                platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                campaign_name=campaign_name, signal="budget_lost_share", category="delivery",
+                severity="warning" if _num(budget_lost) < 40 else "critical", confidence=confidence,
+                title=f"Budget is limiting eligible Search reach in {campaign_name}",
+                summary=f"Google reports {_num(budget_lost):.1f}% of eligible Search impression share was lost to budget.",
+                why="A meaningful portion of eligible Search traffic was unavailable because of budget constraints.",
+                interpretation="This does not automatically mean the budget should be raised. First confirm that the campaign is producing acceptable conversion efficiency and that additional traffic is desirable.",
+                review_items=["Current CPA or ROAS before increasing spend", "Budget allocation across campaigns", "Whether the campaign is consistently reaching its daily budget"],
+                evidence=[{"label":"Budget-lost share","value":f"{_num(budget_lost):.1f}%"},{"label":"Daily budget","value":_money(budget)},{"label":"Bidding strategy","value":str(bid or "Unknown")}],
+                current=current, previous=previous,
+            ))
+        if _num(rank_lost) >= 20 and _integer(current.get("impressions")) >= MIN_IMPRESSIONS:
+            findings.append(_context_finding(
+                platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                campaign_name=campaign_name, signal="rank_lost_share", category="delivery",
+                severity="warning", confidence=confidence,
+                title=f"Ad rank is limiting Search visibility in {campaign_name}",
+                summary=f"Google reports {_num(rank_lost):.1f}% of eligible Search impression share was lost to rank.",
+                why="The campaign is missing eligible impressions because ad rank is not competitive enough in some auctions.",
+                interpretation="Ad rank can reflect bid competitiveness, expected CTR, ad relevance, and landing-page experience. Increasing budget alone would not address this signal.",
+                review_items=["Ad and keyword relevance", "Landing-page experience", "Bid strategy and target settings in Google Ads", "Quality and engagement of the active ads"],
+                evidence=[{"label":"Rank-lost share","value":f"{_num(rank_lost):.1f}%"},{"label":"Search impression share","value":f"{_num(impression_share):.1f}%"},{"label":"Campaign type","value":str(campaign_type or "Unknown")}],
+                current=current, previous=previous,
+            ))
+        if conversion_rate is not None and _num(current.get("clicks")) >= MIN_CLICKS:
+            # Context-only opportunity when engagement is healthy but post-click rate is weak.
+            if _num(conversion_rate) < 2 and _num(current.get("ctr")) >= 3:
+                findings.append(_context_finding(
+                    platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                    campaign_name=campaign_name, signal="post_click_gap", category="opportunity",
+                    severity="opportunity", confidence=confidence,
+                    title=f"Post-click performance deserves review in {campaign_name}",
+                    summary=f"The campaign's conversion rate is {_num(conversion_rate):.2f}% while ad engagement remains comparatively healthy.",
+                    why="People are clicking, but a relatively small share of those interactions become recorded conversions.",
+                    interpretation="The next review should focus after the click: landing-page relevance, conversion tracking, offer clarity, and the conversion action being optimized.",
+                    review_items=["Landing-page message match", "Conversion action configuration", "Page speed and mobile experience", "Offer and form friction"],
+                    evidence=[{"label":"Conversion rate","value":f"{_num(conversion_rate):.2f}%"},{"label":"CTR","value":_pct(current.get("ctr"))},{"label":"Bidding strategy","value":str(bid or "Unknown")}],
+                    current=current, previous=previous,
+                ))
+
+    if platform == "meta_ads":
+        ad_sets = [row for row in (connection.get("adSets") or []) if str(row.get("campaignId") or "") == campaign_id]
+        if ad_sets:
+            total_spend = sum(_num(row.get("spend")) for row in ad_sets)
+            highest_frequency = max((_num(row.get("frequency")) for row in ad_sets), default=0)
+            if highest_frequency >= 4 and _integer(current.get("impressions")) >= MIN_IMPRESSIONS:
+                findings.append(_context_finding(
+                    platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                    campaign_name=campaign_name, signal="high_frequency", category="creative",
+                    severity="warning" if highest_frequency < 7 else "critical", confidence=confidence,
+                    title=f"Audience frequency is elevated in {campaign_name}",
+                    summary=f"At least one Meta ad set reached a frequency of {highest_frequency:.2f} during the selected period.",
+                    why="Repeated exposure can eventually reduce engagement and increase the likelihood of creative fatigue, especially in prospecting audiences.",
+                    interpretation="Frequency should be interpreted alongside audience type, CTR trend, and campaign objective. Retargeting campaigns can reasonably run at a higher frequency than prospecting campaigns.",
+                    review_items=["Whether the ad set is prospecting or retargeting", "CTR and CPA trend for the same ad set", "Creative age and number of active variations", "Audience size and overlap"],
+                    evidence=[{"label":"Highest ad-set frequency","value":f"{highest_frequency:.2f}"},{"label":"Ad sets reviewed","value":str(len(ad_sets))}],
+                    current=current, previous=previous,
+                ))
+            if total_spend >= MIN_SPEND and len(ad_sets) >= 2:
+                leader = max(ad_sets, key=lambda row: _num(row.get("spend")))
+                share = _num(leader.get("spend")) / total_spend if total_spend else 0
+                others = [row for row in ad_sets if row is not leader and _num(row.get("spend")) > 0]
+                if share >= 0.70 and others:
+                    findings.append(_context_finding(
+                        platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                        campaign_name=campaign_name, signal="adset_spend_concentration", category="delivery",
+                        severity="opportunity", confidence=confidence,
+                        title=f"Meta delivery is concentrated in one ad set for {campaign_name}",
+                        summary=f"{leader.get('adSetName') or 'One ad set'} received {share * 100:.0f}% of recorded campaign spend.",
+                        why="Heavy concentration can be intentional, but it can also mean other ad sets are not gathering enough delivery to be evaluated fairly.",
+                        interpretation="Meta allocates delivery dynamically. Review efficiency before forcing a more even split; the leading ad set may simply be stronger.",
+                        review_items=["CPA and ROAS by ad set", "Optimization goal and bid strategy", "Audience overlap", "Whether low-delivery ad sets have enough time and budget to learn"],
+                        evidence=[{"label":"Leading ad set","value":str(leader.get("adSetName") or "Ad set")},{"label":"Spend share","value":f"{share * 100:.0f}%"},{"label":"Optimization goal","value":str(leader.get("optimizationGoal") or "Unknown")}],
+                        current=current, previous=previous,
+                    ))
+            inactive = [row for row in ad_sets if str(row.get("effectiveStatus") or row.get("status") or "").upper() not in {"ACTIVE", "PAUSED", "CAMPAIGN_PAUSED"}]
+            if inactive:
+                findings.append(_context_finding(
+                    platform=platform, platform_label=platform_label, campaign_id=campaign_id,
+                    campaign_name=campaign_name, signal="adset_delivery_status", category="tracking",
+                    severity="info", confidence=confidence,
+                    title=f"Some ad sets have restricted or inactive delivery in {campaign_name}",
+                    summary=f"{len(inactive)} ad set{'s' if len(inactive) != 1 else ''} reported a non-active delivery status.",
+                    why="Delivery status can explain why spend or conversion volume is lower than expected.",
+                    interpretation="Review the exact status in Meta Ads Manager. ADGen is reporting the saved status only and does not change delivery.",
+                    review_items=["Ad-set delivery status and policy notices", "Campaign and ad status", "Schedule and budget availability"],
+                    evidence=[{"label":"Affected ad sets","value":str(len(inactive))}],
+                    current=current, previous=previous,
+                ))
+    return findings
+
+
 def _campaign_findings(
     *,
     platform: str,
@@ -477,6 +619,10 @@ def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             continue
 
         rows = list_daily(uid, account_id=account_id, limit=20000)
+        if platform == "google_ads" and connection.get("campaignContextWarning"):
+            notes.append("Google campaign-setting context was unavailable for the latest sync; core performance analysis is still available.")
+        if platform == "meta_ads" and connection.get("adSetContextWarning"):
+            notes.append("Meta ad-set context was unavailable for the latest sync; campaign-level analysis is still available.")
         if not rows:
             notes.append(f"{label} does not have saved daily campaign history yet. Refresh it manually first.")
             continue
@@ -541,6 +687,15 @@ def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
                 current=current,
                 previous=previous,
             )
+            findings.extend(_campaign_context_findings(
+                platform=platform,
+                platform_label=label,
+                campaign_id=campaign_id,
+                campaign_name=names[campaign_id],
+                current=current,
+                previous=previous,
+                connection=connection,
+            ))
             for finding in findings:
                 finding["comparisonLabel"] = comparison_label
                 finding["actions"] = [
@@ -1096,7 +1251,7 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             "impressionsReviewed": sum(int((item.get("currentPeriod") or {}).get("impressions") or 0) for item in assessments),
             "clicksReviewed": sum(int((item.get("currentPeriod") or {}).get("clicks") or 0) for item in assessments),
             "conversionsReviewed": round(sum(float((item.get("currentPeriod") or {}).get("conversions") or 0) for item in assessments), 2),
-            "engineVersion": "Campaign Intelligence 2B.2",
+            "engineVersion": "Campaign Intelligence 2B.3",
         },
         "comparisonLabel": comparison_label,
         "headline": headline,

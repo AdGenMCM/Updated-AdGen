@@ -158,6 +158,7 @@ def save_sync_summary(
     campaigns: list[dict[str, Any]],
     synced_at: int,
     date_range: str | None = None,
+    campaign_context_warning: str | None = None,
 ) -> None:
     connection_ref(uid).set(
         {
@@ -166,6 +167,7 @@ def save_sync_summary(
             "summary": summary or {},
             "campaigns": campaigns or [],
             "lastSyncDateRange": date_range,
+            "campaignContextWarning": campaign_context_warning,
             "updatedAt": int(time.time()),
         },
         merge=True,

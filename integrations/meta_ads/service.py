@@ -55,6 +55,46 @@ INSIGHT_FIELDS = ",".join(
     ]
 )
 
+
+ADSET_FIELDS = ",".join(
+    [
+        "id",
+        "name",
+        "campaign{id,name}",
+        "status",
+        "effective_status",
+        "daily_budget",
+        "lifetime_budget",
+        "bid_strategy",
+        "billing_event",
+        "optimization_goal",
+        "start_time",
+        "end_time",
+    ]
+)
+
+ADSET_INSIGHT_FIELDS = ",".join(
+    [
+        "adset_id",
+        "adset_name",
+        "campaign_id",
+        "campaign_name",
+        "impressions",
+        "reach",
+        "frequency",
+        "clicks",
+        "inline_link_clicks",
+        "spend",
+        "ctr",
+        "cpc",
+        "cpm",
+        "actions",
+        "action_values",
+        "date_start",
+        "date_stop",
+    ]
+)
+
 DATE_PRESETS = {
     "LAST_7_DAYS": "last_7d",
     "LAST_14_DAYS": "last_14d",
@@ -441,6 +481,103 @@ def _summary(campaigns: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+
+def _adset_insight_row(item: dict[str, Any]) -> dict[str, Any]:
+    row = _insight_row({
+        **item,
+        "campaign_id": item.get("campaign_id"),
+        "campaign_name": item.get("campaign_name"),
+    })
+    row.update({
+        "adSetId": str(item.get("adset_id") or ""),
+        "adSetName": item.get("adset_name") or "Meta ad set",
+    })
+    return row
+
+
+def _sync_adset_context(
+    *,
+    account_id: str,
+    access_token: str,
+    insight_date_params: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch optional ad-set context without making the stable campaign sync fail."""
+    try:
+        adset_items = _paged_rows(
+            f"{account_id}/adsets",
+            access_token=access_token,
+            params={"fields": ADSET_FIELDS, "limit": 100},
+            max_rows=1000,
+        )
+        insight_items = _paged_rows(
+            f"{account_id}/insights",
+            access_token=access_token,
+            params={
+                "level": "adset",
+                **insight_date_params,
+                "fields": ADSET_INSIGHT_FIELDS,
+                "limit": 100,
+            },
+            max_rows=1000,
+        )
+        by_adset = {
+            row["adSetId"]: row
+            for row in (_adset_insight_row(item) for item in insight_items)
+            if row.get("adSetId")
+        }
+        rows: list[dict[str, Any]] = []
+        known: set[str] = set()
+        for item in adset_items:
+            adset_id = str(item.get("id") or "")
+            if not adset_id:
+                continue
+            known.add(adset_id)
+            campaign = item.get("campaign") or {}
+            metrics = by_adset.get(adset_id) or {}
+            daily_budget = _safe_float(item.get("daily_budget")) / 100
+            lifetime_budget = _safe_float(item.get("lifetime_budget")) / 100
+            rows.append({
+                "adSetId": adset_id,
+                "adSetName": item.get("name") or metrics.get("adSetName") or "Meta ad set",
+                "campaignId": str(campaign.get("id") or metrics.get("campaignId") or ""),
+                "campaignName": campaign.get("name") or metrics.get("campaignName") or "Meta campaign",
+                "status": item.get("status"),
+                "effectiveStatus": item.get("effective_status"),
+                "dailyBudget": _round(daily_budget, 2) if daily_budget else None,
+                "lifetimeBudget": _round(lifetime_budget, 2) if lifetime_budget else None,
+                "bidStrategy": item.get("bid_strategy"),
+                "billingEvent": item.get("billing_event"),
+                "optimizationGoal": item.get("optimization_goal"),
+                "startTime": item.get("start_time"),
+                "endTime": item.get("end_time"),
+                **{k: v for k, v in metrics.items() if k not in {
+                    "adSetId", "adSetName", "campaignId", "campaignName"
+                }},
+            })
+        for adset_id, metrics in by_adset.items():
+            if adset_id in known:
+                continue
+            rows.append({
+                "adSetId": adset_id,
+                "adSetName": metrics.get("adSetName") or "Meta ad set",
+                "campaignId": metrics.get("campaignId") or "",
+                "campaignName": metrics.get("campaignName") or "Meta campaign",
+                **{k: v for k, v in metrics.items() if k not in {
+                    "adSetId", "adSetName", "campaignId", "campaignName"
+                }},
+            })
+        rows.sort(key=lambda row: (_safe_float(row.get("spend")), _safe_int(row.get("impressions"))), reverse=True)
+        return rows, None
+    except requests.HTTPError as exc:
+        message = "Meta ad-set context was unavailable; campaign analysis still completed."
+        if exc.response is not None:
+            try:
+                message = ((exc.response.json() or {}).get("error") or {}).get("message") or message
+            except Exception:
+                pass
+        return [], message
+
+
 def sync_campaign_performance(
     uid: str,
     date_range: str = "LAST_30_DAYS",
@@ -533,6 +670,11 @@ def sync_campaign_performance(
     )
 
     summary = _summary(rows)
+    ad_sets, ad_set_warning = _sync_adset_context(
+        account_id=account_id,
+        access_token=access_token,
+        insight_date_params=insight_date_params,
+    )
 
     return {
         "ok": True,
@@ -545,6 +687,9 @@ def sync_campaign_performance(
         "campaignCount": len(rows),
         "summary": summary,
         "campaigns": rows[:200],
+        "adSetCount": len(ad_sets),
+        "adSets": ad_sets[:1000],
+        "adSetContextWarning": ad_set_warning,
         "dailyCampaignPerformance": daily_campaign_performance,
     }
 

@@ -133,16 +133,17 @@ const sections = [
   },
   {
     number: "07",
-    eyebrow: "PERFORMANCE INTELLIGENCE & Insights",
+    eyebrow: "PERFORMANCE, CAMPAIGN INTELLIGENCE & Insights",
     title: "Turn qualified results into future creative guidance.",
     outcome: "Build a reusable Creative DNA profile for your brand.",
     text:
       "Performance Intelligence combines your Creative Library, Google Ads, Meta Ads, and manual performance tracking to build Creative DNA that continuously improves future image and video generations.",
     points: [
-      "Connect Google Ads or add performance manually",
+      "Connect Google, Meta Ads or add performance manually",
       "Qualify reliable winners and underperformers",
       "Build Creative DNA from colors, styles, copy, and composition",
       "Apply learned patterns to future image and video generations",
+      "Use Campaign Intelligence to optimize your running campaign to maximize reach and ROI.",
     ],
     image: "/screenshots/insights.png",
     imageAlt:

@@ -32,7 +32,7 @@ const plans = [
       "100 image generations",
       "14 video credits",
       "20 Optimizer runs",
-      "Performance Intelligence",
+      "Performance & Campaign Intelligence",
     ],
     badge: "Most popular",
   },
@@ -43,10 +43,12 @@ const plans = [
     text:
       "For teams and agencies managing higher-volume, multi-brand creative workflows.",
     features: [
+      "Everything in Pro",
       "250 image generations",
       "32 video credits",
       "75 Optimizer runs",
       "10 Brand Kits",
+      "Priority Support and Generation",
     ],
   },
 ];

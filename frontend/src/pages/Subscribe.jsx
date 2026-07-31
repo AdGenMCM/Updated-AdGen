@@ -110,6 +110,7 @@ const PLAN_OPTIONS = [
       "Everything in Starter",
       "Creative Optimizer",
       "Performance Intelligence",
+      "Campaign Intelligence",
       "Winner analysis",
       "Unified Campaign Reporting",
       "Advanced Insights with Google and Meta Ads integration",

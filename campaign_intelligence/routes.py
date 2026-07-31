@@ -64,6 +64,7 @@ def _sync_google(uid: str, date_range: str) -> dict[str, Any]:
         campaigns=report.get("campaigns") or [],
         synced_at=synced_at,
         date_range=report.get("dateRange") or date_range,
+        campaign_context_warning=report.get("campaignContextWarning"),
     )
     save_google_daily(
         uid,
@@ -93,6 +94,8 @@ def _sync_meta(uid: str, date_range: str) -> dict[str, Any]:
             date_range=result.get("dateRange") or date_range,
             summary=result.get("summary") or {},
             campaigns=result.get("campaigns") or [],
+            ad_sets=result.get("adSets") or [],
+            ad_set_context_warning=result.get("adSetContextWarning"),
         )
         save_meta_daily(
             uid,
