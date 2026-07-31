@@ -1,6 +1,6 @@
 // src/AuthProvider.js
 import React, { createContext, useEffect, useMemo, useState, useContext } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebaseConfig";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 
@@ -23,10 +23,31 @@ export function AuthProvider({ children }) {
   // 1️⃣ Firebase Auth listener
   // -----------------------------
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const usesPasswordProvider = user.providerData.some(
+          (provider) => provider.providerId === "password"
+        );
+
+        // Never expose the authenticated application to an unverified
+        // email/password account, including sessions left behind by signup.
+        if (usesPasswordProvider && !user.emailVerified) {
+          try {
+            await signOut(auth);
+          } catch (error) {
+            console.error("Unable to clear unverified auth session:", error);
+          }
+
+          setCurrentUser(null);
+          setLoading(false);
+          return;
+        }
+      }
+
       setCurrentUser(user);
       setLoading(false);
     });
+
     return () => unsub();
   }, []);
 

@@ -12,6 +12,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   getIdTokenResult,
+  signOut,
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ArrowRight, Check, Eye, EyeOff, Image, Video, Palette, BarChart3 } from "lucide-react";
@@ -295,6 +296,12 @@ export default function AuthForm({ onLogin }) {
         });
 
         await sendEmailVerification(credential.user);
+
+        // Firebase signs a newly created email/password user in immediately.
+        // Clear that session so verification cannot bypass the normal sign-in
+        // and plan-routing flow.
+        await signOut(auth);
+
         showMessage(
           "Your account is ready. Check your inbox to verify your email before signing in.",
           "success"

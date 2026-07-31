@@ -134,7 +134,44 @@ def require_user(authorization: Optional[str]) -> Tuple[str, Optional[str], Dict
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid auth token (missing uid).")
 
-    email = claims.get("email")
+    try:
+        user_record = fb_auth.get_user(uid)
+    except fb_auth.UserNotFoundError:
+        raise HTTPException(
+            status_code=401,
+            detail="User account no longer exists. Please sign in again.",
+        )
+    except Exception as error:
+        print(
+            "[FIREBASE AUTH] User status lookup failed:",
+            type(error).__name__,
+            repr(error),
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=401,
+            detail="Unable to confirm account status.",
+        )
+
+    if user_record.disabled:
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been disabled.",
+        )
+
+    provider_ids = {
+        provider.provider_id
+        for provider in (user_record.provider_data or [])
+    }
+    uses_password_provider = "password" in provider_ids
+
+    if uses_password_provider and not user_record.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before continuing.",
+        )
+
+    email = claims.get("email") or user_record.email
     return uid, email, claims
 
 
