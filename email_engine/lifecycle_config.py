@@ -26,6 +26,7 @@ class LifecycleSettings:
     usage_enabled: bool
     upgrade_enabled: bool
     reengagement_enabled: bool
+    disabled_notice_enabled: bool
     global_cooldown_hours: int
     weekly_cap: int
     daily_cap: int
@@ -65,6 +66,7 @@ def get_lifecycle_settings() -> LifecycleSettings:
         usage_enabled=_env_bool("EMAIL_USAGE_ENABLED", True),
         upgrade_enabled=_env_bool("EMAIL_UPGRADE_ENABLED", True),
         reengagement_enabled=_env_bool("EMAIL_REENGAGEMENT_ENABLED", True),
+        disabled_notice_enabled=_env_bool("EMAIL_DISABLED_NOTICE_ENABLED", True),
         global_cooldown_hours=max(24, _env_int("EMAIL_GLOBAL_COOLDOWN_HOURS", 72)),
         weekly_cap=max(1, _env_int("EMAIL_WEEKLY_CAP", 3)),
         daily_cap=max(1, _env_int("EMAIL_DAILY_CAP", 1)),

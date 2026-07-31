@@ -799,6 +799,72 @@ def render_lifecycle_campaign_email(
     return template.subject, html
 
 
+
+def render_account_disabled_email(
+    *,
+    first_name: str,
+    support_email: str,
+) -> tuple[str, str]:
+    name = (first_name or "there").strip()
+    safe_name = _safe(name, "there")
+    safe_support_email = _safe(
+        support_email,
+        "support@adgenmcm.com",
+    )
+    subject = "Your ADGen account has been disabled"
+
+    body_html = (
+        f"""
+        <p style="margin:0 0 16px;">
+          Hi {safe_name},
+        </p>
+
+        <p style="margin:0 0 16px;">
+          Your ADGen account has been disabled because activity associated
+          with the account violated ADGen's Terms and Conditions.
+        </p>
+
+        <p style="margin:0;">
+          You will no longer be able to access the platform or use its
+          services. If you believe this action was taken in error, contact
+          <a
+            href="mailto:{safe_support_email}"
+            style="color:{PURPLE_LIGHT};text-decoration:none;"
+          >
+            {safe_support_email}
+          </a>.
+        </p>
+        """
+    )
+
+    supporting_html = _feature_panel(
+        "Account status",
+        (
+            "Access to the ADGen platform has been disabled",
+            "Future lifecycle and promotional emails have been stopped",
+            f"Questions or appeals can be sent to {support_email}",
+        ),
+        RED,
+    )
+
+    html = render_base_email(
+        preview_text=(
+            "Your ADGen account has been disabled and access is no longer available."
+        ),
+        eyebrow="Account status",
+        heading="Your ADGen account has been disabled.",
+        body_html=body_html,
+        footer_note=(
+            "You are receiving this account-status notice because your "
+            "ADGen account was disabled."
+        ),
+        accent=RED,
+        supporting_html=supporting_html,
+    )
+
+    return subject, html
+
+
 def render_lifecycle_email(
     *,
     first_name: str,

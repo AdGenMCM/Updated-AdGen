@@ -16,7 +16,10 @@ from customer_intelligence.event_service import track_event
 from .config import get_email_config
 from .email_service import EMAIL_DELIVERIES_COLLECTION, send_email_once, _first_name
 from .lifecycle_config import get_lifecycle_settings
-from .templates import render_lifecycle_campaign_email
+from .templates import (
+    render_account_disabled_email,
+    render_lifecycle_campaign_email,
+)
 
 SUCCESS = {"succeeded", "completed", "success"}
 
@@ -219,6 +222,71 @@ def send_candidate(uid: str, recipient: str, display_name: str, tier: str, candi
     return {**result, "campaign": candidate.key}
 
 
+
+def send_account_disabled_notice(
+    uid: str,
+    recipient: str,
+    display_name: str,
+    *,
+    test_mode: bool = False,
+) -> dict:
+    config = get_email_config()
+    subject, html = render_account_disabled_email(
+        first_name=_first_name(display_name, recipient),
+        support_email=config.reply_to,
+    )
+
+    email_key = f"account_disabled:{uid}"
+    category = "account_status"
+
+    if test_mode:
+        email_key = f"test:{email_key}:{int(time.time())}"
+        category = "test"
+
+    result = send_email_once(
+        uid=uid,
+        recipient=recipient,
+        email_key=email_key,
+        category=category,
+        subject=subject,
+        html=html,
+        metadata={
+            "campaign": "account_disabled",
+            "category": "account_status",
+            "schemaVersion": 1,
+            "reason": "terms_violation",
+            "testMode": test_mode,
+        },
+    )
+
+    if result.get("sent") and not result.get("skipped") and not test_mode:
+        try:
+            track_event(
+                get_db(),
+                uid,
+                "email.sent.account_disabled",
+                event_id=f"email:account_disabled:{uid}",
+                metadata={
+                    "campaign": "account_disabled",
+                    "category": "account_status",
+                    "deliveryId": result.get("deliveryId"),
+                },
+                source="email_engine",
+            )
+        except Exception as error:
+            print(
+                "[EMAIL LIFECYCLE] Disabled-account event tracking failed:",
+                repr(error),
+                flush=True,
+            )
+
+    return {
+        **result,
+        "campaign": "account_disabled",
+        "reason": result.get("reason") or "firebase_user_disabled",
+    }
+
+
 def process_user(
     uid: str,
     user_doc: dict,
@@ -229,27 +297,68 @@ def process_user(
 ) -> dict:
     settings = get_lifecycle_settings()
 
+    recipient = str(user_doc.get("email") or "").strip()
+    auth_display_name = ""
+    auth_user = None
+
+    try:
+        auth_user = firebase_auth.get_user(uid)
+        if not recipient:
+            recipient = str(auth_user.email or "").strip()
+        auth_display_name = str(auth_user.display_name or "").strip()
+    except Exception as error:
+        print(
+            f"[EMAIL LIFECYCLE] Firebase Auth lookup failed for {uid}: "
+            f"{error!r}",
+            flush=True,
+        )
+
+    firestore_display_name = " ".join(
+        filter(
+            None,
+            [
+                user_doc.get("firstName"),
+                user_doc.get("lastName"),
+            ],
+        )
+    ).strip()
+
+    display_name = str(
+        user_doc.get("displayName")
+        or firestore_display_name
+        or auth_display_name
+    ).strip()
+
+    if auth_user is not None and bool(auth_user.disabled):
+        if not recipient:
+            return {
+                "sent": False,
+                "skipped": True,
+                "reason": "missing_email_disabled_account",
+                "campaign": "account_disabled",
+            }
+
+        if not settings.disabled_notice_enabled and not test_mode:
+            return {
+                "sent": False,
+                "skipped": True,
+                "reason": "firebase_user_disabled",
+                "campaign": "account_disabled",
+            }
+
+        return send_account_disabled_notice(
+            uid,
+            recipient,
+            display_name,
+            test_mode=test_mode,
+        )
+
     if not settings.enabled and not test_mode:
         return {
             "sent": False,
             "skipped": True,
             "reason": "lifecycle_disabled",
         }
-
-    recipient = str(user_doc.get("email") or "").strip()
-    auth_display_name = ""
-
-    if not recipient:
-        try:
-            auth_user = firebase_auth.get_user(uid)
-            recipient = str(auth_user.email or "").strip()
-            auth_display_name = str(auth_user.display_name or "").strip()
-        except Exception as error:
-            print(
-                f"[EMAIL LIFECYCLE] Firebase Auth lookup failed for {uid}: "
-                f"{error!r}",
-                flush=True,
-            )
 
     if not recipient:
         return {
@@ -276,22 +385,6 @@ def process_user(
 
     tier, _ = get_tier_and_status(user_doc)
 
-    firestore_display_name = " ".join(
-        filter(
-            None,
-            [
-                user_doc.get("firstName"),
-                user_doc.get("lastName"),
-            ],
-        )
-    ).strip()
-
-    display_name = str(
-        user_doc.get("displayName")
-        or firestore_display_name
-        or auth_display_name
-    ).strip()
-
     return send_candidate(
         uid,
         recipient,
@@ -301,7 +394,6 @@ def process_user(
         bypass_cooldown=bypass_cooldown,
         test_mode=test_mode,
     )
-
 
 def run_lifecycle_batch(*, limit: Optional[int] = None) -> dict:
     settings = get_lifecycle_settings()
