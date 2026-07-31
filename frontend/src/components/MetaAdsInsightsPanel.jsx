@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   connectMetaAds,
   disconnectMetaAds,
@@ -64,7 +64,11 @@ function percent(value) {
   return Number.isFinite(amount) ? `${amount.toFixed(2)}%` : "—";
 }
 
-export default function MetaAdsInsightsPanel() {
+export default function MetaAdsInsightsPanel({
+  isActive = false,
+  selectedDateRange = "LAST_30_DAYS",
+  onDateRangeChange,
+}) {
   const [status, setStatus] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +76,8 @@ export default function MetaAdsInsightsPanel() {
   const [syncing, setSyncing] = useState(false);
   const [creatives, setCreatives] = useState([]);
   const [creativeFilter, setCreativeFilter] = useState("all");
-  const [dateRange, setDateRange] = useState("LAST_30_DAYS");
+  const [dateRange, setDateRange] = useState(selectedDateRange);
+  const autoRefreshInFlightRef = useRef(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -135,6 +140,12 @@ export default function MetaAdsInsightsPanel() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.connected, status?.selectedAdAccountId]);
+
+  useEffect(() => {
+    if (selectedDateRange && selectedDateRange !== dateRange) {
+      setDateRange(selectedDateRange);
+    }
+  }, [selectedDateRange, dateRange]);
 
   const filteredCreatives = useMemo(() => {
     if (creativeFilter === "all") return creatives;
@@ -233,8 +244,47 @@ export default function MetaAdsInsightsPanel() {
   const changeDateRange = async (event) => {
     const next = event.target.value;
     setDateRange(next);
+    onDateRangeChange?.(next);
     await refreshForRange(next);
   };
+
+  useEffect(() => {
+    if (
+      !isActive ||
+      !status?.connected ||
+      !status?.selectedAdAccountId ||
+      syncing ||
+      autoRefreshInFlightRef.current
+    ) {
+      return;
+    }
+
+    const key = `adgen-meta-auto-refresh:${status.selectedAdAccountId}:${dateRange}`;
+    const last = Number(window.sessionStorage.getItem(key) || 0);
+    const cooldownMs = 60 * 1000;
+    if (Date.now() - last < cooldownMs) return;
+
+    autoRefreshInFlightRef.current = true;
+    window.sessionStorage.setItem(key, String(Date.now()));
+
+    (async () => {
+      try {
+        const result = await syncMetaAds(dateRange);
+        const creativeResult = await syncMetaAdsCreatives(dateRange);
+        const nextStatus = await getMetaAdsStatus();
+        setStatus(nextStatus);
+        setCreatives(creativeResult?.creatives || []);
+        if (result?.campaignCount !== undefined) {
+          setSuccess("Meta Ads refreshed automatically.");
+          window.setTimeout(() => setSuccess(""), 2500);
+        }
+      } catch (err) {
+        setError(err?.message || "Could not automatically refresh Meta Ads data.");
+      } finally {
+        autoRefreshInFlightRef.current = false;
+      }
+    })();
+  }, [isActive, status?.connected, status?.selectedAdAccountId, dateRange, syncing]);
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect Meta Ads from ADGen?")) return;
@@ -409,10 +459,12 @@ export default function MetaAdsInsightsPanel() {
                 onChange={changeDateRange}
                 disabled={syncing}
               >
-                <option value="LAST_7_DAYS">Previous 7 days</option>
-                <option value="LAST_14_DAYS">Previous 14 days</option>
-                <option value="LAST_30_DAYS">Previous 30 days</option>
-                <option value="LAST_90_DAYS">Previous 90 days</option>
+                <option value="TODAY">Today</option>
+                <option value="YESTERDAY">Yesterday</option>
+                <option value="LAST_7_DAYS">Last 7 days</option>
+                <option value="LAST_14_DAYS">Last 14 days</option>
+                <option value="LAST_30_DAYS">Last 30 days</option>
+                <option value="LAST_90_DAYS">Last 90 days</option>
                 <option value="THIS_MONTH">This month</option>
                 <option value="LAST_MONTH">Last month</option>
                 <option value="MAXIMUM">Maximum available</option>

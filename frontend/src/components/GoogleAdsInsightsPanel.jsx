@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   connectGoogleAds,
   disconnectGoogleAds,
@@ -13,10 +13,13 @@ import "./GoogleAdsInsightsPanel.css";
 const DATE_OPTIONS = [
   { value: "TODAY", label: "Today" },
   { value: "YESTERDAY", label: "Yesterday" },
-  { value: "LAST_7_DAYS", label: "Previous 7 days" },
-  { value: "LAST_30_DAYS", label: "Previous 30 days" },
+  { value: "LAST_7_DAYS", label: "Last 7 days" },
+  { value: "LAST_14_DAYS", label: "Last 14 days" },
+  { value: "LAST_30_DAYS", label: "Last 30 days" },
+  { value: "LAST_90_DAYS", label: "Last 90 days" },
   { value: "THIS_MONTH", label: "This month" },
   { value: "LAST_MONTH", label: "Last month" },
+  { value: "MAXIMUM", label: "Maximum available" },
 ];
 
 function number(value, digits = 0) {
@@ -59,10 +62,15 @@ function accountName(name, customerId) {
   return value;
 }
 
-export default function GoogleAdsInsightsPanel() {
+export default function GoogleAdsInsightsPanel({
+  isActive = false,
+  selectedDateRange = "LAST_30_DAYS",
+  onDateRangeChange,
+}) {
   const [status, setStatus] = useState(null);
   const [customers, setCustomers] = useState([]);
-  const [dateRange, setDateRange] = useState("LAST_30_DAYS");
+  const [dateRange, setDateRange] = useState(selectedDateRange);
+  const autoRefreshInFlightRef = useRef(false);
   const [assetType, setAssetType] = useState("ALL");
   const [assets, setAssets] = useState([]);
   const [expanded, setExpanded] = useState({});
@@ -123,6 +131,12 @@ export default function GoogleAdsInsightsPanel() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.connected, status?.selectedCustomerId]);
+
+  useEffect(() => {
+    if (selectedDateRange && selectedDateRange !== dateRange) {
+      setDateRange(selectedDateRange);
+    }
+  }, [selectedDateRange, dateRange]);
 
   const campaignAssetGroups = useMemo(() => {
     const groups = new Map();
@@ -296,6 +310,7 @@ export default function GoogleAdsInsightsPanel() {
   const changeDateRange = async (event) => {
     const next = event.target.value;
     setDateRange(next);
+    onDateRangeChange?.(next);
     setSyncing(true);
     setError("");
     setSuccess("");
@@ -310,6 +325,40 @@ export default function GoogleAdsInsightsPanel() {
       setSyncing(false);
     }
   };
+
+  useEffect(() => {
+    if (
+      !isActive ||
+      !status?.connected ||
+      !status?.selectedCustomerId ||
+      syncing ||
+      autoRefreshInFlightRef.current
+    ) {
+      return;
+    }
+
+    const key = `adgen-google-auto-refresh:${status.selectedCustomerId}:${dateRange}`;
+    const last = Number(window.sessionStorage.getItem(key) || 0);
+    const cooldownMs = 60 * 1000;
+    if (Date.now() - last < cooldownMs) return;
+
+    autoRefreshInFlightRef.current = true;
+    window.sessionStorage.setItem(key, String(Date.now()));
+
+    (async () => {
+      try {
+        await syncGoogleAds(dateRange);
+        const nextStatus = await getGoogleAdsStatus();
+        setStatus(nextStatus);
+        const assetResult = await getGoogleAdsAssets(dateRange);
+        setAssets(assetResult?.assets || []);
+      } catch (err) {
+        setError(err?.message || "Could not automatically refresh Google Ads data.");
+      } finally {
+        autoRefreshInFlightRef.current = false;
+      }
+    })();
+  }, [isActive, status?.connected, status?.selectedCustomerId, dateRange, syncing]);
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect Google Ads from AdGen MCM?")) return;

@@ -408,34 +408,64 @@ def _campaign_findings(
     return findings
 
 
-def _platform_data(uid: str) -> tuple[list[dict[str, Any]], list[str], list[str], int]:
+def _period_bounds(date_range: str) -> tuple[date, date, date, date, str]:
+    requested = str(date_range or "LAST_30_DAYS").upper()
+    today = date.today()
+
+    if requested == "TODAY":
+        current_start = current_end = today
+        previous_start = previous_end = today - timedelta(days=1)
+        label = "today versus yesterday"
+    elif requested == "YESTERDAY":
+        current_start = current_end = today - timedelta(days=1)
+        previous_start = previous_end = today - timedelta(days=2)
+        label = "yesterday versus the prior day"
+    elif requested == "THIS_MONTH":
+        current_start = today.replace(day=1)
+        current_end = today
+        days = max(1, (current_end - current_start).days + 1)
+        previous_end = current_start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=days - 1)
+        label = "this month versus the preceding equal-length period"
+    elif requested == "LAST_MONTH":
+        current_end = today.replace(day=1) - timedelta(days=1)
+        current_start = current_end.replace(day=1)
+        days = (current_end - current_start).days + 1
+        previous_end = current_start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=days - 1)
+        label = "last month versus the prior month"
+    else:
+        days = {
+            "LAST_7_DAYS": 7,
+            "LAST_14_DAYS": 14,
+            "LAST_30_DAYS": 30,
+            "LAST_90_DAYS": 90,
+            "MAXIMUM": 90,
+        }.get(requested, 30)
+        current_end = today - timedelta(days=1)
+        current_start = current_end - timedelta(days=days - 1)
+        previous_end = current_start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=days - 1)
+        label = ("all available history split into two comparable periods" if requested == "MAXIMUM" else f"the latest {days} days versus the preceding {days} days")
+
+    return current_start, current_end, previous_start, previous_end, label
+
+
+def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: str = "all") -> tuple[list[dict[str, Any]], list[str], list[str], int, str, list[dict[str, Any]]]:
     all_findings: list[dict[str, Any]] = []
     platforms: list[str] = []
     notes: list[str] = []
     campaigns_analyzed: set[str] = set()
+    campaign_snapshots: list[dict[str, Any]] = []
 
-    today = date.today()
-    current_end = today - timedelta(days=1)
-    current_start = current_end - timedelta(days=6)
-    previous_end = current_start - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=6)
+    current_start, current_end, previous_start, previous_end, comparison_label = _period_bounds(date_range)
 
     sources = [
-        (
-            "google_ads",
-            "Google Ads",
-            get_google_connection(uid) or {},
-            list_google_daily,
-            "selectedCustomerId",
-        ),
-        (
-            "meta_ads",
-            "Meta Ads",
-            get_meta_connection(uid) or {},
-            list_meta_daily,
-            "selectedAdAccountId",
-        ),
+        ("google_ads", "Google Ads", get_google_connection(uid) or {}, list_google_daily, "selectedCustomerId"),
+        ("meta_ads", "Meta Ads", get_meta_connection(uid) or {}, list_meta_daily, "selectedAdAccountId"),
     ]
+    if platform_filter in {"google_ads", "meta_ads"}:
+        sources = [source for source in sources if source[0] == platform_filter]
 
     for platform, label, connection, list_daily, account_key in sources:
         if connection.get("status") != "connected":
@@ -462,86 +492,630 @@ def _platform_data(uid: str) -> tuple[list[dict[str, Any]], list[str], list[str]
             names[campaign_id] = str(row.get("campaignName") or row.get("name") or "Campaign")
 
         for campaign_id, campaign_rows in grouped.items():
-            current_rows = _period_rows(campaign_rows, start=current_start, end=current_end)
-            previous_rows = _period_rows(campaign_rows, start=previous_start, end=previous_end)
+            campaign_current_start = current_start
+            campaign_current_end = current_end
+            campaign_previous_start = previous_start
+            campaign_previous_end = previous_end
+
+            if str(date_range).upper() == "MAXIMUM":
+                available_dates = []
+                for row in campaign_rows:
+                    raw_date = str(row.get("date") or row.get("reportDate") or "")
+                    try:
+                        available_dates.append(date.fromisoformat(raw_date))
+                    except ValueError:
+                        continue
+                available_dates = sorted(set(available_dates))
+                if len(available_dates) >= 2:
+                    midpoint = max(1, len(available_dates) // 2)
+                    previous_dates = available_dates[:midpoint]
+                    current_dates = available_dates[midpoint:]
+                    if current_dates and previous_dates:
+                        campaign_current_start = current_dates[0]
+                        campaign_current_end = current_dates[-1]
+                        campaign_previous_start = previous_dates[0]
+                        campaign_previous_end = previous_dates[-1]
+
+            current_rows = _period_rows(campaign_rows, start=campaign_current_start, end=campaign_current_end)
+            previous_rows = _period_rows(campaign_rows, start=campaign_previous_start, end=campaign_previous_end)
             if not current_rows and not previous_rows:
                 continue
 
             campaigns_analyzed.add(f"{platform}:{campaign_id}")
             current = _aggregate(current_rows)
             previous = _aggregate(previous_rows)
-            all_findings.extend(
-                _campaign_findings(
-                    platform=platform,
-                    platform_label=label,
-                    campaign_id=campaign_id,
-                    campaign_name=names[campaign_id],
-                    current=current,
-                    previous=previous,
-                )
+            campaign_snapshots.append({
+                "platform": platform,
+                "platformLabel": label,
+                "campaignId": campaign_id,
+                "campaignName": names[campaign_id],
+                "current": current,
+                "previous": previous,
+                "confidence": _confidence(current, previous),
+            })
+            findings = _campaign_findings(
+                platform=platform,
+                platform_label=label,
+                campaign_id=campaign_id,
+                campaign_name=names[campaign_id],
+                current=current,
+                previous=previous,
             )
+            for finding in findings:
+                finding["comparisonLabel"] = comparison_label
+                finding["actions"] = [
+                    {"label": "Open Optimizer", "href": "/optimizer", "kind": "primary"},
+                    {"label": "Generate variation", "href": "/adgenerator", "kind": "secondary"},
+                ] if finding.get("creativeRelated") else [
+                    {"label": f"Review in {label}", "href": "/insights", "kind": "secondary"}
+                ]
+            all_findings.extend(findings)
 
-    return all_findings, platforms, notes, len(campaigns_analyzed)
+    return all_findings, platforms, notes, len(campaigns_analyzed), comparison_label, campaign_snapshots
 
 
-SEVERITY_ORDER = {
-    "critical": 0,
-    "warning": 1,
-    "opportunity": 2,
-    "healthy": 3,
-    "info": 4,
-}
+
+def _healthy_analysis(
+    snapshots: list[dict[str, Any]],
+    platforms: list[str],
+    campaign_count: int,
+) -> dict[str, Any]:
+    if not snapshots:
+        return {}
+
+    current_total = _aggregate([item["current"] for item in snapshots])
+    previous_total = _aggregate([item["previous"] for item in snapshots])
+    overall_confidence = _confidence(current_total, previous_total)
+
+    positives: list[str] = []
+    ctr_change = _change(_num(current_total.get("ctr")), _num(previous_total.get("ctr")))
+    conversion_change = _change(_num(current_total.get("conversions")), _num(previous_total.get("conversions")))
+    cpc_change = _change(_num(current_total.get("cpc")), _num(previous_total.get("cpc")))
+
+    if ctr_change is None or abs(ctr_change) < MEANINGFUL_CHANGE:
+        positives.append("Engagement remained within the expected range for the comparison period.")
+    if conversion_change is None or abs(conversion_change) < MEANINGFUL_CHANGE:
+        positives.append("Recorded conversion volume did not show a material decline.")
+    if cpc_change is None or cpc_change < MEANINGFUL_CHANGE:
+        positives.append("Click costs remained stable enough that no cost warning was triggered.")
+    if len(platforms) > 1:
+        positives.append("No broad decline was detected across both connected advertising platforms.")
+    if not positives:
+        positives.append("No campaign exceeded ADGen's current evidence thresholds for a material negative change.")
+
+    strongest = max(
+        snapshots,
+        key=lambda item: (
+            _num(item["current"].get("conversions")),
+            _num(item["current"].get("conversionValue")),
+            _num(item["current"].get("ctr")),
+            _num(item["current"].get("impressions")),
+        ),
+    )
+
+    opportunities = [
+        "Keep monitoring the campaigns while the current performance pattern remains stable.",
+        "Review Performance Intelligence for creative patterns worth repeating.",
+        "Generate a controlled variation from a proven creative instead of changing several variables at once.",
+    ]
+    if _num(current_total.get("conversions")) < 4:
+        opportunities.append("Collect more conversion data before making aggressive campaign decisions.")
+    else:
+        opportunities.append("Compare your strongest campaign with lower-performing campaigns to identify repeatable differences.")
+
+    evidence = [
+        {"label": "Campaigns analyzed", "value": f"{campaign_count:,}"},
+        {"label": "Impressions reviewed", "value": f"{_integer(current_total.get('impressions')):,}"},
+        {"label": "Clicks reviewed", "value": f"{_integer(current_total.get('clicks')):,}"},
+        {"label": "Conversions reviewed", "value": f"{_num(current_total.get('conversions')):.2f}"},
+    ]
+
+    strongest_metrics = strongest.get("current") or {}
+    strongest_reason = []
+    if _num(strongest_metrics.get("conversions")) > 0:
+        strongest_reason.append(f"{_num(strongest_metrics.get('conversions')):.2f} conversions")
+    if _num(strongest_metrics.get("ctr")) > 0:
+        strongest_reason.append(f"{_pct(strongest_metrics.get('ctr'))} CTR")
+    if _num(strongest_metrics.get("roas")) > 0:
+        strongest_reason.append(f"{_num(strongest_metrics.get('roas')):.2f}x ROAS")
+
+    return {
+        "confidence": overall_confidence,
+        "whatThisMeans": (
+            "Performance is moving within ADGen's current evidence thresholds. "
+            "This does not mean every campaign is fully optimized; it means no material negative trend was strong enough to require immediate attention."
+        ),
+        "workingWell": positives[:4],
+        "opportunities": opportunities[:4],
+        "evidence": evidence,
+        "strongestCampaign": {
+            "platformLabel": strongest.get("platformLabel"),
+            "campaignName": strongest.get("campaignName"),
+            "summary": ", ".join(strongest_reason) if strongest_reason else "Most established delivery in the current period.",
+        },
+        "recommendation": (
+            "Keep the account stable, preserve what is working, and use Performance Intelligence to create one deliberate new test rather than making broad campaign changes."
+        ),
+        "actions": [
+            {"label": "Open Performance Intelligence", "href": "/insights", "kind": "primary"},
+            {"label": "Generate a variation", "href": "/adgenerator", "kind": "secondary"},
+            {"label": "Open Library", "href": "/library", "kind": "secondary"},
+        ],
+    }
+
+
+def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
+    current = snapshot.get("current") or {}
+    previous = snapshot.get("previous") or {}
+    campaign_name = str(snapshot.get("campaignName") or "Campaign")
+    confidence = str(snapshot.get("confidence") or "low")
+
+    critical = [item for item in findings if item.get("severity") == "critical"]
+    warnings = [item for item in findings if item.get("severity") == "warning"]
+    opportunities_found = [item for item in findings if item.get("severity") == "opportunity"]
+
+    impressions = _integer(current.get("impressions"))
+    clicks = _integer(current.get("clicks"))
+    conversions = _num(current.get("conversions"))
+    spend = _num(current.get("spend"))
+
+    if critical:
+        status, status_label = "priority", "Priority"
+        headline = critical[0].get("title") or f"{campaign_name} needs immediate review"
+        summary = critical[0].get("summary") or "A material negative change crossed ADGen's priority threshold."
+    elif warnings:
+        status, status_label = "attention", "Needs attention"
+        headline = warnings[0].get("title") or f"{campaign_name} deserves review"
+        summary = warnings[0].get("summary") or "A meaningful change crossed ADGen's review threshold."
+    elif opportunities_found:
+        status, status_label = "opportunity", "Opportunity"
+        headline = opportunities_found[0].get("title") or f"{campaign_name} has a positive signal"
+        summary = opportunities_found[0].get("summary") or "Performance improved enough to create a learning opportunity."
+    elif impressions >= MIN_IMPRESSIONS or clicks >= MIN_CLICKS or spend >= MIN_SPEND:
+        status, status_label = "healthy", "Healthy"
+        headline = f"{campaign_name} is performing within its expected range"
+        summary = "No material decline crossed ADGen's evidence thresholds for this campaign."
+    else:
+        status, status_label = "learning", "Still learning"
+        headline = f"{campaign_name} needs more delivery data"
+        summary = "The campaign does not yet have enough recent volume for a reliable performance conclusion."
+
+    strengths: list[str] = []
+    concerns = [str(item.get("summary") or item.get("title") or "") for item in [*critical, *warnings] if item.get("summary") or item.get("title")]
+
+    ctr_change = _change(_num(current.get("ctr")), _num(previous.get("ctr")))
+    conversion_change = _change(_num(current.get("conversions")), _num(previous.get("conversions")))
+    cpc_change = _change(_num(current.get("cpc")), _num(previous.get("cpc")))
+    roas_change = None
+    if current.get("roas") is not None and previous.get("roas") not in (None, 0):
+        roas_change = _change(_num(current.get("roas")), _num(previous.get("roas")))
+
+    if ctr_change is not None and ctr_change >= MEANINGFUL_CHANGE:
+        strengths.append(f"CTR improved {abs(ctr_change) * 100:.0f}% versus the comparison period.")
+    elif ctr_change is None or abs(ctr_change) < MEANINGFUL_CHANGE:
+        strengths.append("Engagement remained within the expected range.")
+
+    if conversion_change is not None and conversion_change >= MEANINGFUL_CHANGE:
+        strengths.append(f"Conversion volume improved {abs(conversion_change) * 100:.0f}%.")
+    elif conversions > 0 and (conversion_change is None or abs(conversion_change) < MEANINGFUL_CHANGE):
+        strengths.append("Recorded conversion volume remained stable.")
+
+    if cpc_change is not None and cpc_change <= -MEANINGFUL_CHANGE:
+        strengths.append(f"Average CPC improved {abs(cpc_change) * 100:.0f}%.")
+    elif cpc_change is None or cpc_change < MEANINGFUL_CHANGE:
+        strengths.append("Click costs did not trigger a material cost warning.")
+
+    if roas_change is not None and roas_change >= MEANINGFUL_CHANGE:
+        strengths.append(f"ROAS improved {abs(roas_change) * 100:.0f}%.")
+
+    opportunities: list[str] = []
+    if status in {"priority", "attention"}:
+        opportunities.append("Review the detailed finding before making broad campaign changes.")
+        if any(item.get("creativeRelated") for item in findings):
+            opportunities.append("Use the Optimizer or generate one controlled creative variation.")
+        else:
+            opportunities.append(f"Review this campaign inside {snapshot.get('platformLabel') or 'the ad platform'}." )
+    elif status == "opportunity":
+        opportunities.append("Identify what changed and preserve the variables associated with the improvement.")
+        opportunities.append("Create a controlled variation while the positive signal is active.")
+    elif status == "healthy":
+        opportunities.append("Preserve the current setup while testing only one deliberate variable at a time.")
+        opportunities.append("Compare this campaign with weaker campaigns to identify repeatable differences.")
+    else:
+        opportunities.append("Allow more impressions, clicks, and conversion data to accumulate before drawing conclusions.")
+
+    evidence = [
+        {"label": "Impressions", "value": f"{impressions:,}"},
+        {"label": "Clicks", "value": f"{clicks:,}"},
+        {"label": "CTR", "value": _pct(current.get("ctr"))},
+        {"label": "Conversions", "value": f"{conversions:.2f}"},
+    ]
+    if spend > 0:
+        evidence.append({"label": "Spend", "value": _money(spend)})
+    if current.get("cpa") is not None:
+        evidence.append({"label": "CPA", "value": _money(current.get("cpa"))})
+    if current.get("roas") is not None:
+        evidence.append({"label": "ROAS", "value": f"{_num(current.get('roas')):.2f}x"})
+
+    return {
+        "id": f"{snapshot.get('platform')}:{snapshot.get('campaignId')}:assessment",
+        "platform": snapshot.get("platform"),
+        "platformLabel": snapshot.get("platformLabel"),
+        "campaignId": str(snapshot.get("campaignId") or ""),
+        "campaignName": campaign_name,
+        "status": status,
+        "statusLabel": status_label,
+        "confidence": confidence,
+        "headline": headline,
+        "summary": summary,
+        "strengths": strengths[:4],
+        "concerns": concerns[:4],
+        "opportunities": opportunities[:3],
+        "evidence": evidence,
+        "currentPeriod": current,
+        "previousPeriod": previous,
+        "findingIds": [str(item.get("id")) for item in findings if item.get("id")],
+        "readOnly": True,
+    }
+
+
+def _campaign_assessments(snapshots: list[dict[str, Any]], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for item in findings:
+        grouped[(str(item.get("platform") or ""), str(item.get("campaignId") or ""))].append(item)
+
+    assessments = [
+        _campaign_assessment(
+            snapshot,
+            grouped.get((str(snapshot.get("platform") or ""), str(snapshot.get("campaignId") or "")), []),
+        )
+        for snapshot in snapshots
+    ]
+    status_order = {"priority": 0, "attention": 1, "opportunity": 2, "healthy": 3, "learning": 4}
+    confidence_order = {"high": 0, "medium": 1, "low": 2}
+    assessments.sort(
+        key=lambda item: (
+            status_order.get(str(item.get("status")), 99),
+            confidence_order.get(str(item.get("confidence")), 99),
+            str(item.get("campaignName") or "").lower(),
+        )
+    )
+    return assessments
+
+
+
+def _performance_intelligence_context(uid: str) -> dict[str, Any]:
+    """Read the existing creative profile without rebuilding or changing it."""
+    try:
+        from performance_intelligence.service import generation_profile
+
+        result = generation_profile(uid) or {}
+        profile = result.get("profile") or {}
+
+        def top_value(key: str) -> str | None:
+            values = profile.get(key) or []
+            if isinstance(values, dict):
+                values = values.get("items") or values.get("values") or []
+            if not isinstance(values, list) or not values:
+                return None
+            first = values[0]
+            if isinstance(first, dict):
+                return str(first.get("value") or first.get("label") or first.get("name") or "").strip() or None
+            return str(first or "").strip() or None
+
+        traits = []
+        trait_map = [
+            ("Visual style", "top_visual_styles"),
+            ("Composition", "top_compositions"),
+            ("CTA opener", "top_cta_openers"),
+            ("Headline opener", "top_headline_openers"),
+            ("Background", "top_backgrounds"),
+            ("Imagery", "top_imagery_types"),
+        ]
+        for label, key in trait_map:
+            value = top_value(key)
+            if value:
+                traits.append({"label": label, "value": value.replace("_", " ")})
+
+        return {
+            "available": bool(traits),
+            "confidence": result.get("confidence", 0),
+            "evidenceCount": int(result.get("evidenceCount") or 0),
+            "qualifiedCount": int(result.get("qualifiedCount") or 0),
+            "positiveCount": int(result.get("positiveCount") or 0),
+            "traits": traits[:6],
+            "recommendation": (
+                "Use these learned traits as controlled inputs when a campaign finding points to a creative issue."
+                if traits
+                else "Performance Intelligence needs more qualified creative evidence before it can guide campaign-specific creative tests."
+            ),
+        }
+    except Exception as exc:
+        return {
+            "available": False,
+            "confidence": 0,
+            "evidenceCount": 0,
+            "qualifiedCount": 0,
+            "positiveCount": 0,
+            "traits": [],
+            "recommendation": "Performance Intelligence is unavailable for this briefing.",
+            "note": str(exc)[:180],
+        }
+
+
+def _cross_platform_insights(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_platform: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in snapshots:
+        by_platform[str(item.get("platform") or "")].append(item)
+    if not by_platform.get("google_ads") or not by_platform.get("meta_ads"):
+        return []
+
+    totals = {
+        platform: {
+            "current": _aggregate([item.get("current") or {} for item in items]),
+            "previous": _aggregate([item.get("previous") or {} for item in items]),
+        }
+        for platform, items in by_platform.items()
+    }
+    g, m = totals["google_ads"], totals["meta_ads"]
+    g_ctr = _change(_num(g["current"].get("ctr")), _num(g["previous"].get("ctr")))
+    m_ctr = _change(_num(m["current"].get("ctr")), _num(m["previous"].get("ctr")))
+    g_conv = _change(_num(g["current"].get("conversions")), _num(g["previous"].get("conversions")))
+    m_conv = _change(_num(m["current"].get("conversions")), _num(m["previous"].get("conversions")))
+    rows: list[dict[str, Any]] = []
+
+    if g_ctr is not None and m_ctr is not None:
+        if g_ctr <= -MEANINGFUL_CHANGE and m_ctr <= -MEANINGFUL_CHANGE:
+            rows.append({
+                "category": "creative",
+                "status": "attention",
+                "title": "Engagement weakened across both platforms",
+                "summary": "Google and Meta both recorded a meaningful CTR decline. A shared creative or offer issue becomes more plausible, although audience and delivery differences still need review.",
+                "confidence": "medium",
+            })
+        elif g_ctr <= -MEANINGFUL_CHANGE and abs(m_ctr) < MEANINGFUL_CHANGE:
+            rows.append({
+                "category": "performance",
+                "status": "learning",
+                "title": "The engagement decline appears isolated to Google",
+                "summary": "Meta engagement remained comparatively stable while Google CTR declined. Search intent, keyword-to-ad alignment, or Google-specific delivery deserves more attention than a broad creative conclusion.",
+                "confidence": "medium",
+            })
+        elif m_ctr <= -MEANINGFUL_CHANGE and abs(g_ctr) < MEANINGFUL_CHANGE:
+            rows.append({
+                "category": "performance",
+                "status": "learning",
+                "title": "The engagement decline appears isolated to Meta",
+                "summary": "Google engagement remained comparatively stable while Meta CTR declined. Audience mix, frequency, placements, or Meta-specific creative delivery deserves review.",
+                "confidence": "medium",
+            })
+        elif g_ctr >= MEANINGFUL_CHANGE and m_ctr >= MEANINGFUL_CHANGE:
+            rows.append({
+                "category": "opportunity",
+                "status": "opportunity",
+                "title": "Engagement improved across both platforms",
+                "summary": "Google and Meta both moved positively. Review recent creative, offer, and messaging changes for patterns worth preserving.",
+                "confidence": "medium",
+            })
+
+    if g_conv is not None and m_conv is not None and g_conv * m_conv < 0:
+        improving = "Google" if g_conv > 0 else "Meta"
+        weakening = "Meta" if g_conv > 0 else "Google"
+        rows.append({
+            "category": "performance",
+            "status": "learning",
+            "title": f"Conversion direction differs by platform",
+            "summary": f"{improving} conversion volume improved while {weakening} moved lower. Treat the issue as platform-specific until more evidence suggests a shared cause.",
+            "confidence": "medium",
+        })
+    return rows[:4]
+
+
+def _campaign_memory(uid: str, assessments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    try:
+        from .store import list_briefings
+        history = list_briefings(uid, limit=8)
+    except Exception:
+        return []
+    previous = history[0] if history else None
+    if not previous:
+        return []
+    old_by_id = {
+        f"{item.get('platform')}:{item.get('campaignId')}": item
+        for item in (previous.get("campaignAssessments") or [])
+    }
+    memory = []
+    for item in assessments:
+        key = f"{item.get('platform')}:{item.get('campaignId')}"
+        old = old_by_id.get(key)
+        if not old:
+            continue
+        old_status, new_status = old.get("status"), item.get("status")
+        if old_status == new_status:
+            if new_status in {"priority", "attention"}:
+                message = "This campaign remains flagged from the previous saved briefing."
+            else:
+                continue
+        elif old_status in {"priority", "attention"} and new_status in {"healthy", "opportunity"}:
+            message = "This campaign improved from its previous flagged state."
+        elif old_status in {"healthy", "opportunity"} and new_status in {"priority", "attention"}:
+            message = "This campaign newly moved into a review state."
+        else:
+            message = f"Campaign status changed from {old.get('statusLabel') or old_status} to {item.get('statusLabel') or new_status}."
+        memory.append({
+            "platformLabel": item.get("platformLabel"),
+            "campaignName": item.get("campaignName"),
+            "previousStatus": old_status,
+            "currentStatus": new_status,
+            "message": message,
+        })
+    return memory[:8]
+
+
+def _briefing_sections(assessments: list[dict[str, Any]], findings: list[dict[str, Any]]) -> dict[str, Any]:
+    working = []
+    attention = []
+    tests = []
+    for item in assessments:
+        if item.get("status") in {"healthy", "opportunity"}:
+            working.append({
+                "platformLabel": item.get("platformLabel"),
+                "campaignName": item.get("campaignName"),
+                "text": (item.get("strengths") or [item.get("summary")])[0],
+            })
+        if item.get("status") in {"priority", "attention"}:
+            attention.append({
+                "platformLabel": item.get("platformLabel"),
+                "campaignName": item.get("campaignName"),
+                "text": item.get("summary"),
+            })
+        for opportunity in (item.get("opportunities") or [])[:1]:
+            tests.append({
+                "platformLabel": item.get("platformLabel"),
+                "campaignName": item.get("campaignName"),
+                "text": opportunity,
+            })
+    return {"working": working[:5], "attention": attention[:5], "tests": tests[:5]}
+
+SEVERITY_ORDER = {"critical": 0, "warning": 1, "opportunity": 2, "healthy": 3, "info": 4}
 CONFIDENCE_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def build_briefing(uid: str) -> dict[str, Any]:
-    findings, platforms, notes, campaign_count = _platform_data(uid)
-    findings.sort(
-        key=lambda item: (
-            SEVERITY_ORDER.get(item.get("severity"), 99),
-            CONFIDENCE_ORDER.get(item.get("confidence"), 99),
-            item.get("campaignName") or "",
-        )
-    )
+def _health(
+    findings: list[dict[str, Any]],
+    campaign_count: int,
+    assessments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    critical = sum(1 for item in findings if item.get("severity") == "critical")
+    warnings = sum(1 for item in findings if item.get("severity") == "warning")
+    opportunities = sum(1 for item in assessments if item.get("status") == "opportunity")
+    healthy = sum(1 for item in assessments if item.get("status") == "healthy")
+    learning = sum(1 for item in assessments if item.get("status") == "learning")
+    priority_campaigns = sum(1 for item in assessments if item.get("status") == "priority")
+    attention_campaigns = sum(1 for item in assessments if item.get("status") == "attention")
 
+    if priority_campaigns:
+        status, label = "priority", "Priority"
+    elif attention_campaigns:
+        status, label = "attention", "Needs attention"
+    elif campaign_count:
+        status, label = "healthy", "Stable"
+    else:
+        status, label = "learning", "Learning"
+
+    return {
+        "status": status,
+        "label": label,
+        "critical": critical,
+        "warnings": warnings,
+        "opportunities": opportunities,
+        "healthy": healthy,
+        "learning": learning,
+        "priorityCampaigns": priority_campaigns,
+        "attentionCampaigns": attention_campaigns,
+        "campaignsAnalyzed": campaign_count,
+    }
+
+
+def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: str = "all") -> dict[str, Any]:
+    from .store import save_briefing
+
+    normalized_range = str(date_range or "LAST_30_DAYS").upper()
+    findings, platforms, notes, campaign_count, comparison_label, snapshots = _platform_data(uid, normalized_range, platform_filter)
+    findings.sort(key=lambda item: (SEVERITY_ORDER.get(item.get("severity"), 99), CONFIDENCE_ORDER.get(item.get("confidence"), 99), item.get("campaignName") or ""))
+
+    assessments = _campaign_assessments(snapshots, findings)
     top = findings[0] if findings else None
-    urgent_count = sum(1 for item in findings if item.get("severity") in {"critical", "warning"})
-    opportunity_count = sum(1 for item in findings if item.get("severity") == "opportunity")
+    urgent_count = sum(1 for item in assessments if item.get("status") in {"priority", "attention"})
+    opportunity_count = sum(1 for item in assessments if item.get("status") == "opportunity")
+    healthy_count = sum(1 for item in assessments if item.get("status") == "healthy")
+    learning_count = sum(1 for item in assessments if item.get("status") == "learning")
+    health = _health(findings, campaign_count, assessments)
+    healthy_analysis = _healthy_analysis(snapshots, platforms, campaign_count) if platforms and not findings else {}
 
     if not platforms:
         headline = "Connect campaign data to begin"
         summary = "Campaign Intelligence needs saved Google Ads or Meta Ads history before it can prepare a briefing."
     elif not findings:
-        headline = "No urgent changes detected"
+        headline = "Performance is stable"
+        status_parts = []
+        if healthy_count:
+            status_parts.append(f"{healthy_count} healthy")
+        if learning_count:
+            status_parts.append(f"{learning_count} still learning")
+        status_text = ", ".join(status_parts) if status_parts else "stable overall"
         summary = (
-            f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} "
-            "and did not find a material seven-day change that met the current evidence thresholds."
+            f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} across {', '.join(platforms)}. "
+            f"Campaign-by-campaign status: {status_text}. No material negative change crossed the evidence thresholds for {comparison_label}."
         )
     else:
         headline = "Your campaign briefing"
         parts = []
         if urgent_count:
-            parts.append(f"{urgent_count} area{'s' if urgent_count != 1 else ''} deserve attention")
+            parts.append(f"{urgent_count} campaign{'s' if urgent_count != 1 else ''} deserve attention")
         if opportunity_count:
-            parts.append(f"{opportunity_count} improvement signal{'s' if opportunity_count != 1 else ''} appeared")
+            parts.append(f"{opportunity_count} campaign opportunity{'ies' if opportunity_count != 1 else 'y'} appeared")
+        if healthy_count:
+            parts.append(f"{healthy_count} campaign{'s remain' if healthy_count != 1 else ' remains'} healthy")
+        if learning_count:
+            parts.append(f"{learning_count} campaign{'s need' if learning_count != 1 else ' needs'} more data")
         summary = (
-            f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} across "
-            f"{', '.join(platforms)} and found " + (" and ".join(parts) if parts else f"{len(findings)} notable changes") + "."
+            f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} across {', '.join(platforms)}. "
+            + (", ".join(parts) if parts else f"{len(findings)} notable changes were found")
+            + "."
         )
 
-    return {
+    pi_context = _performance_intelligence_context(uid)
+    cross_platform = _cross_platform_insights(snapshots)
+    memory = _campaign_memory(uid, assessments)
+    sections = _briefing_sections(assessments, findings)
+
+    executive_briefing = {
+        "greeting": "Campaign briefing",
+        "overview": summary,
+        "whatChanged": (
+            sections.get("attention", [])[:3]
+            if sections.get("attention")
+            else [{"text": "No material negative campaign change crossed ADGen's current thresholds."}]
+        ),
+        "whatIsWorking": sections.get("working", [])[:3],
+        "whatToTest": sections.get("tests", [])[:3],
+        "estimatedReviewTime": "30–60 seconds",
+    }
+
+    briefing = {
         "generatedAt": int(time.time()),
         "readOnly": True,
+        "dateRange": normalized_range,
+        "platformFilter": platform_filter,
+        "analysisMetadata": {
+            "lookback": normalized_range,
+            "platformFilter": platform_filter,
+            "campaignsAnalyzed": campaign_count,
+            "platformsAnalyzed": platforms,
+            "impressionsReviewed": sum(int((item.get("currentPeriod") or {}).get("impressions") or 0) for item in assessments),
+            "clicksReviewed": sum(int((item.get("currentPeriod") or {}).get("clicks") or 0) for item in assessments),
+            "conversionsReviewed": round(sum(float((item.get("currentPeriod") or {}).get("conversions") or 0) for item in assessments), 2),
+            "engineVersion": "Campaign Intelligence 2B.2",
+        },
+        "comparisonLabel": comparison_label,
         "headline": headline,
         "summary": summary,
+        "health": health,
         "topPriorityId": top.get("id") if top else None,
-        "topPriorityText": (
-            f"If you review one thing, review {top.get('campaignName')}: {top.get('title')}."
-            if top
-            else "No single campaign requires immediate attention based on the available evidence."
-        ),
+        "topPriorityText": f"Review {top.get('campaignName')}: {top.get('title')}." if top else "No single campaign requires immediate attention based on the available evidence.",
         "campaignsAnalyzed": campaign_count,
         "platformsAnalyzed": platforms,
-        "findings": findings[:20],
+        "campaignAssessments": assessments,
+        "findings": findings[:40],
         "dataNotes": notes,
+        "healthyAnalysis": healthy_analysis,
+        "executiveBriefing": executive_briefing,
+        "crossPlatformInsights": cross_platform,
+        "performanceIntelligence": pi_context,
+        "campaignMemory": memory,
+        "briefingSections": sections,
     }
+    save_briefing(uid, briefing)
+    return briefing
+

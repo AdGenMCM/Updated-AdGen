@@ -49,6 +49,7 @@ export default function Insights() {
   const [limit, setLimit] = useState(200);
   const [minSpend, setMinSpend] = useState(0);
   const [activeSource, setActiveSource] = useState("intelligence");
+  const [campaignDateRange, setCampaignDateRange] = useState("LAST_30_DAYS");
   const [me, setMe] = useState({
     tier: null,
     status: null,
@@ -543,7 +544,7 @@ export default function Insights() {
           {activeSource === "campaign-intelligence" && (
             <div className="ins-sourceDetailInner ins-intelligenceDetail">
               {canUsePerformanceFeatures ? (
-                <CampaignIntelligencePanel />
+                <CampaignIntelligencePanel dateRange={campaignDateRange} />
               ) : (
                 renderLockedFeature({
                   eyebrow: "Campaign Intelligence",
@@ -622,7 +623,11 @@ export default function Insights() {
           {activeSource === "google" && (
             <div className="ins-sourceDetailInner">
               {canUsePerformanceFeatures ? (
-                <GoogleAdsInsightsPanel />
+                <GoogleAdsInsightsPanel
+                  isActive={activeSource === "google"}
+                  selectedDateRange={campaignDateRange}
+                  onDateRangeChange={setCampaignDateRange}
+                />
               ) : (
                 renderLockedFeature({
                   eyebrow: "Google Ads Integration",
@@ -643,7 +648,11 @@ export default function Insights() {
           {activeSource === "meta" && (
             <div className="ins-sourceDetailInner">
               {canUsePerformanceFeatures ? (
-                <MetaAdsInsightsPanel />
+                <MetaAdsInsightsPanel
+                  isActive={activeSource === "meta"}
+                  selectedDateRange={campaignDateRange}
+                  onDateRangeChange={setCampaignDateRange}
+                />
               ) : (
                 renderLockedFeature({
                   eyebrow: "Meta Ads Integration",

@@ -308,3 +308,742 @@
     grid-template-columns: 1fr;
   }
 }
+
+.ci-headerActions { display:flex; gap:9px; flex-wrap:wrap; }
+.ci-secondaryButton { padding:10px 14px; border:1px solid rgba(255,255,255,.12); border-radius:10px; background:rgba(30,41,59,.72); color:#e2e8f0; font:inherit; font-weight:900; cursor:pointer; }
+.ci-health { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 15px; border:1px solid rgba(255,255,255,.08); border-radius:13px; background:rgba(15,23,42,.6); }
+.ci-health > div:first-child span,.ci-health > div:first-child strong { display:block; }
+.ci-health > div:first-child span { color:#94a3b8; font-size:.62rem; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
+.ci-health > div:first-child strong { margin-top:4px; color:#fff; font-size:1.05rem; }
+.ci-health.priority { border-color:rgba(239,68,68,.3); }
+.ci-health.attention { border-color:rgba(245,158,11,.3); }
+.ci-health.healthy { border-color:rgba(34,197,94,.3); }
+.ci-healthCounts { display:flex; gap:8px; flex-wrap:wrap; }
+.ci-healthCounts span { padding:6px 9px; border-radius:999px; background:rgba(255,255,255,.06); color:#cbd5e1; font-size:.68rem; font-weight:800; }
+.ci-confidence.high { color:#15803d; }
+.ci-confidence.medium { color:#b45309; }
+.ci-confidence.low { color:#64748b; }
+.ci-confidenceNote { padding:10px 12px; border-radius:10px; background:#eff6ff; color:#475569; font-size:.72rem; line-height:1.5; }
+.ci-timelinePanel { padding:15px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.55); }
+.ci-timelineHeader { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; }
+.ci-timelineHeader span,.ci-timelineHeader strong { display:block; }
+.ci-timelineHeader span { color:#60a5fa; font-size:.62rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+.ci-timelineHeader strong { margin-top:5px; color:#fff; }
+.ci-timelineFilters { display:flex; gap:5px; flex-wrap:wrap; }
+.ci-timelineFilters button { padding:6px 9px; border:0; border-radius:8px; background:rgba(255,255,255,.06); color:#94a3b8; font:inherit; font-size:.68rem; font-weight:800; cursor:pointer; }
+.ci-timelineFilters button.active { background:rgba(99,102,241,.24); color:#fff; }
+.ci-timeline { display:grid; gap:0; margin-top:16px; }
+.ci-timeline article { position:relative; display:grid; grid-template-columns:18px 1fr; gap:10px; padding:0 0 16px; }
+.ci-timeline article:not(:last-child)::before { content:""; position:absolute; left:5px; top:12px; bottom:0; width:1px; background:rgba(148,163,184,.25); }
+.ci-timelineDot { width:11px; height:11px; margin-top:3px; border-radius:50%; background:#6366f1; box-shadow:0 0 0 4px rgba(99,102,241,.14); }
+.ci-timeline small,.ci-timeline strong,.ci-timeline p { display:block; }
+.ci-timeline small { color:#64748b; font-size:.68rem; }
+.ci-timeline strong { margin-top:4px; color:#e2e8f0; font-size:.82rem; }
+.ci-timeline p { margin:4px 0 0; color:#94a3b8; font-size:.74rem; }
+.ci-timelineEmpty { padding:18px 0 2px; color:#64748b; text-align:center; }
+.ci-actions a.primary { background:#2563eb; }
+.ci-actions a.secondary { background:#0f172a; }
+@media(max-width:850px){ .ci-headerActions,.ci-health,.ci-timelineHeader{align-items:stretch;flex-direction:column}.ci-headerActions button{width:100%}.ci-healthCounts{justify-content:flex-start}.ci-timelineFilters{width:100%}.ci-timelineFilters button{flex:1} }
+
+
+/* Complete stable-account briefing */
+.ci-healthyBriefing {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.ci-healthyIntro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ci-healthyIntro span:first-child,
+.ci-healthySection > span,
+.ci-strongestCampaign span,
+.ci-analystRecommendation span {
+  display: block;
+  color: #60a5fa;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ci-healthyIntro h4 {
+  margin: 5px 0 7px;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.ci-healthyIntro p,
+.ci-strongestCampaign p,
+.ci-analystRecommendation p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.55;
+}
+
+.ci-healthyConfidence {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.68rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ci-healthyConfidence.high { color: #86efac; }
+.ci-healthyConfidence.medium { color: #fcd34d; }
+.ci-healthyConfidence.low { color: #cbd5e1; }
+
+.ci-healthyEvidence {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ci-healthyEvidence > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  background: rgba(30, 41, 59, 0.64);
+}
+
+.ci-healthyEvidence small,
+.ci-healthyEvidence strong { display: block; }
+
+.ci-healthyEvidence small {
+  color: #94a3b8;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ci-healthyEvidence strong {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-healthyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ci-healthySection {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.58);
+}
+
+.ci-healthySection.working { border: 1px solid rgba(34, 197, 94, 0.18); }
+.ci-healthySection.opportunities { border: 1px solid rgba(245, 158, 11, 0.18); }
+
+.ci-healthySection ul {
+  margin: 9px 0 0;
+  padding-left: 18px;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.ci-healthySection li + li { margin-top: 6px; }
+
+.ci-strongestCampaign,
+.ci-analystRecommendation {
+  padding: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.07);
+}
+
+.ci-strongestCampaign strong {
+  display: block;
+  margin: 5px 0 4px;
+  color: #fff;
+}
+
+.ci-healthyActions { margin-top: 1px; }
+
+.ci-healthyNotes {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+@media (max-width: 850px) {
+  .ci-healthyIntro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ci-healthyConfidence { align-self: flex-start; }
+
+  .ci-healthyEvidence,
+  .ci-healthyGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Multi-campaign direct analysis */
+.ci-campaignBreakdown {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.ci-campaignBreakdownHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ci-campaignBreakdownHeader span,
+.ci-campaignAssessmentHeadline span,
+.ci-campaignAssessmentSection > span {
+  display: block;
+  color: #60a5fa;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ci-campaignBreakdownHeader strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.ci-campaignBreakdownHeader p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.ci-campaignCount {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.14);
+  color: #c4b5fd !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.ci-campaignAssessmentList {
+  display: grid;
+  gap: 9px;
+}
+
+.ci-campaignAssessment {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.48);
+}
+
+.ci-campaignAssessment.priority { border-left-color: #ef4444; }
+.ci-campaignAssessment.attention { border-left-color: #f59e0b; }
+.ci-campaignAssessment.opportunity { border-left-color: #8b5cf6; }
+.ci-campaignAssessment.healthy { border-left-color: #22c55e; }
+.ci-campaignAssessment.learning { border-left-color: #64748b; }
+
+.ci-campaignAssessmentTop {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ci-campaignStatus {
+  min-width: 90px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  text-align: center;
+  color: #e2e8f0;
+  font-size: 0.61rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ci-campaignStatus.priority { background: rgba(239, 68, 68, 0.14); color: #fca5a5; }
+.ci-campaignStatus.attention { background: rgba(245, 158, 11, 0.14); color: #fcd34d; }
+.ci-campaignStatus.opportunity { background: rgba(139, 92, 246, 0.16); color: #c4b5fd; }
+.ci-campaignStatus.healthy { background: rgba(34, 197, 94, 0.14); color: #86efac; }
+.ci-campaignStatus.learning { background: rgba(100, 116, 139, 0.18); color: #cbd5e1; }
+
+.ci-campaignAssessmentCopy {
+  min-width: 0;
+}
+
+.ci-campaignAssessmentCopy small,
+.ci-campaignAssessmentCopy strong,
+.ci-campaignAssessmentCopy p {
+  display: block;
+}
+
+.ci-campaignAssessmentCopy small {
+  color: #94a3b8;
+  font-size: 0.65rem;
+}
+
+.ci-campaignAssessmentCopy strong {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-campaignAssessmentCopy p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.ci-campaignAssessmentDetails {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(2, 6, 23, 0.18);
+}
+
+.ci-campaignAssessmentHeadline strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+}
+
+.ci-campaignEvidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 7px;
+}
+
+.ci-campaignEvidence > div {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.58);
+}
+
+.ci-campaignEvidence small,
+.ci-campaignEvidence strong {
+  display: block;
+}
+
+.ci-campaignEvidence small {
+  color: #64748b;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ci-campaignEvidence strong {
+  margin-top: 5px;
+  color: #fff;
+}
+
+.ci-campaignAssessmentGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ci-campaignAssessmentSection {
+  padding: 12px;
+  border-radius: 11px;
+  background: rgba(30, 41, 59, 0.52);
+}
+
+.ci-campaignAssessmentSection.positive { border: 1px solid rgba(34, 197, 94, 0.16); }
+.ci-campaignAssessmentSection.concern { border: 1px solid rgba(239, 68, 68, 0.14); }
+.ci-campaignAssessmentSection.test { border: 1px solid rgba(245, 158, 11, 0.16); }
+
+.ci-campaignAssessmentSection ul {
+  margin: 8px 0 0;
+  padding-left: 17px;
+  color: #cbd5e1;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.ci-campaignAssessmentSection li + li { margin-top: 5px; }
+
+.ci-campaignAssessmentSection p {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.ci-relatedFindingButton {
+  justify-self: start;
+  padding: 8px 11px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .ci-campaignAssessmentTop {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ci-campaignAssessmentTop .ci-confidence,
+  .ci-campaignAssessmentTop .ci-expandLabel {
+    justify-self: start;
+    grid-column: 2;
+  }
+
+  .ci-campaignAssessmentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .ci-campaignBreakdownHeader {
+    flex-direction: column;
+  }
+
+  .ci-campaignAssessmentTop {
+    grid-template-columns: 1fr;
+  }
+
+  .ci-campaignAssessmentTop .ci-confidence,
+  .ci-campaignAssessmentTop .ci-expandLabel {
+    grid-column: auto;
+  }
+
+  .ci-campaignStatus {
+    justify-self: start;
+  }
+}
+
+/* Phase 2B.1 analyst briefing, cross-platform reasoning, memory, and PI connection */
+.ci-analystBriefing,
+.ci-crossPlatform,
+.ci-memory,
+.ci-piConnection {
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.ci-analystBriefingTop,
+.ci-sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ci-analystBriefingTop span,
+.ci-sectionHeading span {
+  display: block;
+  color: #a5b4fc;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ci-analystBriefingTop h4,
+.ci-sectionHeading strong {
+  display: block;
+  margin: 4px 0 0;
+  color: #fff;
+}
+
+.ci-analystBriefingTop p,
+.ci-piConnection > p {
+  margin: 7px 0 0;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.ci-analystBriefingTop > small,
+.ci-piConnection > small {
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.ci-briefingColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.ci-briefingColumns > div {
+  padding: 13px;
+  border-radius: 12px;
+  background: rgba(31, 41, 55, 0.55);
+}
+
+.ci-briefingColumns > div > span {
+  color: #c4b5fd;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ci-briefingColumns p {
+  margin: 9px 0 0;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.ci-briefingColumns p strong {
+  color: #fff;
+}
+
+.ci-crossPlatformList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ci-crossPlatformList article {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(31, 41, 55, 0.52);
+}
+
+.ci-crossPlatformList article.attention {
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.ci-crossPlatformList article.opportunity {
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.ci-crossPlatformList article > span,
+.ci-memory > div > span {
+  color: #a5b4fc;
+  font-size: 0.63rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ci-crossPlatformList article strong,
+.ci-memory > div strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+}
+
+.ci-crossPlatformList article p,
+.ci-memory > div p {
+  margin: 6px 0 0;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.ci-crossPlatformList article small {
+  display: block;
+  margin-top: 8px;
+  color: #94a3b8;
+}
+
+.ci-memory {
+  display: grid;
+  gap: 10px;
+}
+
+.ci-memory > div:not(.ci-sectionHeading) {
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ci-piTraits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.ci-piTraits > div {
+  padding: 12px;
+  border-radius: 11px;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.ci-piTraits small,
+.ci-piTraits strong {
+  display: block;
+}
+
+.ci-piTraits small {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ci-piTraits strong {
+  margin-top: 5px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+@media (max-width: 850px) {
+  .ci-briefingColumns,
+  .ci-piTraits {
+    grid-template-columns: 1fr;
+  }
+
+  .ci-analystBriefingTop,
+  .ci-sectionHeading {
+    flex-direction: column;
+  }
+}
+
+/* Phase 2B.2 analysis controls */
+.ci-analysisControl {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(420px, 1.3fr);
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(15, 23, 42, 0.72));
+}
+
+.ci-analysisControlIntro span,
+.ci-analysisControlIntro strong,
+.ci-analysisControlIntro p { display: block; }
+.ci-analysisControlIntro span { color: #a5b4fc; font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.ci-analysisControlIntro strong { margin-top: 6px; color: #fff; font-size: 1.05rem; }
+.ci-analysisControlIntro p { margin: 7px 0 0; color: #9ca3af; font-size: .78rem; line-height: 1.5; }
+
+.ci-analysisFields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+.ci-analysisFields label { display: grid; gap: 6px; }
+.ci-analysisFields label > span { color: #9ca3af; font-size: .62rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.ci-analysisFields select {
+  min-height: 42px;
+  padding: 9px 32px 9px 11px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 800;
+}
+.ci-analyzeButton {
+  min-height: 42px;
+  padding: 10px 15px;
+  border: 1px solid #4f46e5;
+  border-radius: 10px;
+  background: #4f46e5;
+  color: #fff;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ci-analyzeButton:disabled { opacity: .6; cursor: wait; }
+.ci-analysisProgress { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.07); color: #c7d2fe; font-size: .76rem; }
+.ci-analysisProgress > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.ci-analysisProgress span { padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.05); }
+.ci-analysisProgress span.success { color: #86efac; }
+.ci-analysisProgress span.error { color: #fca5a5; }
+.ci-analysisWarning { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid rgba(245,158,11,.24); border-radius: 10px; background: rgba(245,158,11,.08); color: #fcd34d; font-size: .75rem; }
+
+.ci-analysisMeta { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.ci-analysisMeta > div { min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(31,41,55,.55); }
+.ci-analysisMeta small, .ci-analysisMeta strong { display: block; }
+.ci-analysisMeta small { color: #6b7280; font-size: .56rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.ci-analysisMeta strong { margin-top: 6px; overflow: hidden; color: #fff; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1050px) {
+  .ci-analysisControl { grid-template-columns: 1fr; }
+  .ci-analysisMeta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .ci-analysisFields { grid-template-columns: 1fr; }
+  .ci-analysisMeta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ci-analysisProgress { align-items: flex-start; flex-direction: column; }
+}
+
+/* Phase 2B.2 UI refinement: one analysis action and clearer hierarchy */
+.ci-analysisControl {
+  margin-bottom: 14px;
+}
+
+.ci-header {
+  margin-top: 2px;
+}
+
+.ci-analysisMeta {
+  margin: 12px 0 14px;
+}
+
+.ci-analyzeButton {
+  min-width: 190px;
+  white-space: nowrap;
+}
+
+.ci-analysisProgress {
+  position: relative;
+  overflow: hidden;
+}
+
+.ci-analysisProgress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #6366f1;
+}
+
+.ci-analysisProgress > strong {
+  padding-left: 6px;
+}
+
+@media (max-width: 850px) {
+  .ci-analyzeButton {
+    width: 100%;
+    min-width: 0;
+  }
+}
