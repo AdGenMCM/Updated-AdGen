@@ -26,7 +26,7 @@ FEATURES: Dict[str, Dict[str, Any]] = {
     },
     "creative_studio": {
         "label": "Creative Studio",
-        "route": "/texteditor",
+        "route": "/creative-studio",
         "availability": (
             "tiers:trial_monthly,early_access,starter_monthly,"
             "pro_monthly,business_monthly"
@@ -51,7 +51,7 @@ FEATURES: Dict[str, Dict[str, Any]] = {
     },
     "brand_kit": {
         "label": "Brand Kit",
-        "route": "/brandkit",
+        "route": "/brand-kit",
         "availability": "limit:brand_kits",
     },
     "optimizer": {

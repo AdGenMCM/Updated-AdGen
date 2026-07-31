@@ -149,9 +149,9 @@ def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> lis
             body = f"Your workspace is ready and you still have {remaining} image generation{'s' if remaining != 1 else ''} available. Create your first campaign-ready ad in a few minutes."
             candidates.append(Candidate("first_image", "activation", "Create your first ADGen image", body, "Create my first image", "/adgenerator", 100))
         if settings.campaigns["brand_kit"] and age_days >= 3 and int(limits.get("brand_kits") or 0) > 0 and not _brand_kit_exists(uid):
-            candidates.append(Candidate("brand_kit", "activation", "Keep every creative on brand", "Set up your Brand Kit once, then apply your brand identity across future image and video generations.", "Create my Brand Kit", "/brandkit", 85))
+            candidates.append(Candidate("brand_kit", "activation", "Keep every creative on brand", "Set up your Brand Kit once, then apply your brand identity across future image and video generations.", "Create my Brand Kit", "/brand-kit", 85))
         if settings.campaigns["first_video"] and age_days >= 5 and has_feature(tier, "video_generation") and int(limits.get("video_credits") or 0) > 0 and not video_exists:
-            candidates.append(Candidate("first_video", "activation", "Turn your creative into a video ad", "Your plan includes Video Ads. Animate a product image or generate a campaign-ready marketing video from your prompt.", "Create a video ad", "/videoads", 80))
+            candidates.append(Candidate("first_video", "activation", "Turn your creative into a video ad", "Your plan includes Video Ads. Animate a product image or generate a campaign-ready marketing video from your prompt.", "Create a video ad", "/video-ads", 80))
         if settings.campaigns["google_ads"] and age_days >= 7 and has_feature(tier, "performance_tracking") and not _connection_exists("google_ads_connections", uid):
             candidates.append(Candidate("google_ads", "activation", "Connect Google Ads to ADGen", "Bring campaign performance into ADGen so your creative intelligence can learn from real results.", "Connect Google Ads", "/insights", 75))
         if settings.campaigns["meta_ads"] and age_days >= 8 and has_feature(tier, "performance_tracking") and not _connection_exists("meta_ads_connections", uid):

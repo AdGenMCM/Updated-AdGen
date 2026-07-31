@@ -349,6 +349,81 @@ const markAllRead = async () => {
   setNotificationBusy(false);
 };
 
+
+const normalizeNotificationLink = (rawLink) => {
+  if (!rawLink || typeof rawLink !== "string") {
+    return null;
+  }
+
+  const trimmedLink = rawLink.trim();
+
+  if (!trimmedLink.startsWith("/")) {
+    return "/dashboard";
+  }
+
+  const legacyRouteMap = {
+    "/brandkit": "/brand-kit",
+    "/videoads": "/video-ads",
+    "/texteditor": "/creative-studio",
+  };
+
+  const [pathname, ...queryParts] = trimmedLink.split("?");
+  const queryString = queryParts.join("?");
+  const normalizedPath = legacyRouteMap[pathname] || pathname;
+
+  return queryString
+    ? `${normalizedPath}?${queryString}`
+    : normalizedPath;
+};
+
+const getSafeNotificationDestination = (notification) => {
+  const normalizedLink = normalizeNotificationLink(
+    notification?.link
+  );
+
+  if (!normalizedLink) {
+    return "/dashboard";
+  }
+
+  const pathname = normalizedLink.split("?")[0];
+
+  const freePlanGatedRoutes = [
+    "/video-ads",
+    "/brand-kit",
+    "/creative-studio",
+    "/optimizer",
+    "/library",
+    "/insights",
+    "/reports",
+    "/campaigns",
+    "/admin",
+  ];
+
+  const isFreeGatedRoute = freePlanGatedRoutes.some(
+    (route) =>
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+
+  if (isFreePlan && isFreeGatedRoute) {
+    return "/subscribe?upgrade=1";
+  }
+
+  if (
+    !isAdmin &&
+    (
+      pathname === "/admin" ||
+      pathname.startsWith("/admin/") ||
+      pathname === "/campaigns" ||
+      pathname.startsWith("/campaigns/")
+    )
+  ) {
+    return "/dashboard";
+  }
+
+  return normalizedLink;
+};
+
   return (
     <div
       className={[
@@ -622,18 +697,24 @@ const markAllRead = async () => {
                   className={`dash-notification-item ${
                   notification.read ? "" : "is-unread"
                   }`}
-                  onClick={async()=>{
+                  onClick={async () => {
+                    try {
+                      await markRead(notification);
+                    } catch (error) {
+                      console.error(
+                        "Unable to mark notification as read:",
+                        error
+                      );
+                    }
 
-                  await markRead(notification);
+                    setNotificationOpen(false);
 
-                  setNotificationOpen(false);
+                    const destination =
+                      getSafeNotificationDestination(notification);
 
-                  if(notification.link){
-
-                  navigate(notification.link);
-
-                  }
-
+                    navigate(destination, {
+                      replace: true,
+                    });
                   }}
 
                   >
