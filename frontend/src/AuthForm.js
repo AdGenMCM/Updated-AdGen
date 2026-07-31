@@ -309,19 +309,23 @@ export default function AuthForm({ onLogin }) {
         return;
       }
 
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
 
-      if (!credential.user.emailVerified) {
+      await credential.user.reload();
+
+      const refreshedUser = auth.currentUser;
+
+      if (!refreshedUser?.emailVerified) {
         setUnverifiedUser(credential.user);
         showMessage("Please verify your email before signing in.");
         return;
       }
 
-      // Authentication and navigation must never depend on notification or
-      // email delivery. Complete the sign-in first, then run verified-email
-      // onboarding as a best-effort background task only when the profile says
-      // a welcome email is still pending.
-      await continueAfterAuthentication(credential.user);
+      await continueAfterAuthentication(refreshedUser);
 
       void (async () => {
         try {
@@ -334,12 +338,12 @@ export default function AuthForm({ onLogin }) {
             onboarding.welcomeEmailCompleted !== true
           ) {
             try {
-              await createWelcomeNotification(credential.user);
+              await createWelcomeNotification(refreshedUser);
             } catch (notificationError) {
               console.warn("Welcome notification could not be created:", notificationError);
             }
 
-            await completeNewUserOnboarding(credential.user, "email");
+            await completeNewUserOnboarding(refreshedUser, "email");
           }
         } catch (onboardingError) {
           console.warn("Verified-email onboarding check failed:", onboardingError);
