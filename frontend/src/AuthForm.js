@@ -18,6 +18,7 @@ import { ArrowRight, Check, Eye, EyeOff, Image, Video, Palette, BarChart3 } from
 import { trackEvent } from "./analytics/tracking";
 
 const db = getFirestore();
+const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: "select_account",
@@ -58,6 +59,40 @@ export default function AuthForm({ onLogin }) {
   };
 
 
+
+  const completeNewUserOnboarding = async (user, authProvider) => {
+    if (!user?.uid) return null;
+
+    try {
+      const idToken = await user.getIdToken(true);
+      const response = await fetch(
+        `${API_BASE_URL}/email-engine/onboarding/complete`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ authProvider }),
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result?.detail || "The welcome email onboarding step could not be completed."
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // Account creation must remain successful even if the email provider is
+      // temporarily unavailable. The idempotent endpoint is safe to retry.
+      console.warn("New-user email onboarding did not complete:", error);
+      return null;
+    }
+  };
 
   const createWelcomeNotification = async (user) => {
     if (!user?.uid) return;
@@ -191,6 +226,7 @@ export default function AuthForm({ onLogin }) {
 
       if (isNewUser) {
         await createWelcomeNotification(user);
+        await completeNewUserOnboarding(user, "google");
 
         trackEvent("signup_completed", {
           method: "google",
@@ -245,11 +281,14 @@ export default function AuthForm({ onLogin }) {
             tier: "free",
             subscriptionStatus: "inactive",
             monthlyUsage: 0,
+            authProvider: "email",
+            onboarding: {
+              welcomeEmailPending: true,
+              welcomeEmailCompleted: false,
+            },
           },
           { merge: true }
         );
-
-        await createWelcomeNotification(credential.user);
 
         trackEvent("signup_completed", {
           method: "email",
@@ -271,7 +310,34 @@ export default function AuthForm({ onLogin }) {
         return;
       }
 
+      // Authentication and navigation must never depend on notification or
+      // email delivery. Complete the sign-in first, then run verified-email
+      // onboarding as a best-effort background task only when the profile says
+      // a welcome email is still pending.
       await continueAfterAuthentication(credential.user);
+
+      void (async () => {
+        try {
+          const profileSnapshot = await getDoc(doc(db, "users", credential.user.uid));
+          const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
+          const onboarding = profileData?.onboarding || {};
+
+          if (
+            onboarding.welcomeEmailPending === true &&
+            onboarding.welcomeEmailCompleted !== true
+          ) {
+            try {
+              await createWelcomeNotification(credential.user);
+            } catch (notificationError) {
+              console.warn("Welcome notification could not be created:", notificationError);
+            }
+
+            await completeNewUserOnboarding(credential.user, "email");
+          }
+        } catch (onboardingError) {
+          console.warn("Verified-email onboarding check failed:", onboardingError);
+        }
+      })();
     } catch (error) {
       const code = error?.code || "";
 

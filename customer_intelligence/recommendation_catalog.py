@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+RECOMMENDATIONS: Dict[str, Dict[str, Any]] = {
+    "create_first_creative": {
+        "title": "Create your first creative",
+        "body": "Generate your first campaign-ready image and start building your Library.",
+        "actionLabel": "Create an image",
+        "actionPath": "/adgenerator",
+        "category": "activation",
+        "priority": 100,
+    },
+    "create_second_creative": {
+        "title": "Create another variation",
+        "body": "A second version gives you something meaningful to compare and refine.",
+        "actionLabel": "Create another image",
+        "actionPath": "/adgenerator",
+        "category": "activation",
+        "priority": 90,
+    },
+    "complete_brand_kit": {
+        "title": "Complete your Brand Kit",
+        "body": "Apply your brand colors, voice, logo, and creative preferences automatically.",
+        "actionLabel": "Open Brand Kit",
+        "actionPath": "/brandkit",
+        "category": "activation",
+        "priority": 85,
+    },
+    "try_creative_studio": {
+        "title": "Refine a creative in Creative Studio",
+        "body": "Turn a generated asset into a polished, editable design.",
+        "actionLabel": "Open Creative Studio",
+        "actionPath": "/texteditor",
+        "category": "engagement",
+        "priority": 70,
+    },
+    "create_first_video": {
+        "title": "Create your first video ad",
+        "body": "Turn your product or image into a short campaign-ready video.",
+        "actionLabel": "Create a video",
+        "actionPath": "/video-ads",
+        "category": "engagement",
+        "priority": 65,
+    },
+    "connect_google_ads": {
+        "title": "Connect Google Ads",
+        "body": "Bring campaign performance into ADGen and start learning what works.",
+        "actionLabel": "Connect Google Ads",
+        "actionPath": "/insights",
+        "category": "performance",
+        "priority": 60,
+    },
+    "connect_meta_ads": {
+        "title": "Connect Meta Ads",
+        "body": "Bring Meta campaign performance into ADGen alongside your other creative data.",
+        "actionLabel": "Connect Meta Ads",
+        "actionPath": "/insights",
+        "category": "performance",
+        "priority": 58,
+    },
+    "use_reporting": {
+        "title": "Review campaign reporting",
+        "body": "Turn creative and campaign activity into a clearer performance picture.",
+        "actionLabel": "Open Reporting",
+        "actionPath": "/reports",
+        "category": "performance",
+        "priority": 55,
+    },
+    "use_performance_intelligence": {
+        "title": "Use Performance Intelligence",
+        "body": "Use your connected performance data to identify patterns that can improve future creative.",
+        "actionLabel": "Open Insights",
+        "actionPath": "/insights",
+        "category": "performance",
+        "priority": 53,
+    },
+    "review_creative_dna": {
+        "title": "Review your Creative DNA",
+        "body": "See the creative patterns ADGen has learned from your strongest performance signals.",
+        "actionLabel": "View Creative DNA",
+        "actionPath": "/insights",
+        "category": "performance",
+        "priority": 52,
+    },
+    "use_optimizer": {
+        "title": "Optimize a creative",
+        "body": "Analyze one of your current ads and generate a stronger version.",
+        "actionLabel": "Open Optimizer",
+        "actionPath": "/optimizer",
+        "category": "performance",
+        "priority": 50,
+    },
+    "upgrade_video": {
+        "title": "Unlock more video creation",
+        "body": "Upgrade your plan to continue creating video ads.",
+        "actionLabel": "View plans",
+        "actionPath": "/subscribe?upgrade=1",
+        "category": "upgrade",
+        "priority": 95,
+    },
+    "upgrade_reporting": {
+        "title": "Unlock performance reporting",
+        "body": "Upgrade to connect campaign data and measure creative performance.",
+        "actionLabel": "View plans",
+        "actionPath": "/subscribe?upgrade=1",
+        "category": "upgrade",
+        "priority": 95,
+    },
+    "upgrade_optimizer": {
+        "title": "Unlock the Optimizer",
+        "body": "Upgrade to analyze existing ads and generate improved versions.",
+        "actionLabel": "View plans",
+        "actionPath": "/subscribe?upgrade=1",
+        "category": "upgrade",
+        "priority": 95,
+    },
+    "resolve_payment": {
+        "title": "Update your billing method",
+        "body": "Your latest payment needs attention to keep your workspace active.",
+        "actionLabel": "Open billing",
+        "actionPath": "/account",
+        "category": "billing",
+        "priority": 1000,
+    },
+    "reactivate_subscription": {
+        "title": "Reactivate your workspace",
+        "body": "Choose a plan to restore paid features and continue creating.",
+        "actionLabel": "Choose a plan",
+        "actionPath": "/subscribe?upgrade=1",
+        "category": "billing",
+        "priority": 900,
+    },
+}
+
+
+def get_recommendation(
+    key: str,
+    *,
+    reason: str,
+    metadata: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    item = RECOMMENDATIONS[key]
+    return {
+        "key": key,
+        "title": item["title"],
+        "body": item["body"],
+        "actionLabel": item["actionLabel"],
+        "actionPath": item["actionPath"],
+        "category": item["category"],
+        "priority": int(item["priority"]),
+        "reason": reason,
+        "metadata": metadata or {},
+    }

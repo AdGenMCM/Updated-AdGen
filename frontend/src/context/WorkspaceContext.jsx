@@ -126,6 +126,7 @@ export function WorkspaceProvider({ children }) {
   const [videoUsage, setVideoUsage] = useState(null);
   const [storageUsage, setStorageUsage] = useState(null);
   const [recentCreatives, setRecentCreatives] = useState([]);
+  const [customerIntelligence, setCustomerIntelligence] = useState(null);
   const [brandKitStatus, setBrandKitStatus] = useState(
     getBrandKitStatus(null)
   );
@@ -276,6 +277,7 @@ export function WorkspaceProvider({ children }) {
           videoJobsRes,
           imageJobsRes,
           brandKitsRes,
+          customerIntelligenceRes,
           userSnap,
         ] = await Promise.all([
           fetch(
@@ -308,6 +310,11 @@ export function WorkspaceProvider({ children }) {
             requestOptions
           ),
 
+          fetch(
+            `${apiBase}/customer-intelligence/next-best-action`,
+            requestOptions
+          ),
+
           getDoc(
             doc(
               db,
@@ -324,6 +331,7 @@ export function WorkspaceProvider({ children }) {
           videoJobsData,
           imageJobsData,
           brandKitsData,
+          customerIntelligenceData,
         ] = await Promise.all([
           safeJson(usageRes, null),
           safeJson(videoRes, null),
@@ -331,6 +339,7 @@ export function WorkspaceProvider({ children }) {
           safeJson(videoJobsRes, { items: [] }),
           safeJson(imageJobsRes, { items: [] }),
           safeJson(brandKitsRes, { items: [] }),
+          safeJson(customerIntelligenceRes, null),
         ]);
 
         setUsage(usageData);
@@ -338,6 +347,7 @@ export function WorkspaceProvider({ children }) {
         setStorageUsage(
           entitlementsData?.usage?.storage || null
         );
+        setCustomerIntelligence(customerIntelligenceData);
 
         const brandKitItems = Array.isArray(
           brandKitsData?.items
@@ -442,6 +452,7 @@ export function WorkspaceProvider({ children }) {
       setVideoUsage(null);
       setStorageUsage(null);
       setRecentCreatives([]);
+      setCustomerIntelligence(null);
       setBrandKitStatus(
         getBrandKitStatus(null)
       );
@@ -475,6 +486,7 @@ export function WorkspaceProvider({ children }) {
       videoUsage,
       storageUsage,
       recentCreatives,
+      customerIntelligence,
       brandKitStatus,
       loading,
       lastUpdated,
@@ -490,6 +502,7 @@ export function WorkspaceProvider({ children }) {
       videoUsage,
       storageUsage,
       recentCreatives,
+      customerIntelligence,
       brandKitStatus,
       loading,
       lastUpdated,

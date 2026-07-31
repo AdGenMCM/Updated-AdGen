@@ -113,6 +113,13 @@ from performance_intelligence.service import generation_profile as get_intellige
 #Reporting 
 from reporting_engine import router as reporting_router
 
+# Customer Intelligence
+from customer_intelligence.routes import router as customer_intelligence_router
+from customer_intelligence.event_service import track_event
+
+#Email Engine
+from email_engine.routes import router as email_engine_router
+
 load_dotenv(override=True)
 
 app = FastAPI()
@@ -129,6 +136,9 @@ app.include_router(meta_ads_router)
 app.include_router(performance_intelligence_router)
 
 app.include_router(reporting_router)
+app.include_router(customer_intelligence_router)
+
+app.include_router(email_engine_router)
 
 
 class AdminRequestTierBody(BaseModel):
@@ -2387,6 +2397,19 @@ async def save_creative_studio_image(
         document_ref.set(item, merge=is_update)
         firestore_saved = True
 
+        track_event(
+            db,
+            uid,
+            "creative_studio.project_saved",
+            event_id=f"creative_studio:{job_id}:{now}:saved",
+            metadata={
+                "projectId": job_id,
+                "created": not is_update,
+                "updated": is_update,
+                "sourceImageJobId": item.get("sourceImageJobId"),
+            },
+        )
+
         if is_update and existing_item:
             old_storage_path = existing_item.get("storagePath")
             old_size_bytes = int(existing_item.get("fileSizeBytes") or 0)
@@ -2949,6 +2972,20 @@ async def generate_ad(
         cap_result = check_and_increment_usage(db, uid, tier)
 
         if not cap_result["allowed"]:
+            track_event(
+                db,
+                uid,
+                "usage.limit_reached",
+                event_id=(
+                    f"images:{cap_result.get('periodKey') or cap_result.get('month')}:limit"
+                ),
+                metadata={
+                    "resource": "images",
+                    "used": cap_result.get("used"),
+                    "cap": cap_result.get("cap"),
+                },
+            )
+
             create_usage_notifications(
                 db,
                 uid,
@@ -3522,6 +3559,22 @@ It should be visually impressive enough to appear in a professional design portf
                     "model": OPENAI_IMAGE_MODEL,
                 }
             )
+            track_event(
+                db,
+                uid,
+                "creative.generated",
+                event_id=f"image:{image_job_id}:generated",
+                metadata={
+                    "creativeId": image_job_id,
+                    "creativeType": "image",
+                    "source": "ad_generator",
+                    "platform": platform,
+                    "stylePreset": style,
+                    "aspectRatio": aspect_ratio,
+                    "usedBrandKit": bool(brand_kit_context),
+                    "usedPerformanceIntelligence": use_performance_intelligence,
+                },
+            )
         except Exception:
             pass
 
@@ -3977,6 +4030,17 @@ confidence
             progress_job_id,
             "saving_results",
         )
+        track_event(
+            db,
+            uid,
+            "optimizer.completed",
+            event_id=f"optimizer:{progress_job_id or uuid.uuid4().hex}:completed",
+            metadata={
+                "overallScore": obj.get("overall_score"),
+                "confidence": obj.get("confidence"),
+                "source": analysis_source,
+            },
+        )
         return OptimizeAdResponse(**obj)
 
     except HTTPException:
@@ -4380,6 +4444,21 @@ Improve it.
                     },
                     "model": OPENAI_IMAGE_MODEL,
                 }
+            )
+            track_event(
+                db,
+                uid,
+                "creative.generated",
+                event_id=f"image:{image_job_id}:generated",
+                metadata={
+                    "creativeId": image_job_id,
+                    "creativeType": "image",
+                    "source": "optimizer_generate",
+                    "stylePreset": style,
+                    "aspectRatio": aspect_ratio,
+                    "usedBrandKit": bool(brand_kit_context),
+                    "usedPerformanceIntelligence": False,
+                },
             )
         except Exception:
             pass

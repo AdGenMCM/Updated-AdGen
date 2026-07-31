@@ -38,6 +38,8 @@ from entitlements import require_pro_or_business
 from brand_kits import resolve_brand_kit
 from plan_config import get_limit, video_credits_for_duration
 
+from customer_intelligence.event_service import track_event
+
 from notification_utils import (
     create_notification,
     create_usage_notifications,
@@ -330,6 +332,19 @@ def _enforce_video_entitlements_and_increment(db, uid: str, tier: str, status: s
             raise HTTPException(status_code=500, detail="Video cap configuration missing for your plan.")
 
         if reason == "cap_reached":
+            track_event(
+                db,
+                uid,
+                "usage.limit_reached",
+                event_id=(
+                    f"video_credits:{result.get('periodKey') or result.get('month')}:limit"
+                ),
+                metadata={
+                    "resource": "video_credits",
+                    "used": result.get("used"),
+                    "cap": result.get("cap"),
+                },
+            )
             raise HTTPException(
                 status_code=429,
                 detail={
@@ -1984,6 +1999,24 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 "fileSizeBytes": stored["fileSizeBytes"],
                 "contentType": stored.get("contentType") or "video/mp4",
             })
+
+            track_event(
+                db,
+                uid,
+                "video.generated",
+                event_id=f"video:{job_id}:generated",
+                metadata={
+                    "creativeId": job_id,
+                    "creativeType": "video",
+                    "source": job.get("mode"),
+                    "duration": job.get("duration"),
+                    "ratio": job.get("ratio"),
+                    "usedBrandKit": bool(job.get("useBrandKit")),
+                    "usedPerformanceIntelligence": bool(
+                        job.get("usePerformanceIntelligence")
+                    ),
+                },
+            )
 
             product_name = (
                 job.get("productName")

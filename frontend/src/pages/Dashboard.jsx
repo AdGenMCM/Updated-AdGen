@@ -57,6 +57,7 @@ export default function Dashboard() {
     videoUsage,
     storageUsage,
     recentCreatives,
+    customerIntelligence,
     brandKitStatus,
     userDoc,
     stripe,
@@ -91,7 +92,7 @@ export default function Dashboard() {
 
   const missingBrandItems = brandKitStatus?.missing || [];
 
-  const nextStep = (() => {
+  const fallbackNextStep = (() => {
     if (isFreePlan) {
       if (videoCap > 0 && videoUsed < videoCap) {
         return {
@@ -137,6 +138,23 @@ export default function Dashboard() {
       cta: "Open Library →",
     };
   })();
+
+  const intelligenceNextStep = customerIntelligence?.nextBestAction;
+
+  const nextStep = intelligenceNextStep
+    ? {
+        title: intelligenceNextStep.title,
+        description: intelligenceNextStep.body,
+        link: intelligenceNextStep.actionPath,
+        cta: `${intelligenceNextStep.actionLabel} →`,
+      }
+    : fallbackNextStep;
+
+  const opportunities = Array.isArray(
+    customerIntelligence?.opportunities
+  )
+    ? customerIntelligence.opportunities.slice(0, 3)
+    : [];
 
   const fullName = auth.currentUser?.displayName || "";
   const firstName = fullName.trim().split(" ")[0] || "there";
@@ -362,6 +380,34 @@ export default function Dashboard() {
 
           <a href={nextStep.link}>{nextStep.cta}</a>
         </Card>
+
+        {opportunities.length > 0 && (
+          <Card className="dashboard-panel dashboard-opportunities">
+            <div className="dashboard-opportunities-head">
+              <div>
+                <span className="dashboard-next-eyebrow">Opportunities</span>
+                <h3>Keep building your workspace</h3>
+              </div>
+            </div>
+
+            <div className="dashboard-opportunities-list">
+              {opportunities.map((opportunity) => (
+                <a
+                  key={opportunity.key}
+                  href={opportunity.actionPath}
+                  className="dashboard-opportunity-item"
+                >
+                  <div>
+                    <strong>{opportunity.title}</strong>
+                    <p>{opportunity.body}</p>
+                  </div>
+
+                  <span>{opportunity.actionLabel} →</span>
+                </a>
+              ))}
+            </div>
+          </Card>
+        )}
       </section>
     </div>
   );

@@ -13,6 +13,7 @@ import stripe
 from firebase_admin import firestore
 from auth_helpers import get_db
 from notification_utils import create_notification
+from customer_intelligence.event_service import track_event
 
 
 stripe_router = APIRouter()
@@ -454,6 +455,16 @@ async def stripe_webhook(request: Request):
             }
 
             if event_type == "customer.subscription.deleted":
+                track_event(
+                    db,
+                    uid,
+                    "subscription.canceled",
+                    event_id=f"stripe:{event_id or sub_id}:canceled",
+                    metadata={
+                        **metadata,
+                        "previousTier": previous_tier,
+                    },
+                )
                 _create_billing_notification(
                     db,
                     uid,
@@ -473,6 +484,16 @@ async def stripe_webhook(request: Request):
                 and previous_tier
                 and tier != previous_tier
             ):
+                track_event(
+                    db,
+                    uid,
+                    "subscription.plan_changed",
+                    event_id=f"stripe:{event_id or sub_id}:plan_changed",
+                    metadata={
+                        **metadata,
+                        "previousTier": previous_tier,
+                    },
+                )
                 _create_billing_notification(
                     db,
                     uid,
@@ -493,6 +514,13 @@ async def stripe_webhook(request: Request):
                 status == "active"
                 and previous_status not in {"active", "trialing", "past_due"}
             ):
+                track_event(
+                    db,
+                    uid,
+                    "subscription.activated",
+                    event_id=f"stripe:{event_id or sub_id}:activated",
+                    metadata=metadata,
+                )
                 _create_billing_notification(
                     db,
                     uid,
@@ -535,6 +563,21 @@ async def stripe_webhook(request: Request):
             except Exception:
                 amount_text = ""
 
+            track_event(
+                db,
+                uid,
+                "subscription.payment_failed",
+                event_id=f"stripe:{event_id or invoice_id}:payment_failed",
+                metadata={
+                    "stripeEventId": event_id,
+                    "invoiceId": invoice_id,
+                    "customerId": customer_id,
+                    "subscriptionId": subscription_id,
+                    "amountDue": amount_due,
+                    "currency": currency,
+                },
+            )
+
             _create_billing_notification(
                 db,
                 uid,
@@ -574,6 +617,20 @@ async def stripe_webhook(request: Request):
                         }
                     },
                     merge=True,
+                )
+
+                track_event(
+                    db,
+                    uid,
+                    "subscription.payment_recovered",
+                    event_id=(
+                        f"stripe:{event_id or obj.get('id')}:payment_recovered"
+                    ),
+                    metadata={
+                        "stripeEventId": event_id,
+                        "invoiceId": obj.get("id"),
+                        "customerId": customer_id,
+                    },
                 )
 
                 _create_billing_notification(
