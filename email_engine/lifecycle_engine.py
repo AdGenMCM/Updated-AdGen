@@ -219,21 +219,88 @@ def send_candidate(uid: str, recipient: str, display_name: str, tier: str, candi
     return {**result, "campaign": candidate.key}
 
 
-def process_user(uid: str, user_doc: dict, *, campaign_key: Optional[str] = None, bypass_cooldown: bool = False, test_mode: bool = False) -> dict:
+def process_user(
+    uid: str,
+    user_doc: dict,
+    *,
+    campaign_key: Optional[str] = None,
+    bypass_cooldown: bool = False,
+    test_mode: bool = False,
+) -> dict:
     settings = get_lifecycle_settings()
+
     if not settings.enabled and not test_mode:
-        return {"sent": False, "skipped": True, "reason": "lifecycle_disabled"}
+        return {
+            "sent": False,
+            "skipped": True,
+            "reason": "lifecycle_disabled",
+        }
+
     recipient = str(user_doc.get("email") or "").strip()
+    auth_display_name = ""
+
     if not recipient:
-        return {"sent": False, "skipped": True, "reason": "missing_email"}
+        try:
+            auth_user = firebase_auth.get_user(uid)
+            recipient = str(auth_user.email or "").strip()
+            auth_display_name = str(auth_user.display_name or "").strip()
+        except Exception as error:
+            print(
+                f"[EMAIL LIFECYCLE] Firebase Auth lookup failed for {uid}: "
+                f"{error!r}",
+                flush=True,
+            )
+
+    if not recipient:
+        return {
+            "sent": False,
+            "skipped": True,
+            "reason": "missing_email",
+        }
+
     candidates = evaluate_user(uid, user_doc)
+
     if campaign_key:
-        candidates = [item for item in candidates if item.key == campaign_key]
+        candidates = [
+            item
+            for item in candidates
+            if item.key == campaign_key
+        ]
+
     if not candidates:
-        return {"sent": False, "skipped": True, "reason": "no_eligible_campaign"}
+        return {
+            "sent": False,
+            "skipped": True,
+            "reason": "no_eligible_campaign",
+        }
+
     tier, _ = get_tier_and_status(user_doc)
-    display_name = str(user_doc.get("displayName") or " ".join(filter(None, [user_doc.get("firstName"), user_doc.get("lastName")]))).strip()
-    return send_candidate(uid, recipient, display_name, normalize_tier(tier), candidates[0], bypass_cooldown=bypass_cooldown, test_mode=test_mode)
+
+    firestore_display_name = " ".join(
+        filter(
+            None,
+            [
+                user_doc.get("firstName"),
+                user_doc.get("lastName"),
+            ],
+        )
+    ).strip()
+
+    display_name = str(
+        user_doc.get("displayName")
+        or firestore_display_name
+        or auth_display_name
+    ).strip()
+
+    return send_candidate(
+        uid,
+        recipient,
+        display_name,
+        normalize_tier(tier),
+        candidates[0],
+        bypass_cooldown=bypass_cooldown,
+        test_mode=test_mode,
+    )
 
 
 def run_lifecycle_batch(*, limit: Optional[int] = None) -> dict:
