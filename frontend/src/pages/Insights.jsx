@@ -10,6 +10,7 @@ import FieldLabel from "../components/ui/FieldLabel";
 import GoogleAdsInsightsPanel from "../components/GoogleAdsInsightsPanel";
 import MetaAdsInsightsPanel from "../components/MetaAdsInsightsPanel";
 import PerformanceIntelligencePanel from "../components/PerformanceIntelligencePanel";
+import CampaignIntelligencePanel from "../components/CampaignIntelligencePanel";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -421,6 +422,33 @@ export default function Insights() {
           <button
             type="button"
             role="tab"
+            aria-selected={activeSource === "campaign-intelligence"}
+            className={`ins-sourceTab ${
+              activeSource === "campaign-intelligence" ? "active" : ""
+            }`}
+            onClick={() => setActiveSource("campaign-intelligence")}
+          >
+            <span className="ins-sourceTabIcon intelligence">CI</span>
+            <span className="ins-sourceTabCopy">
+              <strong>Campaign Intelligence</strong>
+              <small>
+                {canUsePerformanceFeatures
+                  ? "What deserves attention now"
+                  : "Available on Pro & Business"}
+              </small>
+            </span>
+            <span
+              className={`ins-sourceTabStatus ${
+                canUsePerformanceFeatures ? "intelligence" : "locked"
+              }`}
+            >
+              {canUsePerformanceFeatures ? "Briefing" : "Pro"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeSource === "manual"}
             className={`ins-sourceTab ${
               activeSource === "manual" ? "active" : ""
@@ -506,6 +534,27 @@ export default function Insights() {
                     "Identify winning colors, styles, compositions, messaging, and CTAs.",
                     "Build a brand-specific Creative DNA profile over time.",
                     "Apply learned patterns inside Image Generator and Video Generator.",
+                  ],
+                })
+              )}
+            </div>
+          )}
+
+          {activeSource === "campaign-intelligence" && (
+            <div className="ins-sourceDetailInner ins-intelligenceDetail">
+              {canUsePerformanceFeatures ? (
+                <CampaignIntelligencePanel />
+              ) : (
+                renderLockedFeature({
+                  eyebrow: "Campaign Intelligence",
+                  title: "Know what deserves attention before opening the ad platform",
+                  description:
+                    "ADGen reviews saved Google Ads and Meta Ads campaign history and prepares a read-only briefing with prioritized findings and supporting evidence.",
+                  benefits: [
+                    "Compare recent campaign performance with the preceding period.",
+                    "Identify engagement, efficiency, conversion, and tracking signals.",
+                    "See why each finding appeared and what deserves review.",
+                    "Keep all connected campaigns completely read-only.",
                   ],
                 })
               )}

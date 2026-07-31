@@ -110,6 +110,9 @@ from integrations.meta_ads.routes import router as meta_ads_router
 from performance_intelligence.routes import router as performance_intelligence_router
 from performance_intelligence.service import generation_profile as get_intelligence_generation_profile
 
+#Campaign Intelligence
+from campaign_intelligence.routes import router as campaign_intelligence_router
+
 #Reporting 
 from reporting_engine import router as reporting_router
 
@@ -134,6 +137,7 @@ app.include_router(brand_kits_router)
 app.include_router(google_ads_router)
 app.include_router(meta_ads_router)
 app.include_router(performance_intelligence_router)
+app.include_router(campaign_intelligence_router)
 
 app.include_router(reporting_router)
 app.include_router(customer_intelligence_router)
