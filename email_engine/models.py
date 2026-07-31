@@ -40,3 +40,12 @@ class EmailSendResponse(BaseModel):
 class CompleteOnboardingResponse(EmailSendResponse):
     ok: bool = True
     intelligenceEventRecorded: bool = False
+
+
+class LifecycleTestRequest(BaseModel):
+    campaign: Optional[str] = Field(default=None, max_length=80)
+    bypassCooldown: bool = False
+
+
+class LifecycleRunRequest(BaseModel):
+    limit: Optional[int] = Field(default=None, ge=1, le=5000)

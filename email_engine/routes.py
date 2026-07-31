@@ -17,8 +17,12 @@ from .models import (
     EmailSendResponse,
     EmailStatusResponse,
     TestWelcomeEmailRequest,
+    LifecycleTestRequest,
+    LifecycleRunRequest,
 )
 from .resend_client import EmailConfigurationError, EmailProviderError
+from .lifecycle_config import get_lifecycle_settings
+from .lifecycle_engine import process_user, run_lifecycle_batch
 
 
 router = APIRouter(prefix="/email-engine", tags=["email-engine"])
@@ -275,3 +279,44 @@ def send_test_welcome_email(
             status_code=500,
             detail="The test email could not be sent.",
         ) from error
+
+
+@router.get("/lifecycle/config")
+def lifecycle_config(authorization: str | None = Header(default=None)):
+    require_user(authorization)
+    settings = get_lifecycle_settings()
+    return {
+        "enabled": settings.enabled,
+        "categories": {
+            "activation": settings.activation_enabled,
+            "usage": settings.usage_enabled,
+            "upgrade": settings.upgrade_enabled,
+            "reengagement": settings.reengagement_enabled,
+        },
+        "cooldowns": {
+            "globalHours": settings.global_cooldown_hours,
+            "dailyCap": settings.daily_cap,
+            "weeklyCap": settings.weekly_cap,
+        },
+        "campaigns": settings.campaigns,
+    }
+
+
+@router.post("/lifecycle/test")
+def test_lifecycle_campaign(payload: LifecycleTestRequest, authorization: str | None = Header(default=None)):
+    uid, email, claims = require_user(authorization)
+    db = get_db()
+    user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    if email and not user_doc.get("email"):
+        user_doc["email"] = email
+    return process_user(uid, user_doc, campaign_key=payload.campaign, bypass_cooldown=payload.bypassCooldown, test_mode=True)
+
+
+@router.post("/lifecycle/run")
+def run_lifecycle_scheduler(payload: LifecycleRunRequest, x_email_scheduler_secret: str | None = Header(default=None)):
+    settings = get_lifecycle_settings()
+    if not settings.scheduler_secret:
+        raise HTTPException(status_code=503, detail="EMAIL_SCHEDULER_SECRET is not configured.")
+    if x_email_scheduler_secret != settings.scheduler_secret:
+        raise HTTPException(status_code=401, detail="Invalid scheduler secret.")
+    return run_lifecycle_batch(limit=payload.limit)
