@@ -277,6 +277,32 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+def public_image_generation_error(exc: Exception) -> str:
+    message = str(exc).lower()
+
+    temporary_provider_errors = (
+        "billing_hard_limit_reached",
+        "billing_limit_user_error",
+        "insufficient_quota",
+        "rate_limit",
+        "rate limit",
+        "server_error",
+        "service_unavailable",
+        "timeout",
+        "timed out",
+    )
+
+    if any(code in message for code in temporary_provider_errors):
+        return (
+            "Image generation is temporarily unavailable. "
+            "Your image credit was not used. Please try again shortly."
+        )
+
+    return (
+        "The image could not be generated. "
+        "Your image credit was not used. Please try again."
+    )
+
 
 def generate_gpt_image_bytes(
     prompt: str,
@@ -3462,10 +3488,16 @@ It should be visually impressive enough to appear in a professional design portf
                 obj["cta"] = str(obj.get("cta") or "Learn More").strip()[:20]
 
             return obj
-        except Exception as e:
+        except Exception as exc:
+            print("AD COPY GENERATION ERROR:", repr(exc), flush=True)
+
             raise HTTPException(
-                status_code=502, detail=f"OpenAI text generation failed: {e}"
-            )
+                status_code=503,
+                detail=(
+                    "ADGen could not prepare the ad copy right now. "
+                    "Your image credit was not used. Please try again shortly."
+                ),
+            ) from exc
 
     async def _gen_image_and_upload():
         try:
@@ -3485,10 +3517,17 @@ It should be visually impressive enough to appear in a professional design portf
                 db, uid, size_bytes=stored["fileSizeBytes"], asset_type="image"
             )
             return stored
-        except Exception as e:
-            raise HTTPException(
-                status_code=502, detail=f"GPT Image generation failed: {e}"
+        except Exception as exc:
+            print(
+                "IMAGE GENERATION ERROR:",
+                repr(exc),
+                flush=True,
             )
+
+            raise HTTPException(
+                status_code=503,
+                detail=public_image_generation_error(exc),
+            ) from exc
 
     try:
         set_generation_progress(db, "image", progress_job_id, "generating_creative")
@@ -3632,10 +3671,16 @@ It should be visually impressive enough to appear in a professional design portf
                 1,
             )
 
-        raise HTTPException(
-            status_code=502,
-            detail=f"Image generation failed: {exc}",
+        print(
+            "IMAGE GENERATION ERROR:",
+            repr(exc),
+            flush=True,
         )
+
+        raise HTTPException(
+            status_code=503,
+            detail=public_image_generation_error(exc),
+        ) from exc
 
 
 # ---------------- Optimize Ad (Pro/Business only, CONSUMES optimizer usage) ----------------
@@ -4066,10 +4111,15 @@ confidence
                 optimizer_usage_reservation.get("periodKey"),
                 1,
             )
+        print("OPTIMIZER ANALYSIS ERROR:", repr(exc), flush=True)
+
         raise HTTPException(
-            status_code=502,
-            detail=f"Optimization failed: {exc}",
-        )
+            status_code=503,
+            detail=(
+                "ADGen could not complete the analysis right now. "
+                "Your Optimizer run was not used. Please try again shortly."
+            ),
+        ) from exc
 
 
 # ---------------- Generate New Creative from Optimizer (Pro/Business only, CONSUMES usage) ----------------
@@ -4497,7 +4547,7 @@ Improve it.
             )
         raise
 
-    except Exception as e:
+    except Exception as exc:
         if not admin and image_usage_reservation:
             rollback_resource(
                 db,
@@ -4508,10 +4558,16 @@ Improve it.
                 1,
             )
 
-        raise HTTPException(
-            status_code=502,
-            detail=f"GPT Image generation failed: {e}",
+        print(
+            "OPTIMIZER IMAGE GENERATION ERROR:",
+            repr(exc),
+            flush=True,
         )
+
+        raise HTTPException(
+            status_code=503,
+            detail=public_image_generation_error(exc),
+        ) from exc
 
 
 # ---------------- Creation of Admin Page Routes ----------------

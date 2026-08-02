@@ -102,6 +102,65 @@ VIDEO_PROGRESS = {
     "failed": (100, "Video generation failed."),
 }
 
+
+def public_video_generation_error(
+    exc: Exception,
+    *,
+    credits_refunded: bool = False,
+) -> str:
+    """Return a customer-safe video error without provider details."""
+    raw = str(exc or "").lower()
+
+    request_related = (
+        "content moderation",
+        "safety",
+        "invalid prompt",
+        "unsupported image",
+        "unsupported format",
+        "input image",
+        "image format",
+    )
+
+    if any(value in raw for value in request_related):
+        message = (
+            "The video service could not process this request. "
+            "Review the image or creative direction and try again."
+        )
+    else:
+        message = (
+            "Video generation is temporarily unavailable. "
+            "Please try again shortly."
+        )
+
+    if credits_refunded:
+        message += " Your video credits were returned."
+
+    return message
+
+
+def public_voiceover_error(
+    exc: Exception,
+    *,
+    credits_refunded: bool = False,
+) -> str:
+    """Return a customer-safe voiceover error without provider details."""
+    message = (
+        "The voiceover could not be completed right now. "
+        "Please try again shortly."
+    )
+
+    if credits_refunded:
+        message += " Your video credits were returned."
+
+    return message
+
+
+def public_voice_preview_error() -> str:
+    return (
+        "The voice preview is temporarily unavailable. "
+        "Please try again shortly."
+    )
+
 def progress_payload(stage: str) -> Dict[str, Any]:
     percent, message = VIDEO_PROGRESS.get(stage, VIDEO_PROGRESS["queued"])
     return {"progressStage": stage, "progressPercent": percent, "progressMessage": message}
@@ -1310,16 +1369,22 @@ async def start_image_video(
                 f"mode=image uid={uid} refunded={refunded}"
             )
 
+        public_error = public_video_generation_error(
+            e,
+            credits_refunded=bool(locals().get("refunded", False)),
+        )
+        print("[Video Submission Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
     except Exception as e:
         rollback_platform_cost(db, cost_reservation)
@@ -1341,16 +1406,22 @@ async def start_image_video(
                 f"mode=image uid={uid} refunded={refunded}"
             )
 
+        public_error = public_video_generation_error(
+            e,
+            credits_refunded=bool(locals().get("refunded", False)),
+        )
+        print("[Video Submission Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail="Failed to start image video job.",
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
 
     # From this point forward, Runway accepted the video job.
@@ -1386,8 +1457,9 @@ async def start_image_video(
         )
 
     except RunwayError as e:
+        refunded = False
         if not admin and usage_reservation:
-            refund_video_usage_once(
+            refunded = refund_video_usage_once(
                 db,
                 job_ref,
                 uid,
@@ -1398,20 +1470,27 @@ async def start_image_video(
                 fallback_period_key=usage_reservation.get("periodKey"),
             )
 
+        public_error = public_voiceover_error(
+            e,
+            credits_refunded=bool(refunded),
+        )
+        print("[Voiceover Start Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
     except Exception as e:
+        refunded = False
         if not admin and usage_reservation:
-            refund_video_usage_once(
+            refunded = refund_video_usage_once(
                 db,
                 job_ref,
                 uid,
@@ -1422,16 +1501,22 @@ async def start_image_video(
                 fallback_period_key=usage_reservation.get("periodKey"),
             )
 
+        public_error = public_voiceover_error(
+            e,
+            credits_refunded=bool(refunded),
+        )
+        print("[Post-Accept Video Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail="Failed after the image video task was accepted.",
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
 
 @router.post("/video/start-prompt", response_model=StartVideoResponse,)
@@ -1751,16 +1836,22 @@ async def start_prompt_video(
                 f"mode=prompt uid={uid} refunded={refunded}"
             )
 
+        public_error = public_video_generation_error(
+            e,
+            credits_refunded=bool(locals().get("refunded", False)),
+        )
+        print("[Video Submission Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
     except Exception as e:
         rollback_platform_cost(db, cost_reservation)
@@ -1782,16 +1873,22 @@ async def start_prompt_video(
                 f"mode=prompt uid={uid} refunded={refunded}"
             )
 
+        public_error = public_video_generation_error(
+            e,
+            credits_refunded=bool(locals().get("refunded", False)),
+        )
+        print("[Video Submission Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail="Failed to start video job.",
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
 
     # From this point forward, Runway accepted the video job.
@@ -1827,8 +1924,9 @@ async def start_prompt_video(
         )
 
     except RunwayError as e:
+        refunded = False
         if not admin and usage_reservation:
-            refund_video_usage_once(
+            refunded = refund_video_usage_once(
                 db,
                 job_ref,
                 uid,
@@ -1839,20 +1937,27 @@ async def start_prompt_video(
                 fallback_period_key=usage_reservation.get("periodKey"),
             )
 
+        public_error = public_voiceover_error(
+            e,
+            credits_refunded=bool(refunded),
+        )
+        print("[Voiceover Start Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
     except Exception as e:
+        refunded = False
         if not admin and usage_reservation:
-            refund_video_usage_once(
+            refunded = refund_video_usage_once(
                 db,
                 job_ref,
                 uid,
@@ -1863,16 +1968,22 @@ async def start_prompt_video(
                 fallback_period_key=usage_reservation.get("periodKey"),
             )
 
+        public_error = public_voiceover_error(
+            e,
+            credits_refunded=bool(refunded),
+        )
+        print("[Post-Accept Video Error]", repr(e), flush=True)
+
         job_ref.update({
             "status": "failed",
-            "error": str(e),
+            "error": public_error,
             **progress_payload("failed"),
         })
 
         raise HTTPException(
-            status_code=500,
-            detail="Failed after the video task was accepted.",
-        )
+            status_code=503,
+            detail=public_error,
+        ) from e
 
 
 
@@ -1887,7 +1998,7 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
         task = await get_task(runway_video_task_id)
         runway_video_url = extract_first_output_url(task)
         if not runway_video_url:
-            raise RuntimeError("Runway succeeded but output URL is missing.")
+            raise RuntimeError("The video service completed the task but no output was available.")
 
         set_video_progress(job_ref, "processing_video", finalizationState="running")
 
@@ -2048,7 +2159,7 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
 
         job_ref.update({
             "status": "failed",
-            "error": str(exc),
+            "error": public_video_generation_error(exc, credits_refunded=bool(refund_succeeded)),
             "finalizationState": "failed",
             **progress_payload("failed"),
             "progressUpdatedAt": int(time.time()),
@@ -2161,7 +2272,7 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         )
 
     if st in ("FAILED", "CANCELED"):
-        refund_video_usage_once(
+        refund_succeeded = refund_video_usage_once(
             db,
             job_ref,
             uid,
@@ -2169,18 +2280,25 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
         )
 
         failure_code = task.get("failureCode") or task.get("failure_code")
-        err = (
+        provider_error = (
             task.get("failure")
             or task.get("error")
             or task.get("failureReason")
-            or "Runway task failed."
+            or "The video task could not be completed."
         )
+
+        public_error = public_video_generation_error(
+            RuntimeError(str(provider_error)),
+            credits_refunded=bool(refund_succeeded),
+        )
+
+        print("[Video Task Failure]", repr(provider_error), flush=True)
 
         job_ref.update({
             "status": "failed",
-            "error": str(err),
+            "error": public_error,
             "providerFailureCode": failure_code,
-            "providerFailureReason": str(err)[:1000],
+            "providerFailureReason": str(provider_error)[:1000],
             "providerTaskStatus": st,
             **progress_payload("failed"),
         })
@@ -2198,14 +2316,14 @@ async def video_status(job_id: str, authorization: str | None = Header(default=N
             link="/video-ads",
             metadata={
                 "jobId": job_id,
-                "error": str(err)[:300],
+                "error": str(provider_error)[:300],
             },
         )
 
         return VideoStatusResponse(
             jobId=job_id,
             status="failed",
-            error=err,
+            error=public_error,
             **progress_payload("failed"),
         )
 
@@ -2252,7 +2370,7 @@ async def tts_preview(req: TTSPreviewRequest, authorization: str | None = Header
         tts_task_id = await create_text_to_speech(prompt_text=text, preset_voice=voice or "Leslie")
     except RunwayError as e:
         rollback_platform_cost(db, tts_cost_reservation)
-        raise HTTPException(status_code=502, detail=f"text_to_speech failed: {e}")
+        raise HTTPException(status_code=502, detail=public_voice_preview_error())
     except Exception:
         rollback_platform_cost(db, tts_cost_reservation)
         raise
@@ -2293,17 +2411,17 @@ async def tts_preview(req: TTSPreviewRequest, authorization: str | None = Header
 
             if st in ("FAILED", "CANCELED"):
                 err = task.get("error") or task.get("failureReason") or "TTS task failed."
-                raise HTTPException(status_code=502, detail=err)
+                raise HTTPException(status_code=503, detail=public_voice_preview_error())
 
             await asyncio.sleep(1)
 
-        raise HTTPException(status_code=504, detail="TTS preview timed out. Try again.")
+        raise HTTPException(status_code=504, detail="The voice preview is taking longer than expected. Please try again.")
     except HTTPException:
         raise
     except RunwayError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=503, detail=public_voice_preview_error())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503, detail=public_voice_preview_error())
     
 @router.get("/video/jobs")
 async def list_video_jobs(

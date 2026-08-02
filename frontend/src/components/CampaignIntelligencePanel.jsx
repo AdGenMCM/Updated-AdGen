@@ -78,7 +78,8 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
         `/campaign-intelligence/briefing?date_range=${encodeURIComponent(dateRange)}&platforms=${encodeURIComponent(platformFilter)}`
       );
       setBriefing(body || {});
-      if (body?.topPriorityId) setExpandedId(body.topPriorityId);
+      setExpandedId(null);
+      setExpandedAssessmentId(null);
       const historyBody = await authorizedFetch("/campaign-intelligence/history?limit=30");
       setHistory(Array.isArray(historyBody?.items) ? historyBody.items : []);
     } catch (err) {
@@ -106,7 +107,8 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
       setAnalysisStage("Building campaign briefing…");
       if (result?.briefing) {
         setBriefing(result.briefing);
-        if (result.briefing?.topPriorityId) setExpandedId(result.briefing.topPriorityId);
+        setExpandedId(null);
+        setExpandedAssessmentId(null);
       }
       if (result?.partial) {
         const failures = (result?.platformResults || [])
@@ -658,7 +660,7 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
                   <span className={`ci-confidence ${finding.confidence}`}>
                     {titleCase(finding.confidence)} confidence
                   </span>
-                  <span className="ci-expandLabel">{expanded ? "Hide details" : "Show me why"}</span>
+                  <span className="ci-expandLabel">{expanded ? "Hide details" : "Open detailed finding"}</span>
                 </button>
 
                 {expanded && (
