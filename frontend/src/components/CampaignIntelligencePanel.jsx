@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { auth } from "../firebaseConfig";
 import "./CampaignIntelligencePanel.css";
 
@@ -29,6 +30,16 @@ function dateRangeLabel(value) {
     MAXIMUM: "Maximum available",
   };
   return labels[value] || "Last 30 days";
+}
+
+function actionLevelLabel(value) {
+  const labels = {
+    do_now: "Do this now",
+    test: "Consider testing",
+    review: "Review first",
+    monitor: "Monitor for now",
+  };
+  return labels[value] || "Review first";
 }
 
 async function authorizedFetch(path, options = {}) {
@@ -69,6 +80,7 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
   const [analysisStage, setAnalysisStage] = useState("");
   const [platformResults, setPlatformResults] = useState([]);
   const [analysisWarning, setAnalysisWarning] = useState("");
+  const findingDrawerRef = useRef(null);
 
   const load = async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
@@ -131,6 +143,31 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, platformFilter]);
+
+  useLayoutEffect(() => {
+    if (!expandedId) return;
+
+    const drawer = findingDrawerRef.current;
+    if (!drawer) return;
+
+    drawer.scrollTop = 0;
+    drawer.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, [expandedId]);
+
+  useEffect(() => {
+    if (!expandedId) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [expandedId]);
 
   const findings = useMemo(
     () => (Array.isArray(briefing?.findings) ? briefing.findings : []),
@@ -278,6 +315,32 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
         <strong>{briefing?.topPriorityText}</strong>
       </div>
 
+      <section className="ci-reviewGuide" aria-label="How to review this briefing">
+        <div>
+          <span>1</span>
+          <p>
+            <strong>Start with the priority</strong>
+            See the single issue ADGen recommends reviewing first.
+          </p>
+        </div>
+
+        <div>
+          <span>2</span>
+          <p>
+            <strong>Review the campaign</strong>
+            Open the affected campaign to understand its strengths and concerns.
+          </p>
+        </div>
+
+        <div>
+          <span>3</span>
+          <p>
+            <strong>Check the evidence</strong>
+            Open a detailed finding only when you want the metrics and reasoning.
+          </p>
+        </div>
+      </section>
+
       {briefing?.executiveBriefing && (
         <section className="ci-analystBriefing">
           <div className="ci-analystBriefingTop">
@@ -380,9 +443,12 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
         <section className="ci-campaignBreakdown">
           <div className="ci-campaignBreakdownHeader">
             <div>
-              <span>Campaign-by-campaign analysis</span>
-              <strong>What ADGen found in each campaign</strong>
-              <p>Each campaign is evaluated independently before ADGen prepares the account-level briefing.</p>
+              <span>Campaign review</span>
+              <strong>Start with campaigns that need attention</strong>
+              <p>
+                Priority campaigns appear first. Open a campaign to see what is
+                working, what needs attention, and why ADGen reached that conclusion.
+              </p>
             </div>
             <span className="ci-campaignCount">{campaignAssessments.length} analyzed</span>
           </div>
@@ -415,7 +481,7 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
                       {titleCase(assessment.confidence || "low")} confidence
                     </span>
                     <span className="ci-expandLabel">
-                      {assessmentExpanded ? "Hide campaign" : "Review campaign"}
+                      {assessmentExpanded ? "Close review" : "Review this campaign"}
                     </span>
                   </button>
 
@@ -424,6 +490,17 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
                       <div className="ci-campaignAssessmentHeadline">
                         <span>Campaign conclusion</span>
                         <strong>{assessment.headline}</strong>
+                      </div>
+
+                      <div className={`ci-campaignNextAction ${assessment.actionLevel || "review"}`}>
+                        <div>
+                          <span>{actionLevelLabel(assessment.actionLevel)}</span>
+                          <strong>If you change one thing, start here</strong>
+                        </div>
+                        <p>
+                          {assessment.recommendedAction ||
+                            "Review the supporting evidence before making a campaign change."}
+                        </p>
                       </div>
 
                       {!!assessment.evidence?.length && (
@@ -475,22 +552,40 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
                       </div>
 
                       {!!assessment.findingIds?.length && (
-                        <button
-                          type="button"
-                          className="ci-relatedFindingButton"
-                          onClick={() => {
-                            const nextId = assessment.findingIds[0];
-                            setExpandedId(nextId);
-                            window.setTimeout(() => {
-                              document.getElementById(`ci-finding-${nextId}`)?.scrollIntoView({
-                                behavior: "smooth",
-                                block: "center",
-                              });
-                            }, 0);
-                          }}
-                        >
-                          Open detailed finding
-                        </button>
+                        <div className="ci-relatedFindings">
+                          <div className="ci-relatedFindingsHeader">
+                            <span>Why ADGen flagged this campaign</span>
+                            <strong>
+                              Review {assessment.findingIds.length} reason
+                              {assessment.findingIds.length === 1 ? "" : "s"} behind this conclusion
+                            </strong>
+                          </div>
+
+                          <div className="ci-relatedFindingsList">
+                            {assessment.findingIds.map((findingId) => {
+                              const relatedFinding = findings.find(
+                                (finding) => finding.id === findingId
+                              );
+
+                              if (!relatedFinding) return null;
+
+                              return (
+                                <button
+                                  key={`${assessment.id}-${findingId}`}
+                                  type="button"
+                                  className="ci-relatedFindingButton"
+                                  onClick={() => setExpandedId(findingId)}
+                                >
+                                  <span>{titleCase(relatedFinding.category)}</span>
+                                  <strong>{relatedFinding.title}</strong>
+                                  <small>
+                                    {actionLevelLabel(relatedFinding.actionLevel)} · View evidence and recommended checks →
+                                  </small>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
@@ -639,66 +734,139 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
             )}
           </div>
         )
-      ) : (
-        <div className="ci-findings">
-          {findings.map((finding) => {
-            const expanded = expandedId === finding.id;
-            return (
-              <article id={`ci-finding-${finding.id}`} key={finding.id} className={`ci-finding ${finding.severity || "info"}`}>
+      ) : null}
+
+      {expandedId && createPortal((() => {
+        const selectedFinding = findings.find((finding) => finding.id === expandedId);
+        if (!selectedFinding) return null;
+
+        return (
+          <div
+            className="ci-findingDrawerBackdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setExpandedId(null);
+              }
+            }}
+          >
+            <aside
+              ref={(node) => {
+                findingDrawerRef.current = node;
+                if (node) {
+                  node.scrollTop = 0;
+                }
+              }}
+              className="ci-findingDrawer"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`ci-finding-title-${selectedFinding.id}`}
+            >
+              <div className="ci-findingDrawerHeader">
+                <div>
+                  <span>{titleCase(selectedFinding.category)}</span>
+                  <small>
+                    {selectedFinding.platformLabel} · {selectedFinding.campaignName}
+                  </small>
+                  <h4 id={`ci-finding-title-${selectedFinding.id}`}>
+                    {selectedFinding.title}
+                  </h4>
+                  <p>{selectedFinding.summary}</p>
+                </div>
                 <button
                   type="button"
-                  className="ci-findingTop"
-                  onClick={() => setExpandedId(expanded ? null : finding.id)}
-                  aria-expanded={expanded}
+                  className="ci-findingDrawerClose"
+                  onClick={() => setExpandedId(null)}
+                  aria-label="Close detailed finding"
                 >
-                  <span className="ci-severity">{titleCase(finding.category)}</span>
-                  <span className="ci-findingCopy">
-                    <small>{finding.platformLabel} · {finding.campaignName}</small>
-                    <strong>{finding.title}</strong>
-                    <p>{finding.summary}</p>
-                  </span>
-                  <span className={`ci-confidence ${finding.confidence}`}>
-                    {titleCase(finding.confidence)} confidence
-                  </span>
-                  <span className="ci-expandLabel">{expanded ? "Hide details" : "Open detailed finding"}</span>
+                  ×
                 </button>
+              </div>
 
-                {expanded && (
-                  <div className="ci-details">
-                    <div className="ci-confidenceNote">
-                      Confidence is based on available impressions, clicks, spend, and conversion volume. Low-volume signals are intentionally treated cautiously.
+              <div className="ci-findingQuickSummary">
+                <div>
+                  <small>Detected</small>
+                  <strong>{selectedFinding.summary}</strong>
+                </div>
+
+                <div className={`ci-primaryRecommendation ${selectedFinding.actionLevel || "review"}`}>
+                  <small>{actionLevelLabel(selectedFinding.actionLevel)}</small>
+                  <strong>
+                    {selectedFinding.recommendedAction ||
+                      "Review the campaign context before making a change."}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="ci-findingDrawerMeta">
+                <span className={`ci-confidence ${selectedFinding.confidence}`}>
+                  {titleCase(selectedFinding.confidence)} confidence
+                </span>
+              </div>
+
+              <div className="ci-confidenceNote">
+                Confidence is based on available impressions, clicks, spend, and conversion volume. Low-volume signals are intentionally treated cautiously.
+              </div>
+
+              <div className="ci-explanationGrid">
+                <div><span>Why it matters</span><p>{selectedFinding.whyItMatters}</p></div>
+                <div><span>How to interpret it</span><p>{selectedFinding.interpretation}</p></div>
+              </div>
+
+              {!!selectedFinding.evidence?.length && (
+                <div className="ci-evidence">
+                  {selectedFinding.evidence.map((item) => (
+                    <div key={`${selectedFinding.id}-${item.label}`}>
+                      <small>{item.label}</small>
+                      <strong>{item.value}</strong>
                     </div>
-                    <div className="ci-explanationGrid">
-                      <div><span>Why it matters</span><p>{finding.whyItMatters}</p></div>
-                      <div><span>How to interpret it</span><p>{finding.interpretation}</p></div>
-                    </div>
-                    {!!finding.evidence?.length && (
-                      <div className="ci-evidence">
-                        {finding.evidence.map((item) => (
-                          <div key={`${finding.id}-${item.label}`}><small>{item.label}</small><strong>{item.value}</strong></div>
-                        ))}
-                      </div>
-                    )}
-                    {!!finding.reviewItems?.length && (
-                      <div className="ci-review">
-                        <span>Things worth reviewing</span>
-                        <ul>{finding.reviewItems.map((item) => <li key={`${finding.id}-${item}`}>{item}</li>)}</ul>
-                      </div>
-                    )}
-                    {!!finding.actions?.length && (
-                      <div className="ci-actions">
-                        {finding.actions.map((action) => (
-                          <a key={`${finding.id}-${action.label}`} href={action.href} className={action.kind || "secondary"}>{action.label}</a>
-                        ))}
-                      </div>
-                    )}
+                  ))}
+                </div>
+              )}
+
+              {!!selectedFinding.reviewItems?.length && (
+                <div className="ci-review">
+                  <span>Supporting checklist</span>
+                  <ul>
+                    {selectedFinding.reviewItems.map((item) => (
+                      <li key={`${selectedFinding.id}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!!selectedFinding.actions?.length && (
+                <div className="ci-actions">
+                  {selectedFinding.actions.map((action) => (
+                    <a key={`${selectedFinding.id}-${action.label}`} href={action.href} className={action.kind || "secondary"}>
+                      {action.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {findings.length > 1 && (
+                <div className="ci-findingDrawerNav">
+                  <span>Other findings</span>
+                  <div>
+                    {findings.map((finding) => (
+                      <button
+                        key={`drawer-${finding.id}`}
+                        type="button"
+                        className={finding.id === selectedFinding.id ? "active" : ""}
+                        onClick={() => setExpandedId(finding.id)}
+                      >
+                        {finding.title}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
+                </div>
+              )}
+            </aside>
+          </div>
+        );
+      })(), document.body)}
+
     </section>
   );
 }

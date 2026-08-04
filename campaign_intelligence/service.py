@@ -111,6 +111,84 @@ def _finding_id(platform: str, campaign_id: str, signal: str) -> str:
     return f"{platform}:{campaign_id}:{signal}".replace(" ", "_").lower()
 
 
+def _finding_actionability(
+    *,
+    signal: str,
+    category: str,
+    severity: str,
+    title: str,
+    review_items: list[str],
+    creative_related: bool,
+) -> tuple[str, str]:
+    """Return a cautious action level and a concrete read-only next step."""
+    text = f"{signal} {category} {title}".lower()
+
+    if severity in {"healthy", "info"} or category == "learning":
+        return (
+            "monitor",
+            "Keep the campaign stable and continue collecting data before making a material change.",
+        )
+
+    if "budget" in text or "lost_share" in text:
+        return (
+            "review",
+            "Confirm CPA, ROAS, lead quality, and search-term relevance first. If efficiency is acceptable and the campaign consistently reaches its budget, test a modest 10–20% budget increase rather than making a large change at once.",
+        )
+
+    if "rank" in text or "impression share" in text:
+        return (
+            "review",
+            "Review ad relevance, landing-page alignment, expected CTR, and bid competitiveness before increasing spend. Improve the weakest quality or relevance signal first.",
+        )
+
+    if "frequency" in text or "fatigue" in text:
+        return (
+            "test",
+            "Prepare one new creative variation for the affected audience or ad set, then compare it against the current creative without changing several variables at once.",
+        )
+
+    if "delivery" in text or "status" in text or "limited" in text:
+        return (
+            "review",
+            "Check the campaign or ad set delivery status, budget, schedule, audience size, and policy notices before changing bids or creative.",
+        )
+
+    if "tracking" in text or "conversion" in text and "rate" not in text:
+        return (
+            "review",
+            "Verify that the primary conversion action is firing correctly and that recorded conversions match the business outcome you want to optimize.",
+        )
+
+    if "cpa" in text or "roas" in text or "conversion rate" in text:
+        return (
+            "review",
+            "Review traffic quality, landing-page alignment, and conversion tracking before changing the bidding strategy. Make one controlled adjustment only after confirming the efficiency signal is reliable.",
+        )
+
+    if creative_related or "creative" in text or "ctr" in text or "engagement" in text:
+        return (
+            "test",
+            "Create one controlled creative variation based on the strongest known brand and performance signals, then compare it against the current version before replacing the existing creative.",
+        )
+
+    if severity == "opportunity":
+        return (
+            "test",
+            "Preserve the current setup and test one deliberate variation so you can identify whether the positive signal is repeatable.",
+        )
+
+    if review_items:
+        return (
+            "review",
+            f"Review {review_items[0].lower()} first, then make only one measured change if the evidence supports it.",
+        )
+
+    return (
+        "review",
+        "Review the supporting evidence and campaign context before making a change. Prioritize one measured adjustment rather than changing several settings at once.",
+    )
+
+
 def _base_finding(
     *,
     platform: str,
@@ -131,8 +209,18 @@ def _base_finding(
     previous: dict[str, Any],
     creative_related: bool = False,
 ) -> dict[str, Any]:
+    action_level, recommended_action = _finding_actionability(
+        signal=signal,
+        category=category,
+        severity=severity,
+        title=title,
+        review_items=review_items,
+        creative_related=creative_related,
+    )
+
     return {
         "id": _finding_id(platform, campaign_id, signal),
+        "signal": signal,
         "platform": platform,
         "platformLabel": platform_label,
         "campaignId": campaign_id,
@@ -145,6 +233,8 @@ def _base_finding(
         "whyItMatters": why,
         "interpretation": interpretation,
         "reviewItems": review_items,
+        "actionLevel": action_level,
+        "recommendedAction": recommended_action,
         "evidence": evidence,
         "currentPeriod": current,
         "previousPeriod": previous,
@@ -892,6 +982,20 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
     if current.get("roas") is not None:
         evidence.append({"label": "ROAS", "value": f"{_num(current.get('roas')):.2f}x"})
 
+    primary_finding = (critical or warnings or opportunities_found or findings or [None])[0]
+    if primary_finding:
+        top_action_level = str(primary_finding.get("actionLevel") or "review")
+        top_action = str(
+            primary_finding.get("recommendedAction")
+            or "Review the detailed evidence before making a campaign change."
+        )
+    elif status == "healthy":
+        top_action_level = "monitor"
+        top_action = "Keep this campaign stable and test only one deliberate variable at a time."
+    else:
+        top_action_level = "monitor"
+        top_action = "Allow more delivery and conversion data to accumulate before making a material change."
+
     return {
         "id": f"{snapshot.get('platform')}:{snapshot.get('campaignId')}:assessment",
         "platform": snapshot.get("platform"),
@@ -903,6 +1007,8 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
         "confidence": confidence,
         "headline": headline,
         "summary": summary,
+        "actionLevel": top_action_level,
+        "recommendedAction": top_action,
         "strengths": strengths[:4],
         "concerns": concerns[:4],
         "opportunities": opportunities[:3],

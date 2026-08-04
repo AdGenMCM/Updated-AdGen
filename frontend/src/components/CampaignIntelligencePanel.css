@@ -1154,3 +1154,285 @@
     padding: 14px;
   }
 }
+
+/* Supporting evidence moved out of the main page flow */
+.ci-relatedFindings { display:grid; gap:10px; padding-top:2px; }
+.ci-relatedFindingsHeader span,
+.ci-evidenceLauncher span,
+.ci-findingDrawerHeader > div > span,
+.ci-findingDrawerNav > span { display:block; color:#60a5fa; font-size:.62rem; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
+.ci-relatedFindingsHeader strong { display:block; margin-top:4px; color:#e2e8f0; font-size:.8rem; }
+.ci-relatedFindingsList { display:grid; gap:7px; }
+.ci-relatedFindingButton { display:grid; justify-items:start; gap:4px; width:100%; padding:10px 12px; border:1px solid rgba(96,165,250,.16); border-radius:10px; background:rgba(37,99,235,.07); color:#e2e8f0; text-align:left; }
+.ci-relatedFindingButton:hover { border-color:rgba(96,165,250,.3); background:rgba(37,99,235,.12); }
+.ci-relatedFindingButton span { color:#93c5fd; font-size:.58rem; font-weight:900; letter-spacing:.07em; text-transform:uppercase; }
+.ci-relatedFindingButton strong { color:#f8fafc; font-size:.76rem; line-height:1.35; }
+.ci-evidenceLauncher { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px 17px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.42); }
+.ci-evidenceLauncher strong { display:block; margin-top:5px; color:#fff; }
+.ci-evidenceLauncher p { max-width:720px; margin:6px 0 0; color:#94a3b8; font-size:.76rem; line-height:1.5; }
+.ci-findingDrawerBackdrop { position:fixed; inset:0; z-index:1000; display:flex; justify-content:flex-end; background:rgba(2,6,23,.68); backdrop-filter:blur(5px); }
+.ci-findingDrawer { width:min(620px,94vw); height:100%; overflow-y:auto; padding:22px; border-left:1px solid rgba(148,163,184,.18); background:radial-gradient(circle at 100% 0%,rgba(79,70,229,.16),transparent 34%),#0f172a; box-shadow:-28px 0 70px rgba(2,6,23,.42); }
+.ci-findingDrawerHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.ci-findingDrawerHeader small { display:block; margin-top:8px; color:#94a3b8; }
+.ci-findingDrawerHeader h4 { margin:8px 0 0; color:#fff; font-size:1.25rem; line-height:1.25; }
+.ci-findingDrawerHeader p { margin:8px 0 0; color:#cbd5e1; line-height:1.55; }
+.ci-findingDrawerClose { flex:0 0 auto; display:grid; place-items:center; width:38px; height:38px; padding:0; border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#e2e8f0; background:rgba(255,255,255,.05); font-size:1.45rem; line-height:1; cursor:pointer; }
+.ci-findingDrawerMeta { display:flex; margin:14px 0; }
+.ci-findingDrawer .ci-explanationGrid { margin-top:14px; }
+.ci-findingDrawer .ci-evidence,
+.ci-findingDrawer .ci-review,
+.ci-findingDrawer .ci-actions { margin-top:14px; }
+.ci-findingDrawerNav { display:grid; gap:9px; margin-top:18px; padding-top:16px; border-top:1px solid rgba(255,255,255,.08); }
+.ci-findingDrawerNav > div { display:grid; gap:7px; }
+.ci-findingDrawerNav button { padding:10px 11px; border:1px solid rgba(255,255,255,.08); border-radius:9px; color:#cbd5e1; background:rgba(30,41,59,.48); font:inherit; font-size:.74rem; text-align:left; cursor:pointer; }
+.ci-findingDrawerNav button.active { border-color:rgba(99,102,241,.38); color:#fff; background:rgba(79,70,229,.16); }
+@media(max-width:700px){ .ci-evidenceLauncher{align-items:stretch;flex-direction:column}.ci-evidenceLauncher .ci-secondaryButton{width:100%}.ci-findingDrawer{width:100%;padding:18px}.ci-findingDrawerHeader h4{font-size:1.08rem} }
+
+
+/* Campaign Intelligence usability refinement */
+.ci-reviewGuide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 13px;
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.ci-reviewGuide > div {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 9px;
+}
+
+.ci-reviewGuide > div > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 999px;
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.18);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.ci-reviewGuide p,
+.ci-reviewGuide strong {
+  display: block;
+}
+
+.ci-reviewGuide p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.ci-reviewGuide strong {
+  margin-bottom: 3px;
+  color: #f8fafc;
+  font-size: 0.74rem;
+}
+
+.ci-relatedFindingButton small {
+  color: #93a4bd;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.ci-findingQuickSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 16px 0;
+}
+
+.ci-findingQuickSummary > div {
+  padding: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.16);
+  border-radius: 11px;
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.ci-findingQuickSummary small,
+.ci-findingQuickSummary strong {
+  display: block;
+}
+
+.ci-findingQuickSummary small {
+  color: #94a3b8;
+  font-size: 0.59rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ci-findingQuickSummary strong {
+  margin-top: 6px;
+  color: #f8fafc;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 800px) {
+  .ci-reviewGuide {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .ci-findingQuickSummary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ensure every detailed finding starts at the top */
+.ci-findingDrawerBackdrop {
+  overflow: hidden;
+}
+
+.ci-findingDrawer {
+  position: relative;
+  top: 0;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+
+
+/* Portaled detailed-finding report: always opens at the viewport top */
+.ci-findingDrawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.ci-findingDrawer {
+  position: relative;
+  inset: auto;
+  top: 0;
+  right: 0;
+  box-sizing: border-box;
+  width: min(620px, 94vw);
+  height: 100dvh;
+  min-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+  scrollbar-gutter: stable;
+}
+
+.ci-findingDrawerHeader {
+  position: relative;
+  padding-right: 48px;
+}
+
+.ci-findingDrawerClose {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+}
+
+@media (max-width: 700px) {
+  .ci-findingDrawer {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+/* Actionability layer */
+.ci-campaignNextAction {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.ci-campaignNextAction > div span,
+.ci-campaignNextAction > div strong {
+  display: block;
+}
+
+.ci-campaignNextAction > div span {
+  color: #93c5fd;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ci-campaignNextAction > div strong {
+  margin-top: 5px;
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.ci-campaignNextAction p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.ci-campaignNextAction.test,
+.ci-primaryRecommendation.test {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.ci-campaignNextAction.monitor,
+.ci-primaryRecommendation.monitor {
+  border-color: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.ci-campaignNextAction.do_now,
+.ci-primaryRecommendation.do_now {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.ci-primaryRecommendation {
+  border-color: rgba(96, 165, 250, 0.2) !important;
+  background: rgba(37, 99, 235, 0.08) !important;
+}
+
+.ci-primaryRecommendation.test {
+  border-color: rgba(245, 158, 11, 0.22) !important;
+  background: rgba(245, 158, 11, 0.07) !important;
+}
+
+.ci-primaryRecommendation.monitor {
+  border-color: rgba(34, 197, 94, 0.2) !important;
+  background: rgba(34, 197, 94, 0.06) !important;
+}
+
+.ci-primaryRecommendation.do_now {
+  border-color: rgba(239, 68, 68, 0.24) !important;
+  background: rgba(239, 68, 68, 0.07) !important;
+}
+
+@media (max-width: 760px) {
+  .ci-campaignNextAction {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -59,6 +59,67 @@ export default function AuthForm({ onLogin }) {
     setUnverifiedUser(null);
   };
 
+  const getFriendlyAuthError = (error) => {
+  const code = error?.code || "";
+
+  switch (code) {
+    case "auth/network-request-failed":
+      return "We couldn't connect to Google sign-in. Please check your internet connection and try again. You can also continue with email.";
+
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in window. Please allow pop-ups and try again.";
+
+    case "auth/popup-closed-by-user":
+      return "Google sign-in was closed before it finished. Please try again.";
+
+    case "auth/cancelled-popup-request":
+      return "Another Google sign-in is already in progress.";
+
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists for this email using a different sign-in method.";
+
+    case "auth/too-many-requests":
+      return "Too many sign-in attempts. Please wait a few minutes and try again.";
+
+    default:
+      return "We couldn't sign you in with Google right now. Please try again or continue with email.";
+  }
+};
+
+const getFriendlyEmailAuthError = (error) => {
+  const code = error?.code || "";
+
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "An account already exists for this email.";
+
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "The email or password you entered is incorrect.";
+
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+
+    case "auth/weak-password":
+      return "Use a stronger password with at least 6 characters.";
+
+    case "auth/network-request-failed":
+      return "We couldn't connect to the sign-in service. This is usually temporary. Please try again.";
+
+    case "auth/too-many-requests":
+      return "Too many sign-in attempts. Please wait a few minutes and try again.";
+
+    case "auth/user-disabled":
+      return "This account has been disabled. Please contact support if you believe this is an error.";
+
+    case "auth/requires-recent-login":
+      return "For security reasons, please sign in again and retry your request.";
+
+    default:
+      return "We couldn't complete your request right now. Please try again.";
+  }
+};
 
 
   const completeNewUserOnboarding = async (user, authProvider) => {
@@ -215,7 +276,7 @@ export default function AuthForm({ onLogin }) {
     return isNewUser;
   };
 
-  const handleGoogleSignIn = async () => {
+    const handleGoogleSignIn = async () => {
     clearFeedback();
     setGoogleLoading(true);
 
@@ -236,19 +297,9 @@ export default function AuthForm({ onLogin }) {
 
       await continueAfterAuthentication(user);
     } catch (error) {
-      const code = error?.code || "";
+      console.error("Google sign-in failed:", error);
 
-      if (code.includes("popup-closed-by-user")) {
-        showMessage("Google sign-in was closed before it finished.");
-      } else if (code.includes("popup-blocked")) {
-        showMessage("Your browser blocked the Google sign-in window. Allow popups and try again.");
-      } else if (code.includes("account-exists-with-different-credential")) {
-        showMessage(
-          "An account already exists for this email using a different sign-in method."
-        );
-      } else {
-        showMessage(error?.message || "We could not sign you in with Google.");
-      }
+      showMessage(getFriendlyAuthError(error));
     } finally {
       setGoogleLoading(false);
     }
@@ -350,23 +401,9 @@ export default function AuthForm({ onLogin }) {
         }
       })();
     } catch (error) {
-      const code = error?.code || "";
+      console.error("Email authentication failed:", error);
 
-      if (code.includes("email-already-in-use")) {
-        showMessage("An account already exists for this email.");
-      } else if (
-        code.includes("invalid-credential") ||
-        code.includes("wrong-password") ||
-        code.includes("user-not-found")
-      ) {
-        showMessage("The email or password you entered is incorrect.");
-      } else if (code.includes("weak-password")) {
-        showMessage("Use a stronger password with at least 6 characters.");
-      } else if (code.includes("invalid-email")) {
-        showMessage("Enter a valid email address.");
-      } else {
-        showMessage(error?.message || "We could not complete that request.");
-      }
+      showMessage(getFriendlyEmailAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -382,8 +419,10 @@ export default function AuthForm({ onLogin }) {
       setResetting(true);
       await sendPasswordResetEmail(auth, email.trim());
       showMessage("Password reset email sent. Check your inbox.", "success");
-    } catch (error) {
-      showMessage(error?.message || "We could not send the reset email.");
+   } catch (error) {
+      console.error("Password reset failed:", error);
+
+      showMessage(getFriendlyEmailAuthError(error));
     } finally {
       setResetting(false);
     }
@@ -395,8 +434,12 @@ export default function AuthForm({ onLogin }) {
     try {
       await sendEmailVerification(unverifiedUser);
       showMessage("Verification email resent. Check your inbox.", "success");
-    } catch (error) {
-      showMessage(error?.message || "We could not resend the verification email.");
+   } catch (error) {
+      console.error("Verification email failed:", error);
+
+      showMessage(
+        "We couldn't resend the verification email right now. Please try again."
+      );
     }
   };
 

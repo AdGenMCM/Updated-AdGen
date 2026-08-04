@@ -27,6 +27,8 @@ class CampaignFinding(BaseModel):
     whyItMatters: str
     interpretation: str
     reviewItems: list[str] = Field(default_factory=list)
+    actionLevel: Literal["do_now", "test", "review", "monitor"] = "review"
+    recommendedAction: str = "Review the supporting evidence before making a change."
     evidence: list[EvidenceItem] = Field(default_factory=list)
     currentPeriod: dict[str, Any] = Field(default_factory=dict)
     previousPeriod: dict[str, Any] = Field(default_factory=dict)
@@ -47,6 +49,8 @@ class CampaignAssessment(BaseModel):
     confidence: Literal["low", "medium", "high"]
     headline: str
     summary: str
+    actionLevel: Literal["do_now", "test", "review", "monitor"] = "review"
+    recommendedAction: str = "Review the supporting evidence before making a change."
     strengths: list[str] = Field(default_factory=list)
     concerns: list[str] = Field(default_factory=list)
     opportunities: list[str] = Field(default_factory=list)
