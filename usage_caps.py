@@ -14,7 +14,9 @@ def utc_month_key(dt: Optional[datetime] = None) -> str:
 
 
 def get_usage_period(user_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    tier = normalize_tier((user_doc or {}).get("tier"))
+    user_doc = user_doc or {}
+    effective_tier, _status = get_tier_and_status(user_doc)
+    tier = normalize_tier(effective_tier)
 
     if tier == "free":
         return {
