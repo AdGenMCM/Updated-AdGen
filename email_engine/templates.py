@@ -430,6 +430,46 @@ def _campaign_template(
     }.get(tier, "your")
 
     templates: dict[str, LifecycleTemplate] = {
+        "plan_selection_24h": LifecycleTemplate(
+            subject="Finish setting up your ADGen workspace",
+            preview="Choose Free or a paid plan to open your creative workspace.",
+            eyebrow="One step left",
+            heading=f"Your ADGen workspace is almost ready, {name}.",
+            intro=body,
+            detail=(
+                "Select the plan that fits your workflow, or start with the Free plan. "
+                "The Free plan includes two image generations and does not require a credit card."
+            ),
+            cta_label=cta_label,
+            panel_title="Choose how you want to begin",
+            panel_items=(
+                "Start with the Free plan and no credit card",
+                "Choose a paid plan for more creative capacity",
+                "Open your workspace immediately after selection",
+            ),
+            accent=BLUE,
+            footer_note="You are receiving this account setup reminder because your ADGen plan selection is not complete.",
+        ),
+        "plan_selection_72h": LifecycleTemplate(
+            subject="Your ADGen workspace is waiting",
+            preview="Finish setup by choosing Free or the paid plan that fits your workflow.",
+            eyebrow="Complete your setup",
+            heading=f"Your workspace is still waiting for you, {name}.",
+            intro=body,
+            detail=(
+                "You can begin with the Free plan and create your first campaign-ready image "
+                "without entering a credit card. Once you choose a plan, your workspace will open."
+            ),
+            cta_label=cta_label,
+            panel_title="You can start for free",
+            panel_items=(
+                "Two image generations included",
+                "No credit card required for Free",
+                "Upgrade later whenever your workflow grows",
+            ),
+            accent=PURPLE,
+            footer_note="This is the final account setup reminder for your current ADGen signup.",
+        ),
         "first_image": LifecycleTemplate(
             subject="Your first ADGen creative is one prompt away",
             preview="Turn your idea into a campaign-ready image ad in minutes.",

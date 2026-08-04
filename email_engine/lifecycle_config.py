@@ -37,6 +37,8 @@ class LifecycleSettings:
 
 def get_lifecycle_settings() -> LifecycleSettings:
     campaign_defaults = {
+        "plan_selection_24h": True,
+        "plan_selection_72h": True,
         "first_image": True,
         "brand_kit": True,
         "first_video": True,

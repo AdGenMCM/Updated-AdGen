@@ -130,6 +130,59 @@ def _last_sign_in(uid: str, fallback: int) -> int:
         return fallback
 
 
+def _normalized_value(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _has_workspace_access(user_doc: dict) -> bool:
+    stripe = user_doc.get("stripe") or {}
+    statuses = {
+        _normalized_value(stripe.get("status")),
+        _normalized_value(user_doc.get("subscriptionStatus")),
+        _normalized_value(user_doc.get("status")),
+    }
+    return bool(statuses & {"active", "trialing", "past_due"})
+
+
+def _has_plan_selection_marker(user_doc: dict) -> bool:
+    onboarding = user_doc.get("onboarding") or {}
+    stripe = user_doc.get("stripe") or {}
+
+    marker_values = (
+        user_doc.get("planSelectedAt"),
+        user_doc.get("selectedPlanAt"),
+        user_doc.get("freePlanSelectedAt"),
+        user_doc.get("checkoutCompletedAt"),
+        onboarding.get("planSelectedAt"),
+        onboarding.get("planSelectionCompletedAt"),
+        onboarding.get("planSelectionCompleted"),
+        stripe.get("checkoutCompletedAt"),
+        stripe.get("subscriptionId"),
+    )
+    return any(value not in (None, "", False) for value in marker_values)
+
+
+def _needs_plan_selection(user_doc: dict) -> bool:
+    # New ADGen profiles may already contain a default tier value before the
+    # user chooses Free or a paid plan. Workspace access and explicit plan
+    # selection markers are therefore safer than tier alone.
+    if _has_workspace_access(user_doc):
+        return False
+    if _has_plan_selection_marker(user_doc):
+        return False
+
+    stripe = user_doc.get("stripe") or {}
+    statuses = {
+        _normalized_value(stripe.get("status")),
+        _normalized_value(user_doc.get("subscriptionStatus")),
+    }
+
+    # The observed incomplete-onboarding state is inactive (or absent on older
+    # profiles). Other terminal states should not receive new-user reminders.
+    meaningful = {value for value in statuses if value}
+    return not meaningful or meaningful <= {"inactive", "none"}
+
+
 def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> list[Candidate]:
     now = now or int(time.time())
     settings = get_lifecycle_settings()
@@ -142,6 +195,34 @@ def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> lis
     image_exists = _query_exists("image_jobs", uid, succeeded=True)
     video_exists = _query_exists("video_jobs", uid, succeeded=True)
     candidates: list[Candidate] = []
+
+    if _needs_plan_selection(user_doc):
+        if settings.campaigns.get("plan_selection_72h", False) and age_days >= 3:
+            candidates.append(
+                Candidate(
+                    "plan_selection_72h",
+                    "plan_selection",
+                    "Your ADGen workspace is waiting",
+                    "You created your ADGen account, but one final step is still needed before you can start creating. Choose the Free plan or select the paid plan that fits your workflow.",
+                    "Finish setting up my workspace",
+                    "/subscribe?complete_setup=1",
+                    220,
+                    "once",
+                )
+            )
+        elif settings.campaigns.get("plan_selection_24h", False) and age_days >= 1:
+            candidates.append(
+                Candidate(
+                    "plan_selection_24h",
+                    "plan_selection",
+                    "Finish setting up your ADGen workspace",
+                    "Your ADGen account is ready, but you still need to choose Free or a paid plan before opening your workspace.",
+                    "Choose my plan",
+                    "/subscribe?complete_setup=1",
+                    210,
+                    "once",
+                )
+            )
 
     if settings.activation_enabled:
         if settings.campaigns["first_image"] and age_days >= 1 and not image_exists:
@@ -214,7 +295,12 @@ def send_candidate(uid: str, recipient: str, display_name: str, tier: str, candi
     if test_mode:
         email_key = f"test:{email_key}:{now}"
     result = send_email_once(uid=uid, recipient=recipient, email_key=email_key, category="test" if test_mode else "lifecycle", subject=subject, html=html, metadata={"campaign": candidate.key, "category": candidate.category, "plan": tier, "schemaVersion": 1, "reason": candidate.key, "testMode": test_mode})
-    if result.get("sent") and not result.get("skipped") and not test_mode:
+    if (
+        result.get("sent")
+        and not result.get("skipped")
+        and not test_mode
+        and candidate.category != "plan_selection"
+    ):
         try:
             track_event(get_db(), uid, "email.sent.lifecycle", event_id=f"email:{candidate.key}:{uid}:{candidate.idempotency_suffix}", metadata={"campaign": candidate.key, "category": candidate.category, "plan": tier, "deliveryId": result.get("deliveryId")}, source="email_engine")
         except Exception as error:
