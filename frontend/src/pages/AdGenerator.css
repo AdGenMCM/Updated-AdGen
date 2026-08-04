@@ -915,3 +915,27 @@
 .template-scroll-target {
   scroll-margin-top: 118px;
 }
+
+/* =========================================================
+   Performance Intelligence plan lock
+========================================================= */
+
+.adgen-form .performance-intelligence-locked {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+}
+
+.adgen-form .performance-intelligence-locked strong {
+  color: var(--ag-text);
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.adgen-form .performance-intelligence-locked small {
+  color: var(--ag-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+

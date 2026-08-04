@@ -271,6 +271,7 @@ function AdGenerator() {
 
   const apiBase = process.env.REACT_APP_API_BASE_URL?.trim();
   const [isFreePlan, setIsFreePlan] = useState(false);
+  const [canUsePerformanceIntelligence, setCanUsePerformanceIntelligence] = useState(false);
   const hasReferenceImages = referenceImages.length > 0;
 
 
@@ -285,11 +286,30 @@ function AdGenerator() {
         });
         if (!res.ok) return;
         const me = await res.json();
-        setIsFreePlan(String(me.tier || "").toLowerCase() === "free");
+        const resolvedTier = String(me.tier || "").toLowerCase();
+
+        setIsFreePlan(resolvedTier === "free");
+        setCanUsePerformanceIntelligence(
+          Boolean(me.isAdmin) ||
+            resolvedTier === "pro_monthly" ||
+            resolvedTier === "business_monthly"
+        );
       } catch {}
     };
     loadPlan();
   }, [apiBase]);
+
+  useEffect(() => {
+    if (
+      usePerformanceIntelligence &&
+      !canUsePerformanceIntelligence
+    ) {
+      setUsePerformanceIntelligence(false);
+    }
+  }, [
+    usePerformanceIntelligence,
+    canUsePerformanceIntelligence,
+  ]);
 
 
 
@@ -598,7 +618,8 @@ function AdGenerator() {
         referenceImageMode,
         productType: form.productType === "auto" ? null : form.productType,
         usePerformanceIntelligence:
-          !isFreePlan && usePerformanceIntelligence,
+          canUsePerformanceIntelligence &&
+          usePerformanceIntelligence,
       };
 
 
@@ -1126,9 +1147,12 @@ function AdGenerator() {
                 <div className={`option-card enhancement-card performance-intelligence-option ${
                   usePerformanceIntelligence ? "enabled" : ""
                 }`}>
-                  {isFreePlan ? (
+                  {!canUsePerformanceIntelligence ? (
                     <div className="performance-intelligence-locked">
-                      <strong>🔒 Performance Intelligence</strong>
+                      <strong>
+                        🔒 Performance Intelligence{" "}
+                        <InfoTip text="Applies the colors, visual styles, compositions, messaging patterns, CTA language, and headline structure ADGen has learned from your qualified performance data." />
+                      </strong>
                       <small>Available on Pro &amp; Business plans.</small>
                     </div>
                   ) : (
@@ -1155,7 +1179,7 @@ function AdGenerator() {
                     </label>
                   )}
 
-                  {!isFreePlan && (
+                  {canUsePerformanceIntelligence && (
                     <PerformanceIntelligencePreview
                       enabled={usePerformanceIntelligence}
                       mode="image"

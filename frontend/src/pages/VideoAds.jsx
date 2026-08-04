@@ -1141,6 +1141,7 @@ return (
                 <div className="videoToggleCopy">
                   <span className="videoToggleTitle">
                     <span>🔒 Performance Intelligence</span>
+                    <InfoTip text="Applies concise patterns learned from qualified performance data while preserving the current request, Brand Kit, source image, and Runway's 1,000-character prompt limit." />
                   </span>
                   <small>Available on Pro &amp; Business plans.</small>
                 </div>
