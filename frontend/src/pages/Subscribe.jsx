@@ -48,7 +48,7 @@ const PLAN_OPTIONS = [
     storage: "250 MB storage",
     features: [
       "Image generation",
-      "One 6-second AI video",
+      "One 6-second video",
       "Dashboard",
       "My Account",
     ],
@@ -82,11 +82,12 @@ const PLAN_OPTIONS = [
       "A dependable monthly creative workflow for freelancers, brands, and small businesses.",
     images: "40 images",
     videos: "6 video credits",
-    optimizer: "No Optimizer",
+    optimizer: "10 Uses",
     brands: "1 Brand Kit",
     storage: "10 GB storage",
     features: [
       "Everything in Trial",
+      "Creative Optimizer",
       "Higher generation limits",
       "Brand-aware defaults",
       "Creative Studio",
@@ -108,7 +109,6 @@ const PLAN_OPTIONS = [
     featured: true,
     features: [
       "Everything in Starter",
-      "Creative Optimizer",
       "Performance Intelligence",
       "Campaign Intelligence",
       "Winner analysis",
@@ -141,7 +141,7 @@ const PLAN_OPTIONS = [
 const ALLOWED_TIERS = new Set(PLAN_OPTIONS.map((plan) => plan.id));
 
 export default function Subscribe() {
-  const { currentUser } = useAuth();
+  const { currentUser, stripe } = useAuth();
   const [status, setStatus] = useState("checking");
   const [stripeInfo, setStripeInfo] = useState(null);
   const [error, setError] = useState("");
@@ -200,9 +200,10 @@ export default function Subscribe() {
 
     (async () => {
       try {
+        const token = await currentUser.getIdToken(true);
         await syncSubscription({
-          uid: currentUser.uid,
           sessionId: sid,
+          token,
         });
       } finally {
         localStorage.removeItem("pending_session_id");
@@ -217,9 +218,10 @@ export default function Subscribe() {
       try {
         setSyncing(true);
 
+        const token = await currentUser.getIdToken(true);
         await syncSubscription({
-          uid: currentUser.uid,
           sessionId,
+          token,
         });
       } catch (syncError) {
         console.error("sync-subscription (initial) failed:", syncError);
@@ -332,9 +334,10 @@ export default function Subscribe() {
       attempts += 1;
 
       try {
+        const token = await currentUser.getIdToken(true);
         await syncSubscription({
-          uid: currentUser.uid,
           sessionId,
+          token,
         });
       } catch {
         // Keep polling briefly while Stripe and Firestore finish syncing.
@@ -511,15 +514,29 @@ export default function Subscribe() {
     setCheckoutLoading(true);
 
     try {
+      if (
+        stripe?.subscriptionId &&
+        ["active", "trialing", "past_due"].includes(
+          String(stripe?.status || "").toLowerCase()
+        )
+      ) {
+        const token = await currentUser.getIdToken(true);
+        localStorage.setItem("adgen_billing_portal_return", "1");
+        const { url } = await createPortalSession(token);
+        window.location.href = url;
+        return;
+      }
+
       localStorage.setItem(
         "adgen_post_checkout_redirect",
         "/brand-kit"
       );
 
+      const token = await currentUser.getIdToken(true);
       const { url } = await createCheckoutSession({
-        uid: currentUser.uid,
         email: currentUser.email,
         tier,
+        token,
       });
 
       openInNewTab(url);
@@ -541,8 +558,10 @@ export default function Subscribe() {
         return;
       }
 
-      const { url } = await createPortalSession(stripeInfo.customerId);
-      openInNewTab(url);
+      const token = await currentUser.getIdToken(true);
+      localStorage.setItem("adgen_billing_portal_return", "1");
+      const { url } = await createPortalSession(token);
+      window.location.href = url;
     } catch (portalError) {
       console.error(portalError);
       setError(portalError.message || "Failed to open billing portal.");
@@ -555,9 +574,10 @@ export default function Subscribe() {
     try {
       setSyncing(true);
 
+      const token = await currentUser.getIdToken(true);
       await syncSubscription({
-        uid: currentUser.uid,
         sessionId,
+        token,
       });
     } catch {
       setError("Refresh failed. Try again in a moment.");

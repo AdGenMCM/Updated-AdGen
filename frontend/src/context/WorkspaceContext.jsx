@@ -124,6 +124,7 @@ export function WorkspaceProvider({ children }) {
 
   const [usage, setUsage] = useState(null);
   const [videoUsage, setVideoUsage] = useState(null);
+  const [optimizerUsage, setOptimizerUsage] = useState(null);
   const [storageUsage, setStorageUsage] = useState(null);
   const [recentCreatives, setRecentCreatives] = useState([]);
   const [customerIntelligence, setCustomerIntelligence] = useState(null);
@@ -344,6 +345,9 @@ export function WorkspaceProvider({ children }) {
 
         setUsage(usageData);
         setVideoUsage(videoData);
+        setOptimizerUsage(
+          entitlementsData?.usage?.optimizerRuns || null
+        );
         setStorageUsage(
           entitlementsData?.usage?.storage || null
         );
@@ -450,6 +454,7 @@ export function WorkspaceProvider({ children }) {
 
       setUsage(null);
       setVideoUsage(null);
+      setOptimizerUsage(null);
       setStorageUsage(null);
       setRecentCreatives([]);
       setCustomerIntelligence(null);
@@ -464,6 +469,19 @@ export function WorkspaceProvider({ children }) {
     fetchWorkspaceData();
   }, [
     currentUser?.uid,
+    fetchWorkspaceData,
+  ]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    void fetchWorkspaceData({ force: true });
+  }, [
+    currentUser?.uid,
+    stripe?.tier,
+    stripe?.status,
+    stripe?.currentPeriodStart,
+    stripe?.currentPeriodEnd,
     fetchWorkspaceData,
   ]);
 
@@ -484,6 +502,7 @@ export function WorkspaceProvider({ children }) {
       planLabel,
       usage,
       videoUsage,
+      optimizerUsage,
       storageUsage,
       recentCreatives,
       customerIntelligence,
@@ -500,6 +519,7 @@ export function WorkspaceProvider({ children }) {
       planLabel,
       usage,
       videoUsage,
+      optimizerUsage,
       storageUsage,
       recentCreatives,
       customerIntelligence,

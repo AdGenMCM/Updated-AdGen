@@ -6,75 +6,124 @@ const isLocalhost =
 
 const API_BASE =
   (process.env.REACT_APP_API_BASE_URL || "").trim() ||
-  (isLocalhost ? "http://localhost:4242" : "https://updated-adgen-1.onrender.com");
+  (isLocalhost
+    ? "http://localhost:4242"
+    : "https://updated-adgen-1.onrender.com");
 
-// Helper: try endpoint at root first, then /stripe if 404
 async function fetchWithStripeFallback(path, options) {
-  let res = await fetch(`${API_BASE}${path}`, options);
-  if (res.status === 404) {
-    res = await fetch(`${API_BASE}/stripe${path}`, options);
+  let response = await fetch(`${API_BASE}${path}`, options);
+
+  if (response.status === 404) {
+    response = await fetch(`${API_BASE}/stripe${path}`, options);
   }
-  return res;
+
+  return response;
 }
 
-async function readError(res) {
-  const text = await res.text();
+async function readError(response) {
+  const text = await response.text();
+
   try {
-    const j = JSON.parse(text);
-    if (j?.detail) return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
-    if (j?.error) return j.error;
-    return JSON.stringify(j);
+    const parsed = JSON.parse(text);
+    const detail = parsed?.detail;
+
+    if (detail) {
+      if (typeof detail === "string") return detail;
+      return detail?.message || JSON.stringify(detail);
+    }
+
+    if (parsed?.error) return parsed.error;
+    return JSON.stringify(parsed);
   } catch {
-    return text || `HTTP ${res.status}`;
+    return text || `HTTP ${response.status}`;
   }
 }
 
-export async function createCheckoutSession({ uid, email, tier }) {
-  const res = await fetchWithStripeFallback(`/create-checkout-session`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ uid, email, tier }),
-  });
+function authenticatedHeaders(token, includeJson = false) {
+  if (!token) {
+    throw new Error("A valid sign-in token is required.");
+  }
 
-  if (!res.ok) throw new Error(await readError(res));
-  return res.json(); // { url }
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(includeJson ? { "Content-Type": "application/json" } : {}),
+  };
 }
 
-export async function createPortalSession(customerId) {
-  const res = await fetchWithStripeFallback(`/create-portal-session`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ customer_id: customerId }),
-  });
+export async function createCheckoutSession({
+  email,
+  tier,
+  token,
+}) {
+  const response = await fetchWithStripeFallback(
+    "/create-checkout-session",
+    {
+      method: "POST",
+      headers: authenticatedHeaders(token, true),
+      credentials: "include",
+      body: JSON.stringify({ email, tier }),
+    }
+  );
 
-  if (!res.ok) throw new Error(await readError(res));
-  return res.json(); // { url }
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return response.json();
 }
 
-export async function syncSubscription({ uid, sessionId, customerId }) {
+export async function createPortalSession(token) {
+  const response = await fetchWithStripeFallback(
+    "/create-portal-session",
+    {
+      method: "POST",
+      headers: authenticatedHeaders(token),
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return response.json();
+}
+
+export async function syncSubscription({
+  sessionId,
+  token,
+} = {}) {
   const url = new URL(`${API_BASE}/sync-subscription`);
-  url.searchParams.set("uid", uid);
-  if (sessionId) url.searchParams.set("session_id", sessionId);
-  if (customerId) url.searchParams.set("customer_id", customerId);
 
-  let res = await fetch(url.toString(), { method: "GET", credentials: "include" });
-
-  if (res.status === 404) {
-    const url2 = new URL(`${API_BASE}/stripe/sync-subscription`);
-    url2.searchParams.set("uid", uid);
-    if (sessionId) url2.searchParams.set("session_id", sessionId);
-    if (customerId) url2.searchParams.set("customer_id", customerId);
-    res = await fetch(url2.toString(), { method: "GET", credentials: "include" });
+  if (sessionId) {
+    url.searchParams.set("session_id", sessionId);
   }
 
-  if (!res.ok) throw new Error(await readError(res));
-  return res.json();
+  let response = await fetch(url.toString(), {
+    method: "GET",
+    headers: authenticatedHeaders(token),
+    credentials: "include",
+  });
+
+  if (response.status === 404) {
+    const fallbackUrl = new URL(
+      `${API_BASE}/stripe/sync-subscription`
+    );
+
+    if (sessionId) {
+      fallbackUrl.searchParams.set("session_id", sessionId);
+    }
+
+    response = await fetch(fallbackUrl.toString(), {
+      method: "GET",
+      headers: authenticatedHeaders(token),
+      credentials: "include",
+    });
+  }
+
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return response.json();
 }
-
-
-
-
-
-

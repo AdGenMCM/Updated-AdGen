@@ -3,7 +3,7 @@ import os
 import json
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import stripe
 
 from firebase_admin import firestore
-from auth_helpers import get_db
+from auth_helpers import get_db, get_bearer_token, verify_firebase_token
 from notification_utils import create_notification
 from customer_intelligence.event_service import track_event
 
@@ -93,16 +93,93 @@ _load_settings_from_env()
 
 # ---------------- Models ----------------
 class CheckoutPayload(BaseModel):
-    uid: str
     email: Optional[str] = None
     tier: str
 
 
-class PortalPayload(BaseModel):
-    customer_id: str
-
-
 # ---------------- Helpers ----------------
+def _require_authenticated_user(
+    authorization: Optional[str],
+) -> tuple[str, Optional[str], Dict[str, Any]]:
+    token = get_bearer_token(authorization)
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization Bearer token.",
+        )
+
+    try:
+        claims = verify_firebase_token(token)
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired auth token.",
+        )
+
+    uid = claims.get("uid")
+    email = claims.get("email")
+
+    if not uid:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid auth token (no uid).",
+        )
+
+    return uid, email, claims
+
+
+def _get_user_stripe_customer(
+    db,
+    uid: str,
+) -> tuple[Dict[str, Any], str]:
+    user_ref = db.collection("users").document(uid)
+    user_data = user_ref.get().to_dict() or {}
+    stripe_info = user_data.get("stripe") or {}
+    customer_id = str(stripe_info.get("customerId") or "").strip()
+
+    if not customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No Stripe customer is associated with this account.",
+        )
+
+    resolved_uid = _resolve_uid_for_customer(
+        db,
+        customer_id,
+        expected_uid=uid,
+    )
+
+    if resolved_uid and resolved_uid != uid:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Stripe customer ownership could not be verified for "
+                "this account."
+            ),
+        )
+
+    return user_data, customer_id
+
+
+def _select_relevant_subscription(customer_id: str):
+    subscriptions = stripe.Subscription.list(
+        customer=customer_id,
+        status="all",
+        limit=10,
+        expand=["data.items.data.price"],
+    )
+
+    items = list(subscriptions.data or [])
+    active_like = {"active", "trialing", "past_due"}
+
+    for subscription in items:
+        if subscription.get("status") in active_like:
+            return subscription
+
+    return items[0] if items else None
+
+
 def price_id_to_tier(price_id: Optional[str]) -> Optional[str]:
     if not price_id:
         return None
@@ -157,30 +234,66 @@ def _tier_label(tier: Optional[str]) -> str:
     return labels.get(str(tier or "").strip(), str(tier or "your plan"))
 
 
-def _resolve_uid_for_customer(db, customer_id: Optional[str]) -> Optional[str]:
+def _resolve_uid_for_customer(
+    db,
+    customer_id: Optional[str],
+    *,
+    expected_uid: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Resolve the Firebase owner for a Stripe customer.
+
+    Stripe customer metadata is treated as the authoritative ownership signal.
+    The Firestore stripe_customers mapping is repaired when it is stale.
+
+    expected_uid is used only when the authenticated user's own Firestore
+    document already references this exact customer ID. In that case, an empty
+    Stripe metadata value can be safely repaired to the authenticated UID.
+    """
     if not customer_id:
         return None
 
-    mapping = db.collection("stripe_customers").document(customer_id).get()
-
-    if mapping.exists:
-        uid = (mapping.to_dict() or {}).get("uid")
-        if uid:
-            return uid
+    mapping_ref = db.collection("stripe_customers").document(customer_id)
+    mapping = mapping_ref.get()
+    mapped_uid = (
+        (mapping.to_dict() or {}).get("uid")
+        if mapping.exists
+        else None
+    )
 
     try:
         customer = stripe.Customer.retrieve(customer_id)
-        uid = (customer.metadata or {}).get("firebase_uid")
+        metadata_uid = str(
+            (customer.metadata or {}).get("firebase_uid") or ""
+        ).strip()
 
-        if uid:
-            db.collection("stripe_customers").document(customer_id).set(
-                {"uid": uid},
+        if metadata_uid:
+            if mapped_uid != metadata_uid:
+                mapping_ref.set(
+                    {"uid": metadata_uid},
+                    merge=True,
+                )
+            return metadata_uid
+
+        if expected_uid:
+            stripe.Customer.modify(
+                customer_id,
+                metadata={"firebase_uid": expected_uid},
+            )
+            mapping_ref.set(
+                {"uid": expected_uid},
                 merge=True,
             )
+            return expected_uid
 
-        return uid
-    except Exception:
-        return None
+        return mapped_uid
+    except Exception as exc:
+        print(
+            "STRIPE CUSTOMER OWNERSHIP LOOKUP ERROR:",
+            customer_id,
+            repr(exc),
+        )
+        return mapped_uid
 
 
 def _create_billing_notification(
@@ -220,45 +333,107 @@ def health():
 
 
 @stripe_router.post("/create-checkout-session")
-def create_checkout_session(body: CheckoutPayload):
+def create_checkout_session(
+    body: CheckoutPayload,
+    authorization: Optional[str] = Header(default=None),
+):
     """
-    Creates a Stripe Checkout Session for a subscription tier.
-    Writes:
-      - stripe_customers/{customerId} -> { uid }
-      - users/{uid}.stripe.customerId + status='pending' + requestedTier
+    Create a new Stripe Checkout subscription for the authenticated user.
+
+    Existing active subscribers must change plans through the Billing Portal,
+    which prevents accidental duplicate Stripe subscriptions.
     """
     try:
-        allowed_checkout_tiers = {"trial_monthly", "starter_monthly", "pro_monthly", "business_monthly"}
+        uid, token_email, _claims = _require_authenticated_user(authorization)
+
+        allowed_checkout_tiers = {
+            "trial_monthly",
+            "starter_monthly",
+            "pro_monthly",
+            "business_monthly",
+        }
+
         if body.tier not in allowed_checkout_tiers or body.tier not in PRICE_MAP:
-            raise HTTPException(status_code=400, detail="Invalid or unavailable tier")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or unavailable tier.",
+            )
 
         price_id = PRICE_MAP[body.tier]
         db = get_db()
-
-        user_ref = db.collection("users").document(body.uid)
+        user_ref = db.collection("users").document(uid)
         user_data = user_ref.get().to_dict() or {}
         stripe_info = user_data.get("stripe") or {}
         customer_id = stripe_info.get("customerId")
+        subscription_id = stripe_info.get("subscriptionId")
+        subscription_status = str(stripe_info.get("status") or "").lower()
+
+        if (
+            subscription_id
+            and subscription_status in {"active", "trialing", "past_due"}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        "This account already has an active subscription. "
+                        "Use the secure billing portal to change plans."
+                    ),
+                    "code": "ACTIVE_SUBSCRIPTION_EXISTS",
+                    "upgradePath": "/account?billing=1",
+                },
+            )
 
         if not customer_id:
             customer = stripe.Customer.create(
-                email=body.email or None,
-                metadata={"firebase_uid": body.uid},
+                email=body.email or token_email or None,
+                metadata={"firebase_uid": uid},
             )
             customer_id = customer.id
+        else:
+            try:
+                stripe.Customer.modify(
+                    customer_id,
+                    metadata={"firebase_uid": uid},
+                )
+            except Exception:
+                pass
 
-        db.collection("stripe_customers").document(customer_id).set({"uid": body.uid}, merge=True)
+        db.collection("stripe_customers").document(customer_id).set(
+            {"uid": uid},
+            merge=True,
+        )
 
         user_ref.set(
-            {"stripe": {"customerId": customer_id, "status": "pending", "requestedTier": body.tier}},
+            {
+                "stripe": {
+                    "customerId": customer_id,
+                    "status": "pending",
+                    "requestedTier": body.tier,
+                }
+            },
             merge=True,
         )
 
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer_id,
+            client_reference_id=uid,
+            metadata={
+                "firebase_uid": uid,
+                "requested_tier": body.tier,
+            },
+            subscription_data={
+                "metadata": {
+                    "firebase_uid": uid,
+                    "requested_tier": body.tier,
+                }
+            },
             line_items=[{"price": price_id, "quantity": 1}],
-            success_url=f"{FRONTEND_URL}/subscribe?success=1&session_id={{CHECKOUT_SESSION_ID}}",
+            success_url=(
+                f"{FRONTEND_URL}/subscribe"
+                "?success=1&session_id={{CHECKOUT_SESSION_ID}}"
+            ),
             cancel_url=f"{FRONTEND_URL}/subscribe?canceled=1",
             allow_promotion_codes=True,
             automatic_tax={"enabled": True},
@@ -270,21 +445,30 @@ def create_checkout_session(body: CheckoutPayload):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @stripe_router.post("/create-portal-session")
-def create_portal_session(body: PortalPayload):
-    """Returns a Billing Portal URL for the given customer."""
+def create_portal_session(
+    authorization: Optional[str] = Header(default=None),
+):
+    """Return a Billing Portal URL for the authenticated user's customer."""
     try:
+        uid, _email, _claims = _require_authenticated_user(authorization)
+        db = get_db()
+        _user_data, customer_id = _get_user_stripe_customer(db, uid)
+
         session = stripe.billing_portal.Session.create(
-            customer=body.customer_id,
-            return_url=f"{FRONTEND_URL}/account",
+            customer=customer_id,
+            return_url=f"{FRONTEND_URL}/account?billing_return=1",
         )
+
         return {"url": session.url}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @stripe_router.post("/webhook")
@@ -437,6 +621,17 @@ async def stripe_webhook(request: Request):
 
             if tier:
                 stripe_update["tier"] = tier
+                stripe_update["tierSyncError"] = firestore.DELETE_FIELD
+            elif price_id:
+                stripe_update["tierSyncError"] = (
+                    f"Unmapped Stripe price ID: {price_id}"
+                )
+                print(
+                    "STRIPE PRICE MAP ERROR:",
+                    price_id,
+                    "is not present in STRIPE_PRICE_MAP_JSON or "
+                    "STRIPE_LEGACY_PRICE_MAP_JSON",
+                )
 
             if period_start:
                 stripe_update["currentPeriodStart"] = int(period_start)
@@ -655,86 +850,126 @@ async def stripe_webhook(request: Request):
 
 @stripe_router.get("/sync-subscription")
 def sync_subscription(
-    uid: str = Query(...),
     session_id: Optional[str] = Query(default=None),
-    customer_id: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
-    Repairs subscription state after checkout.
-    Writes tier/priceId + currentPeriodStart/End.
+    Synchronize the authenticated user's current Stripe subscription.
+
+    - Checkout return: provide session_id.
+    - Billing Portal return: omit session_id; the customer is derived securely
+      from the authenticated user's Firestore record.
     """
     try:
+        uid, _email, _claims = _require_authenticated_user(authorization)
         db = get_db()
+        user_ref = db.collection("users").document(uid)
+        user_data = user_ref.get().to_dict() or {}
 
         resolved_customer = None
-        resolved_sub_id = None
-        resolved_sub_status = None
+        subscription = None
         resolved_session_status = None
         resolved_payment_status = None
-        resolved_price_id = None
-        resolved_tier = None
-        resolved_period_start = None
-        resolved_period_end = None
 
         if session_id:
-            session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+            session = stripe.checkout.Session.retrieve(
+                session_id,
+                expand=["subscription.items.data.price"],
+            )
+
+            session_uid = (
+                session.get("client_reference_id")
+                or (session.get("metadata") or {}).get("firebase_uid")
+            )
+
+            if session_uid and session_uid != uid:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Checkout session does not belong to this account.",
+                )
 
             resolved_customer = session.get("customer")
-            subscription = session.get("subscription") or {}
-
-            resolved_sub_id = subscription.get("id")
-            resolved_sub_status = subscription.get("status")
+            subscription = session.get("subscription") or None
             resolved_session_status = session.get("status")
             resolved_payment_status = session.get("payment_status")
 
-            items = (subscription.get("items") or {}).get("data") or []
-            if items and items[0].get("price"):
-                resolved_price_id = items[0]["price"].get("id")
-                resolved_tier = price_id_to_tier(resolved_price_id)
+            if resolved_customer:
+                resolved_uid = _resolve_uid_for_customer(
+                    db,
+                    resolved_customer,
+                    expected_uid=uid,
+                )
+                if resolved_uid and resolved_uid != uid:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=(
+                            "Checkout customer ownership could not be "
+                            "verified for this account."
+                        ),
+                    )
+        else:
+            _stored_user, resolved_customer = _get_user_stripe_customer(db, uid)
+            subscription = _select_relevant_subscription(resolved_customer)
 
-            resolved_period_start, resolved_period_end = extract_subscription_period(subscription)
+        if not subscription and resolved_customer:
+            subscription = _select_relevant_subscription(resolved_customer)
 
-            active_like = {"active", "trialing", "past_due"}
-            status = "active" if (
-                resolved_sub_status in active_like
-                or (resolved_session_status == "complete" and resolved_payment_status == "paid")
-            ) else "pending"
-
-        elif customer_id:
-            subs = stripe.Subscription.list(
-                customer=customer_id,
-                status="all",
-                limit=1,
-                expand=["data.items"],
+        if not subscription:
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe subscription was found for this account.",
             )
 
-            if subs.data:
-                latest = subs.data[0]
+        resolved_sub_id = subscription.get("id")
+        resolved_sub_status = subscription.get("status") or "inactive"
 
-                resolved_customer = latest.get("customer")
-                resolved_sub_id = latest.get("id")
-                resolved_sub_status = latest.get("status")
+        if not resolved_customer:
+            resolved_customer = subscription.get("customer")
 
-                items = (latest.get("items") or {}).get("data") or []
-                if items and items[0].get("price"):
-                    resolved_price_id = items[0]["price"].get("id")
-                    resolved_tier = price_id_to_tier(resolved_price_id)
+        items = (subscription.get("items") or {}).get("data") or []
+        resolved_price_id = None
 
-                resolved_period_start, resolved_period_end = extract_subscription_period(latest)
+        if items and items[0].get("price"):
+            resolved_price_id = items[0]["price"].get("id")
 
-            status = "active" if resolved_sub_status in {"active", "trialing", "past_due"} else "pending"
+        resolved_tier = price_id_to_tier(resolved_price_id)
 
-        else:
-            raise HTTPException(status_code=400, detail="Provide session_id (cs_...) or customer_id (cus_...).")
+        if resolved_price_id and not resolved_tier:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        "Stripe returned a price that ADGen cannot map to a plan. "
+                        "Update STRIPE_PRICE_MAP_JSON on the backend."
+                    ),
+                    "code": "UNMAPPED_STRIPE_PRICE",
+                    "priceId": resolved_price_id,
+                },
+            )
+
+        resolved_period_start, resolved_period_end = (
+            extract_subscription_period(subscription)
+        )
+
+        active_like = {"active", "trialing", "past_due"}
+        status = (
+            "active"
+            if resolved_sub_status in active_like
+            else "inactive"
+        )
 
         if resolved_customer:
-            db.collection("stripe_customers").document(resolved_customer).set({"uid": uid}, merge=True)
+            db.collection("stripe_customers").document(
+                resolved_customer
+            ).set({"uid": uid}, merge=True)
 
         stripe_update: Dict[str, Any] = {
             "customerId": resolved_customer,
             "subscriptionId": resolved_sub_id,
             "status": status,
             "updatedAt": firestore.SERVER_TIMESTAMP,
+            "tierSyncError": firestore.DELETE_FIELD,
+            "requestedTier": firestore.DELETE_FIELD,
         }
 
         if resolved_price_id:
@@ -746,14 +981,7 @@ def sync_subscription(
         if resolved_period_end:
             stripe_update["currentPeriodEnd"] = int(resolved_period_end)
 
-        user_ref = db.collection("users").document(uid)
-
         user_ref.set({"stripe": stripe_update}, merge=True)
-
-        saved = user_ref.get().to_dict() or {}
-        print("\n===== AFTER SYNC WRITE =====")
-        print(saved)
-        print("============================\n")
 
         return {
             "ok": True,
@@ -767,23 +995,8 @@ def sync_subscription(
             "current_period_end": resolved_period_end,
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 

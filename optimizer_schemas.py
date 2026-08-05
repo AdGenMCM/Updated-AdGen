@@ -15,6 +15,7 @@ class OptimizationMetrics(BaseModel):
     cpc: Optional[float] = None
     cpa: Optional[float] = None
     spend: Optional[float] = None
+    revenue: Optional[float] = None
     impressions: Optional[int] = None
     clicks: Optional[int] = None
     conversions: Optional[int] = None

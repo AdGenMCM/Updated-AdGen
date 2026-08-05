@@ -12,9 +12,13 @@ import GenerationProgress from "../components/GenerationProgress";
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
 const VIDEO_DESCRIPTION_MAX = 400;
+const QUICK_PRODUCT_MAX = 80;
+const QUICK_AUDIENCE_MAX = 100;
+const QUICK_CTA_MAX = 20;
 const IMAGE_MOTION_PROMPT_MAX = 400;
 const EXTRA_DIRECTION_MAX = 200;
 const FULL_CREATIVE_DIRECTION_MAX = 300;
+const VIDEO_GENERATOR_MODE_KEY = "adgen:video-generator-mode";
 
 const RUNWAY_VOICES = [
   "Maya","Arjun","Serene","Bernard","Billy","Mark","Clint","Mabel","Chad","Leslie",
@@ -204,12 +208,16 @@ export default function VideoAds() {
   const navigate = useNavigate();
   const firstWorkspaceSectionRef = useRef(null);
   const videoSettingsSectionRef = useRef(null);
+  const templateSectionRef = useRef(null);
 
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
 
   const [tab, setTab] = useState("image"); // "image" | "prompt"
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [hasGeneratedBefore, setHasGeneratedBefore] = useState(false);
+  const [usageLoaded, setUsageLoaded] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -227,7 +235,6 @@ export default function VideoAds() {
   // Combined dropdown state
   const [formatId, setFormatId] = useState(FORMAT_OPTIONS[0].id);
   const [ratio, setRatio] = useState(FORMAT_OPTIONS[0].ratio);
-  const [platform, setPlatform] = useState(FORMAT_OPTIONS[0].platform);
 
   // ========== Prompt → Video ==========
   const [productName, setProductName] = useState("");
@@ -243,7 +250,7 @@ export default function VideoAds() {
   const [cameraMotion, setCameraMotion] = useState("subtle");
   const [lightingStyle, setLightingStyle] = useState("bright clean");
   const [pace, setPace] = useState("fast");
-  const [callToAction, setCallToAction] = useState("Tap to learn more.");
+  const [callToAction, setCallToAction] = useState("");
   const [fullCreativeDirection, setFullCreativeDirection] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
 
@@ -308,7 +315,7 @@ export default function VideoAds() {
     setAudience(nextDefaults.audience || "");
     setTone(nextDefaults.tone || "confident");
     setOffer(nextDefaults.offer || "");
-    setCallToAction(nextDefaults.callToAction || "Tap to learn more.");
+    setCallToAction(nextDefaults.callToAction || "");
     setFormatId(nextDefaults.formatId || FORMAT_OPTIONS[0].id);
     setSceneStyle(nextDefaults.sceneStyle || "studio product");
 
@@ -324,6 +331,8 @@ export default function VideoAds() {
   const [error, setError] = useState(null);
 
   const [videoLimitReached, setVideoLimitReached] = useState(false);
+  const [videoUsageUsed, setVideoUsageUsed] = useState(null);
+  const [videoUsageCap, setVideoUsageCap] = useState(null);
 
   // scroll target
   const statusRef = useRef(null);
@@ -378,11 +387,10 @@ export default function VideoAds() {
   const isGenerating =
     loading || (!!jobId && !finalVideoUrl && status !== "failed" && status !== "succeeded");
 
-  // Sync platform + ratio when format changes
+  // Sync ratio when format changes.
   useEffect(() => {
     const opt = FORMAT_OPTIONS.find(o => o.id === formatId) || FORMAT_OPTIONS[0];
     setRatio(opt.ratio);
-    setPlatform(opt.platform);
   }, [formatId]);
 
   // Auto-scroll when finished or error
@@ -412,6 +420,7 @@ export default function VideoAds() {
 
     resetJob();
     setSelectedTemplateId(template.id);
+    setAdvancedOpen(true);
     setProductName(values.productName);
     setDescription(values.description);
     setOffer(values.offer);
@@ -435,6 +444,7 @@ export default function VideoAds() {
   const startVideoFromScratch = () => {
     resetJob();
     setSelectedTemplateId("scratch");
+    setAdvancedOpen(true);
     setProductName("");
     setDescription("");
     setOffer("");
@@ -446,7 +456,7 @@ export default function VideoAds() {
     setCameraMotion("subtle");
     setLightingStyle("bright clean");
     setPace("fast");
-    setCallToAction("Tap to learn more.");
+    setCallToAction("");
     setFormatId(FORMAT_OPTIONS[0].id);
     setPromptText("Subtle cinematic camera movement, product showcase");
     setVoiceoverScript("");
@@ -502,6 +512,91 @@ export default function VideoAds() {
     };
     run();
   }, []);
+
+  useEffect(() => {
+    const loadVideoUsageAndPreference = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+          setUsageLoaded(true);
+          return;
+        }
+
+        const token = await user.getIdToken();
+        const response = await fetch(`${API_BASE}/video/usage`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const data = await safeJson(response);
+        const used = Number(
+          data?.used ??
+          data?.videoUsed ??
+          data?.video_used ??
+          data?.usage ??
+          0
+        );
+        const rawCap =
+          data?.cap ??
+          data?.limit ??
+          data?.videoCap ??
+          data?.video_cap ??
+          data?.credits ??
+          null;
+        const cap =
+          rawCap === null || rawCap === undefined || rawCap === ""
+            ? null
+            : Number(rawCap);
+        const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+        const exhausted =
+          response.ok &&
+          hasFiniteCap &&
+          Number.isFinite(used) &&
+          used >= cap;
+
+        const hasPreviousGeneration =
+          response.ok && Number.isFinite(used) && used > 0;
+
+        setVideoUsageUsed(Number.isFinite(used) ? used : null);
+        setVideoUsageCap(hasFiniteCap ? cap : null);
+        setVideoLimitReached(exhausted);
+        setHasGeneratedBefore(hasPreviousGeneration);
+
+        if (hasPreviousGeneration) {
+          const savedMode = window.localStorage.getItem(
+            VIDEO_GENERATOR_MODE_KEY
+          );
+
+          if (savedMode === "advanced") {
+            setAdvancedOpen(true);
+          }
+        }
+      } catch {
+        // Usage detection only controls presentation.
+      } finally {
+        setUsageLoaded(true);
+      }
+    };
+
+    loadVideoUsageAndPreference();
+  }, []);
+
+  useEffect(() => {
+    if (!usageLoaded) return;
+
+    window.localStorage.setItem(
+      VIDEO_GENERATOR_MODE_KEY,
+      advancedOpen ? "advanced" : "quick"
+    );
+  }, [advancedOpen, usageLoaded]);
+
+  useEffect(() => {
+    if (advancedOpen) return;
+
+    setTab("prompt");
+    setDuration(6);
+    setVoiceEnabled(false);
+    setVoiceoverScript("");
+  }, [advancedOpen]);
 
   // Cleanup object URL previews
   useEffect(() => {
@@ -627,6 +722,7 @@ export default function VideoAds() {
 
   // Start jobs
   const startImageVideo = async () => {
+    if (!ensureVideoCreditsAvailable()) return;
     if (!imageFile) throw new Error("Please upload an image first.");
     ensureScriptFitsOrThrow();
 
@@ -679,6 +775,10 @@ export default function VideoAds() {
 
         if (res.status === 429) {
           setVideoLimitReached(true);
+          const responseUsed = Number(detail?.used);
+          const responseCap = Number(detail?.cap);
+          if (Number.isFinite(responseUsed)) setVideoUsageUsed(responseUsed);
+          if (Number.isFinite(responseCap)) setVideoUsageCap(responseCap);
         }
 
         throw new Error(
@@ -690,6 +790,18 @@ export default function VideoAds() {
       }
 
       setJobId(data.jobId);
+      setHasGeneratedBefore(true);
+      setVideoUsageUsed((current) => {
+        const next = Number.isFinite(current) ? current + Number(duration === 10 ? 2 : 1) : current;
+        if (
+          Number.isFinite(next) &&
+          Number.isFinite(videoUsageCap) &&
+          next >= videoUsageCap
+        ) {
+          setVideoLimitReached(true);
+        }
+        return next;
+      });
       setStatus(data.status || "running");
       setProgressStage(data.progressStage || "waiting_for_server");
       setProgressMessage(data.progressMessage || "Generating your video.");
@@ -702,8 +814,11 @@ export default function VideoAds() {
     }
   };
 
-  const startPromptVideo = async () => {
-    ensureScriptFitsOrThrow();
+  const startPromptVideo = async ({ quickMode = false } = {}) => {
+    if (!ensureVideoCreditsAvailable()) return;
+    if (!quickMode) {
+      ensureScriptFitsOrThrow();
+    }
 
     resetJob();
     setLoading(true);
@@ -711,6 +826,14 @@ export default function VideoAds() {
 
     try {
       const token = await getIdToken();
+
+      const effectiveDuration = quickMode ? 6 : duration;
+      const effectiveVoiceEnabled = quickMode ? false : voiceEnabled;
+      const selectedFormat =
+        FORMAT_OPTIONS.find((option) => option.id === formatId) ||
+        FORMAT_OPTIONS[0];
+      const effectiveRatio = selectedFormat.ratio;
+      const effectivePlatform = selectedFormat.platform;
 
       const payload = {
         useBrandKit,
@@ -720,7 +843,7 @@ export default function VideoAds() {
         offer: offer || null,
         audience: audience || null,
         tone,
-        platform,
+        platform: effectivePlatform,
 
         goal,
         hookStyle,
@@ -729,15 +852,19 @@ export default function VideoAds() {
         lightingStyle,
         pace,
         callToAction,
-        fullCreativeDirection: fullCreativeDirection || null,
-        userPrompt: userPrompt || null,
+        fullCreativeDirection: quickMode
+          ? null
+          : fullCreativeDirection || null,
+        userPrompt: quickMode ? null : userPrompt || null,
 
-        duration,
-        ratio,
+        duration: effectiveDuration,
+        ratio: effectiveRatio,
 
-        voiceoverScript: voiceEnabled ? (voiceoverScript || "").trim() : null,
+        voiceoverScript: effectiveVoiceEnabled
+          ? (voiceoverScript || "").trim()
+          : null,
         voiceover: {
-          enabled: voiceEnabled,
+          enabled: effectiveVoiceEnabled,
           presetVoice,
         },
 
@@ -769,6 +896,10 @@ export default function VideoAds() {
 
         if (res.status === 429) {
           setVideoLimitReached(true);
+          const responseUsed = Number(detail?.used);
+          const responseCap = Number(detail?.cap);
+          if (Number.isFinite(responseUsed)) setVideoUsageUsed(responseUsed);
+          if (Number.isFinite(responseCap)) setVideoUsageCap(responseCap);
         }
 
         throw new Error(
@@ -780,6 +911,19 @@ export default function VideoAds() {
       }
 
       setJobId(data.jobId);
+      setHasGeneratedBefore(true);
+      setVideoUsageUsed((current) => {
+        const creditsUsed = quickMode ? 1 : Number(duration === 10 ? 2 : 1);
+        const next = Number.isFinite(current) ? current + creditsUsed : current;
+        if (
+          Number.isFinite(next) &&
+          Number.isFinite(videoUsageCap) &&
+          next >= videoUsageCap
+        ) {
+          setVideoLimitReached(true);
+        }
+        return next;
+      });
       setStatus(data.status || "running");
       setProgressStage(data.progressStage || "waiting_for_server");
       setProgressMessage(data.progressMessage || "Generating your video.");
@@ -842,6 +986,21 @@ export default function VideoAds() {
   const canStartPrompt = productName.trim() && description.trim();
   const canStartImage = !!imageFile;
 
+  const ensureVideoCreditsAvailable = () => {
+    if (!videoLimitReached) return true;
+
+    setError(
+      "You've used all available video credits for this billing period. Upgrade to continue creating."
+    );
+    window.setTimeout(() => {
+      statusRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+    return false;
+  };
+
   // Locked UX
   if (!auth.currentUser) {
     return (
@@ -899,101 +1058,425 @@ return (
           </p>
         </div>
 
-        {!isFreePlan ? (
-          <BrandKitSelector
-            value={brandKitId}
-            onChange={setBrandKitId}
-            onKitChange={setBrandKit}
-            disabled={isGenerating || !useBrandKit}
-          />
-        ) : (
-          <div className="hint videoFreePlanHint">
-            Brand Kit is available on paid plans. Your complimentary video can still be created without it.
-          </div>
-        )}
-
-        <section className={`template-starter video-template-starter ${templatesOpen ? "is-open" : "is-collapsed"}`} aria-labelledby="video-template-title">
-          <button
-            type="button"
-            className="template-starter-toggle"
-            onClick={() => setTemplatesOpen((open) => !open)}
-            aria-expanded={templatesOpen}
-            aria-controls="video-template-options"
-          >
-            <span className="template-starter-heading">
-              <span>
-                <span className="template-eyebrow">Need inspiration?</span>
-                <span id="video-template-title" className="template-title">Start with a Template</span>
-                <span className="template-description">
-                  Choose an industry and ADGen will prepare the workspace for you. 8 templates available.
-                </span>
-              </span>
-
-              <span className="template-heading-actions">
-                {selectedTemplateId && (
-                  <span className="template-loaded-pill">
-                    {selectedTemplateId === "scratch"
-                      ? "Blank setup selected"
-                      : `✓ ${selectedVideoTemplate?.name || "Template"} template`}
-                  </span>
-                )}
-                <span className="template-chevron" aria-hidden="true">⌄</span>
-              </span>
-            </span>
-          </button>
-
-          <div id="video-template-options" className="template-options" hidden={!templatesOpen}>
-          <div className="template-card-grid">
-            {VIDEO_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className={`template-card ${
-                  selectedTemplateId === template.id ? "selected" : ""
-                }`}
-                onClick={() => applyVideoTemplate(template)}
-                disabled={isGenerating}
-                aria-pressed={selectedTemplateId === template.id}
-              >
-                <span className="template-card-icon" aria-hidden="true">
-                  {template.icon}
-                </span>
-                <span className="template-card-copy">
-                  <strong>{template.name}</strong>
-                  <small>{template.description}</small>
-                </span>
-                <span className="template-card-action">
-                  Use template
-                </span>
-              </button>
-            ))}
+        {advancedOpen ? (
+          <section className="videoQuickCollapsed" aria-label="Quick Create">
+            <div>
+              <span className="videoQuickKicker">Quick Create</span>
+              <h2>Full Creative Workspace is open</h2>
+              <p>
+                The simplified prompt is hidden so there is only one active
+                generation path and one Create button.
+              </p>
+            </div>
 
             <button
               type="button"
-              className={`template-card template-card-scratch ${
-                selectedTemplateId === "scratch" ? "selected" : ""
-              }`}
-              onClick={startVideoFromScratch}
+              className="videoSwitchQuickButton"
+              onClick={() => {
+                setAdvancedOpen(false);
+                setTemplatesOpen(false);
+                setTab("prompt");
+                setDuration(6);
+                setVoiceEnabled(false);
+                setVoiceoverScript("");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
               disabled={isGenerating}
-              aria-pressed={selectedTemplateId === "scratch"}
             >
-              <span className="template-card-icon" aria-hidden="true">✨</span>
-              <span className="template-card-copy">
-                <strong>Start From Scratch</strong>
-                <small>Clear the guided setup and configure the video yourself.</small>
+              Switch to Quick Create
+              <span aria-hidden="true">↑</span>
+            </button>
+          </section>
+        ) : (
+          <section className="videoQuickStart" aria-labelledby="video-quick-title">
+            <div className="videoQuickHead">
+              <span className="videoQuickKicker">
+                {hasGeneratedBefore ? "Quick Create" : "Fastest way to begin"}
               </span>
-              <span className="template-card-action">
-                {selectedTemplateId === "scratch" ? "Selected ✓" : "Use blank setup"}
+              <h2 id="video-quick-title">
+                {hasGeneratedBefore
+                  ? "Create Another Video"
+                  : "Create Your First Video"}
+              </h2>
+              <p>
+                {hasGeneratedBefore
+                  ? "Add the essentials for a fast prompt-to-video generation, or open the full workspace for complete control."
+                  : "Describe what you are promoting and ADGen will prepare the video settings for you. The full creative workspace remains available below."}
+              </p>
+            </div>
+
+            <div className="videoQuickDefaultsNote">
+              <strong>Quick Create uses Prompt → Video, a fixed 6-second duration, and no voiceover.</strong>
+              <span>
+                Open the Full Creative Workspace for image animation, narration,
+                10-second videos, and advanced motion controls.
+              </span>
+            </div>
+
+            <div className="videoQuickFields">
+              <div className="field">
+                <label>Product or Service</label>
+                <input
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="What are you advertising?"
+                  maxLength={QUICK_PRODUCT_MAX}
+                  disabled={isGenerating}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    productName.length >= QUICK_PRODUCT_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {productName.length}/{QUICK_PRODUCT_MAX}
+                </div>
+              </div>
+
+              <div className="field">
+                <label>Who is this for?</label>
+                <input
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="Example: online shoppers, busy parents, small businesses"
+                  maxLength={QUICK_AUDIENCE_MAX}
+                  disabled={isGenerating}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    audience.length >= QUICK_AUDIENCE_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {audience.length}/{QUICK_AUDIENCE_MAX}
+                </div>
+              </div>
+
+              <div className="field videoQuickDescription">
+                <label>
+                  Video Prompt
+                  <InfoTip text="Describe the subject, action, environment, camera movement, and ending shot you want in the video." />
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Example: A premium coffee bottle pouring over ice in a bright café, close-up condensation, energetic movement, ending with the product centered on screen."
+                  maxLength={VIDEO_DESCRIPTION_MAX}
+                  disabled={isGenerating}
+                />
+                <div className="videoQuickPromptHelper">
+                  Describe the subject, action, environment, and ending shot for the best results.
+                </div>
+                <div
+                  className={`videoCharacterCount ${
+                    description.length >= VIDEO_DESCRIPTION_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {description.length}/{VIDEO_DESCRIPTION_MAX}
+                </div>
+              </div>
+
+              <div className="field">
+                <label>Goal</label>
+                <select
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  <option value="conversions">Sales / Conversions</option>
+                  <option value="leads">Generate Leads</option>
+                  <option value="traffic">Website Traffic</option>
+                  <option value="awareness">Brand Awareness</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Visual Style</label>
+                <select
+                  value={sceneStyle}
+                  onChange={(e) => setSceneStyle(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  <option value="studio product">Product Showcase</option>
+                  <option value="lifestyle">Lifestyle</option>
+                  <option value="ugc">UGC Style</option>
+                  <option value="cinematic">Cinematic / Premium</option>
+                  <option value="minimal abstract">Minimal</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Platform / Aspect Ratio</label>
+                <select
+                  value={formatId}
+                  onChange={(e) => setFormatId(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  {FORMAT_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Call to Action <span className="videoQuickOptional">Optional</span></label>
+                <input
+                  value={callToAction}
+                  onChange={(e) => setCallToAction(e.target.value)}
+                  placeholder="Example: Shop Now"
+                  maxLength={QUICK_CTA_MAX}
+                  disabled={isGenerating}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    callToAction.length >= QUICK_CTA_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {callToAction.length}/{QUICK_CTA_MAX}
+                </div>
+              </div>
+            </div>
+
+            {videoLimitReached && (
+              <div className="generatorUsageLimitCard" role="alert">
+                <div>
+                  <strong>Video credits used</strong>
+                  <p>
+                    You've used all available video credits
+                    {Number.isFinite(videoUsageCap)
+                      ? ` (${videoUsageUsed ?? videoUsageCap}/${videoUsageCap})`
+                      : ""}.
+                    Upgrade to continue creating videos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/subscribe?upgrade=1")}
+                >
+                  Upgrade to Continue
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="videoQuickGenerate"
+              disabled={
+                isGenerating ||
+                videoLimitReached ||
+                !productName.trim() ||
+                !description.trim()
+              }
+              onClick={async () => {
+                setTab("prompt");
+                setDuration(6);
+                setVoiceEnabled(false);
+                setVoiceoverScript("");
+
+                try {
+                  await startPromptVideo({ quickMode: true });
+                } catch {}
+              }}
+            >
+              {isGenerating
+                ? "Creating..."
+                : hasGeneratedBefore
+                  ? "✨ Generate Video"
+                  : "✨ Generate My First Video"}
+            </button>
+
+            <div className="videoQuickDivider">
+              <span>or</span>
+            </div>
+
+            <div className="videoQuickTemplateAction">
+              <button
+                type="button"
+                className="videoQuickSecondary"
+                onClick={() => {
+                  setTemplatesOpen(true);
+
+                  window.setTimeout(() => {
+                    templateSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 120);
+                }}
+                disabled={isGenerating}
+                aria-expanded={templatesOpen}
+                aria-controls="video-template-options"
+              >
+                Need Inspiration? 🎨 Start with a Template
+              </button>
+            </div>
+
+            <div className="videoFullWorkspaceCallout">
+              <div>
+                <span className="videoFullWorkspaceKicker">
+                  Full creative workspace
+                </span>
+                <h3>Need complete video control?</h3>
+                <p>
+                  Choose image-to-video or prompt-to-video, configure duration,
+                  format, voiceover, Brand Kit, Performance Intelligence, motion,
+                  lighting, pacing, creative direction, and every advanced setting.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="videoFullWorkspaceButton"
+                onClick={() => {
+                  setTemplatesOpen(false);
+                  setAdvancedOpen(true);
+
+                  window.setTimeout(() => {
+                    firstWorkspaceSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 80);
+                }}
+                disabled={isGenerating}
+                aria-expanded={advancedOpen}
+                aria-controls="video-full-workspace"
+              >
+                Open Full Creative Workspace
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {(!advancedOpen ? templatesOpen : true) && (
+          <section
+            ref={templateSectionRef}
+            className={`template-starter video-template-starter ${
+              templatesOpen ? "is-open" : "is-collapsed"
+            }`}
+            aria-labelledby="video-template-title"
+          >
+            <button
+              type="button"
+              className="template-starter-toggle"
+              onClick={() => setTemplatesOpen((open) => !open)}
+              aria-expanded={templatesOpen}
+              aria-controls="video-template-options"
+            >
+              <span className="template-starter-heading">
+                <span>
+                  <span className="template-eyebrow">Need inspiration?</span>
+                  <span id="video-template-title" className="template-title">
+                    Start with a Template
+                  </span>
+                  <span className="template-description">
+                    Choose an industry and ADGen will prepare the workspace for you. 8 templates available.
+                  </span>
+                </span>
+
+                <span className="template-heading-actions">
+                  {selectedTemplateId && (
+                    <span className="template-loaded-pill">
+                      {selectedTemplateId === "scratch"
+                        ? "Blank setup selected"
+                        : `✓ ${selectedVideoTemplate?.name || "Template"} template`}
+                    </span>
+                  )}
+                  <span className="template-chevron" aria-hidden="true">⌄</span>
+                </span>
               </span>
             </button>
-          </div>
 
-          <div className="template-helper-note">
-            <span aria-hidden="true">✨</span>
-            <span>Templates prefill your current controls only. Creation modes, Brand Kit, voiceover, Performance Intelligence, uploads, and every existing integration stay unchanged.</span>
-          </div>
-          </div>
-        </section>
+            <div
+              id="video-template-options"
+              className="template-options"
+              hidden={!templatesOpen}
+            >
+              <div className="template-card-grid">
+                {VIDEO_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`template-card ${
+                      selectedTemplateId === template.id ? "selected" : ""
+                    }`}
+                    onClick={() => applyVideoTemplate(template)}
+                    disabled={isGenerating}
+                    aria-pressed={selectedTemplateId === template.id}
+                  >
+                    <span className="template-card-icon" aria-hidden="true">
+                      {template.icon}
+                    </span>
+                    <span className="template-card-copy">
+                      <strong>{template.name}</strong>
+                      <small>{template.description}</small>
+                    </span>
+                    <span className="template-card-action">Use template</span>
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  className={`template-card template-card-scratch ${
+                    selectedTemplateId === "scratch" ? "selected" : ""
+                  }`}
+                  onClick={startVideoFromScratch}
+                  disabled={isGenerating}
+                  aria-pressed={selectedTemplateId === "scratch"}
+                >
+                  <span className="template-card-icon" aria-hidden="true">
+                    ✨
+                  </span>
+                  <span className="template-card-copy">
+                    <strong>Start From Scratch</strong>
+                    <small>
+                      Clear the guided setup and configure the video yourself.
+                    </small>
+                  </span>
+                  <span className="template-card-action">
+                    {selectedTemplateId === "scratch"
+                      ? "Selected ✓"
+                      : "Use blank setup"}
+                  </span>
+                </button>
+              </div>
+
+              <div className="template-helper-note">
+                <span aria-hidden="true">✨</span>
+                <span>
+                  Templates prefill your current controls only. Creation modes,
+                  Brand Kit, voiceover, Performance Intelligence, uploads, and
+                  every existing integration stay unchanged.
+                </span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {advancedOpen && (
+          <div id="video-full-workspace">
+            {!isFreePlan ? (
+              <BrandKitSelector
+                value={brandKitId}
+                onChange={setBrandKitId}
+                onKitChange={setBrandKit}
+                disabled={isGenerating || !useBrandKit}
+              />
+            ) : (
+              <div className="hint videoFreePlanHint">
+                Brand Kit is available on paid plans. Your complimentary video
+                can still be created without it.
+              </div>
+            )}
 
         <div className="videoAdsForm">
         <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
@@ -1345,9 +1828,26 @@ return (
                 </div>
               </div>
 
+              {videoLimitReached && (
+                <div className="generatorUsageLimitCard" role="alert">
+                  <div>
+                    <strong>Video credits used</strong>
+                    <p>
+                      Upgrade your plan to continue creating videos.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/subscribe?upgrade=1")}
+                  >
+                    Upgrade to Continue
+                  </button>
+                </div>
+              )}
+
               <button
                 className="primary"
-                disabled={isGenerating || !canStartImage || scriptTooLong}
+                disabled={isGenerating || videoLimitReached || !canStartImage || scriptTooLong}
                 onClick={async () => {
                   try {
                     await startImageVideo();
@@ -1601,9 +2101,26 @@ return (
                 </div>
               </div>
 
+              {videoLimitReached && (
+                <div className="generatorUsageLimitCard" role="alert">
+                  <div>
+                    <strong>Video credits used</strong>
+                    <p>
+                      Upgrade your plan to continue creating videos.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/subscribe?upgrade=1")}
+                  >
+                    Upgrade to Continue
+                  </button>
+                </div>
+              )}
+
               <button
                 className="primary"
-                disabled={isGenerating || !canStartPrompt || scriptTooLong}
+                disabled={isGenerating || videoLimitReached || !canStartPrompt || scriptTooLong}
                 onClick={async () => {
                   try {
                     await startPromptVideo();
@@ -1621,6 +2138,8 @@ return (
           )}
         </StepSection>
         </div>
+          </div>
+        )}
       </main>
 
       <aside className="videoAdsSide">
@@ -1653,7 +2172,7 @@ return (
               onClick={() => navigate("/subscribe?upgrade=1")}
               style={{ marginTop: 12 }}
             >
-              View Upgrade Options
+              Upgrade to Continue
             </button>
           )}
 
@@ -1679,41 +2198,84 @@ return (
         </div>
 
         <div className="side-card">
-          <h3>Video Specs</h3>
-          <div className="videoSpecList">
-            <div className="videoSpecRow">
-              <span>Duration</span>
-              <strong>{duration}s</strong>
-            </div>
+          <h3>{advancedOpen ? "Video Specs" : "Quick Create Defaults"}</h3>
 
-            <div className="videoSpecRow">
-              <span>Format</span>
-              <strong>{FORMAT_OPTIONS.find((o) => o.id === formatId)?.label || formatId}</strong>
-            </div>
+          {!advancedOpen ? (
+            <div className="videoSpecList">
+              <div className="videoSpecRow">
+                <span>Creation mode</span>
+                <strong>Prompt → Video</strong>
+              </div>
 
-            <div className="videoSpecRow">
-              <span>Voice</span>
-              <strong>{voiceEnabled ? presetVoice : "Off"}</strong>
-            </div>
+              <div className="videoSpecRow">
+                <span>Duration</span>
+                <strong>6 seconds</strong>
+              </div>
 
-            <div className="videoSpecRow">
-              <span>Brand Kit</span>
-              <strong className={`videoStatusPill ${useBrandKit ? "on" : "off"}`}>
-                {useBrandKit ? "Enabled" : "Disabled"}
-              </strong>
-            </div>
+              <div className="videoSpecRow">
+                <span>Format</span>
+                <strong>
+                  {FORMAT_OPTIONS.find((option) => option.id === formatId)?.label ||
+                    formatId}
+                </strong>
+              </div>
 
-            <div className="videoSpecRow">
-              <span>Performance Intelligence</span>
-              <strong
-                className={`videoStatusPill ${
-                  usePerformanceIntelligence ? "on" : "off"
-                }`}
-              >
-                {usePerformanceIntelligence ? "Enabled" : "Disabled"}
-              </strong>
+              <div className="videoSpecRow">
+                <span>Voiceover</span>
+                <strong className="videoStatusPill off">Disabled</strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Camera & lighting</span>
+                <strong>AI directed</strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Scene pacing</span>
+                <strong>AI optimized</strong>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="videoSpecList">
+              <div className="videoSpecRow">
+                <span>Duration</span>
+                <strong>{duration}s</strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Format</span>
+                <strong>
+                  {FORMAT_OPTIONS.find((o) => o.id === formatId)?.label ||
+                    formatId}
+                </strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Voice</span>
+                <strong>{voiceEnabled ? presetVoice : "Off"}</strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Brand Kit</span>
+                <strong
+                  className={`videoStatusPill ${useBrandKit ? "on" : "off"}`}
+                >
+                  {useBrandKit ? "Enabled" : "Disabled"}
+                </strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Performance Intelligence</span>
+                <strong
+                  className={`videoStatusPill ${
+                    usePerformanceIntelligence ? "on" : "off"
+                  }`}
+                >
+                  {usePerformanceIntelligence ? "Enabled" : "Disabled"}
+                </strong>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </div>

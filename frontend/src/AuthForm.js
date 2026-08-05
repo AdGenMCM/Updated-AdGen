@@ -224,8 +224,10 @@ const getFriendlyEmailAuthError = (error) => {
         return;
       }
 
-      if (from?.pathname && from.pathname !== "/subscribe") {
-        navigate(from.pathname + (from.search || ""), { replace: true });
+      if (from?.pathname) {
+        navigate(from.pathname + (from.search || ""), {
+          replace: true,
+        });
       } else {
         navigate("/dashboard", { replace: true });
       }

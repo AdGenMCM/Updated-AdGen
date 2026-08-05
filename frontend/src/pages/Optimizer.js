@@ -65,36 +65,7 @@ export default function Optimizer() {
   const [sourceSelection, setSourceSelection] = useState(null);
   const [sourceStatus, setSourceStatus] = useState(null);
 
-  const analysisSources = [
-    {
-      id: "google_ads",
-      name: "Google Ads",
-      description: "Select a synced campaign asset and import its reporting context.",
-      badge: "Connected source",
-      enabled: true,
-    },
-    {
-      id: "meta_ads",
-      name: "Meta Ads",
-      description: "Select a synced ad and import its copy, creative, and performance.",
-      badge: "Connected source",
-      enabled: true,
-    },
-    {
-      id: "library",
-      name: "Library Creative",
-      description: "Select a saved creative and import its copy and tracked performance.",
-      badge: "AdGen source",
-      enabled: true,
-    },
-    {
-      id: "manual",
-      name: "Manual Upload",
-      description: "Upload a creative, paste its copy, and add any metrics available.",
-      badge: "Available",
-      enabled: true,
-    },
-  ];
+
 
   const [form, setForm] = useState({
     product_name: "",
@@ -129,6 +100,7 @@ export default function Optimizer() {
     cpc: "",
     cpa: "",
     spend: "",
+    revenue: "",
     impressions: "",
     clicks: "",
     conversions: "",
@@ -180,8 +152,57 @@ const [progress, setProgress] = useState({
   const canUseOptimizer = useMemo(() => {
     if (me.isAdmin) return true;
     const t = (me.tier || "").toLowerCase();
-    return t === "pro_monthly" || t === "business_monthly";
+    return (
+      t === "starter_monthly" ||
+      t === "pro_monthly" ||
+      t === "business_monthly"
+    );
   }, [me]);
+
+  const isStarterPlan = useMemo(() => {
+    if (me.isAdmin) return false;
+    return (me.tier || "").toLowerCase() === "starter_monthly";
+  }, [me]);
+
+  const canUseConnectedSources = useMemo(() => {
+    if (me.isAdmin) return true;
+    const tier = (me.tier || "").toLowerCase();
+    return tier === "pro_monthly" || tier === "business_monthly";
+  }, [me]);
+
+  const analysisSources = useMemo(
+    () => [
+      {
+        id: "manual",
+        name: "Manual Upload",
+        description: "Upload a creative, paste its copy, and add any metrics available.",
+        badge: "Starter+",
+        enabled: true,
+      },
+      {
+        id: "library",
+        name: "Library Creative",
+        description: "Select a saved creative and automatically import its copy and tracked performance.",
+        badge: "Starter+",
+        enabled: true,
+      },
+      {
+        id: "google_ads",
+        name: "Google Ads",
+        description: "Select a synced campaign asset and import its reporting context.",
+        badge: canUseConnectedSources ? "Connected source" : "Pro",
+        enabled: canUseConnectedSources,
+      },
+      {
+        id: "meta_ads",
+        name: "Meta Ads",
+        description: "Select a synced ad and import its copy, creative, and performance.",
+        badge: canUseConnectedSources ? "Connected source" : "Pro",
+        enabled: canUseConnectedSources,
+      },
+    ],
+    [canUseConnectedSources],
+  );
 
   useEffect(() => {
     const run = async () => {
@@ -408,6 +429,16 @@ const [progress, setProgress] = useState({
   };
 
   const loadAnalysisSource = async (sourceId) => {
+    if (
+      ["google_ads", "meta_ads"].includes(sourceId) &&
+      !canUseConnectedSources
+    ) {
+      setSourceError(
+        "Google Ads and Meta Ads optimization are available on Pro and Business plans."
+      );
+      return;
+    }
+
     if (sourceId === "manual") {
       resetImportedSource();
       setAnalysisSource("manual");
@@ -470,6 +501,7 @@ const [progress, setProgress] = useState({
       cpa: cleanNumber(performance.cpa),
       cpm: cleanNumber(performance.cpm),
       spend: cleanNumber(performance.spend),
+      revenue: cleanNumber(performance.revenue),
       roas: cleanNumber(performance.roas),
       frequency: cleanNumber(performance.frequency),
       notes: [
@@ -501,6 +533,28 @@ const [progress, setProgress] = useState({
         .includes(query)
     );
   }, [sourceItems, sourceSearch]);
+
+  const selectedSourceHasMetrics = useMemo(() => {
+    const performance = sourceSelection?.performance || {};
+    return [
+      "impressions",
+      "clicks",
+      "conversions",
+      "ctr",
+      "cpc",
+      "cpa",
+      "cpm",
+      "spend",
+      "revenue",
+      "roas",
+      "frequency",
+    ].some(
+      (key) =>
+        performance[key] !== null &&
+        performance[key] !== undefined &&
+        performance[key] !== ""
+    );
+  }, [sourceSelection]);
 
   // --- Selected-option explanations (dynamic) ---
   const platformHelpMap = useMemo(
@@ -605,7 +659,7 @@ const [progress, setProgress] = useState({
           return;
         }
         if (res.status === 403) {
-          setUploadErr("Uploads are available on Pro and Business plans.");
+          setUploadErr("Creative uploads are available on Starter, Pro, and Business plans.");
           return;
         }
 
@@ -746,6 +800,7 @@ const [progress, setProgress] = useState({
           cpc: form.cpc ? Number(form.cpc) : null,
           cpa: form.cpa ? Number(form.cpa) : null,
           spend: form.spend ? Number(form.spend) : null,
+          revenue: form.revenue ? Number(form.revenue) : null,
           impressions: form.impressions ? Number(form.impressions) : null,
           clicks: form.clicks ? Number(form.clicks) : null,
           conversions: form.conversions ? Number(form.conversions) : null,
@@ -1028,7 +1083,10 @@ const [progress, setProgress] = useState({
               <span className="step-badge">🔒</span>
               <div>
                 <h2>Optimizer Locked</h2>
-                <p>Upgrade to unlock Ad Performance Optimization.</p>
+                <p>
+                  Starter includes 10 monthly Optimizer runs with Manual Upload
+                  and Library sources.
+                </p>
               </div>
             </div>
 
@@ -1059,7 +1117,9 @@ const [progress, setProgress] = useState({
                     will automatically populate the creative and its context.
                   </p>
                 </div>
-                <span className="opt-planPill">Pro & Business</span>
+                <span className="opt-planPill">
+                  {isStarterPlan ? "Starter · 10 runs" : "Pro & Business"}
+                </span>
               </div>
 
               <div className="opt-sourceGrid">
@@ -1079,7 +1139,12 @@ const [progress, setProgress] = useState({
                         <span className="opt-sourceRadio" aria-hidden="true">
                           {selected ? "●" : "○"}
                         </span>
-                        <span className={`opt-sourceBadge ${source.enabled ? "live" : ""}`}>
+                        <span
+                          className={`opt-sourceBadge ${
+                            source.enabled ? "live" : "locked"
+                          }`}
+                        >
+                          {!source.enabled ? "🔒 " : ""}
                           {source.badge}
                         </span>
                       </div>
@@ -1337,12 +1402,35 @@ const [progress, setProgress] = useState({
               }
               description="Add any available performance data. Partial metrics still help."
             >
+              {analysisSource === "library" && sourceSelection && (
+                <div
+                  className={`opt-metricsImportNotice ${
+                    selectedSourceHasMetrics ? "loaded" : "empty"
+                  }`}
+                >
+                  <div>
+                    <strong>
+                      {selectedSourceHasMetrics
+                        ? "✓ Metrics loaded automatically from Library"
+                        : "No saved performance metrics found"}
+                    </strong>
+                    <span>
+                      {selectedSourceHasMetrics
+                        ? `${sourceSelection.title} · Imported values remain editable below.`
+                        : "Enter performance metrics manually below before running the audit."}
+                    </span>
+                  </div>
+                  <small>Source: Library</small>
+                </div>
+              )}
+
               <div className="opt-grid">
                 <input name="ctr" placeholder="CTR %" value={form.ctr} onChange={handleChange} />
                 <input name="cpc" placeholder="CPC" value={form.cpc} onChange={handleChange} />
                 <input name="cpa" placeholder="CPA" value={form.cpa} onChange={handleChange} />
                 <input name="cpm" placeholder="CPM" value={form.cpm} onChange={handleChange} />
                 <input name="spend" placeholder="Spend" value={form.spend} onChange={handleChange} />
+                <input name="revenue" placeholder="Revenue" value={form.revenue} onChange={handleChange} />
                 <input name="impressions" placeholder="Impressions" value={form.impressions} onChange={handleChange} />
                 <input name="clicks" placeholder="Clicks" value={form.clicks} onChange={handleChange} />
                 <input name="conversions" placeholder="Conversions" value={form.conversions} onChange={handleChange} />

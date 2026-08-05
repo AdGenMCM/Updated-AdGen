@@ -62,7 +62,11 @@ from google.cloud import firestore as gc_firestore
 from usage_caps import peek_usage, get_tier_and_status
 
 # feature gating + optimizer schemas
-from entitlements import require_pro_or_business, build_entitlements_payload
+from entitlements import (
+    require_optimizer,
+    require_pro_or_business,
+    build_entitlements_payload,
+)
 from plan_config import get_plan_config
 from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 
@@ -1901,7 +1905,7 @@ async def upload_creatives(
     uid, _email, claims = require_user(authorization)
     admin = is_admin(claims)
 
-    # Pro/Business only (admin bypass)
+    # Starter/Pro/Business Optimizer upload access (admin bypass)
     if not admin:
         db = get_db()
         user_snap = db.collection("users").document(uid).get()
@@ -1914,7 +1918,7 @@ async def upload_creatives(
                 status_code=402,
                 detail="Subscription inactive. Please subscribe to continue.",
             )
-        require_pro_or_business(tier)
+        require_optimizer(tier)
 
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
@@ -1960,6 +1964,7 @@ async def upload_creatives(
         raise HTTPException(status_code=400, detail="No valid files uploaded.")
 
     return {"urls": urls}
+
 
 
 @app.post("/creative-studio/upload-image")
@@ -2865,6 +2870,7 @@ async def optimizer_status(
     return _read_progress_job(get_db(), "optimizer_jobs", job_id, uid, is_admin(claims))
 
 
+
 @app.post("/optimizer/generate/start", response_model=ProgressStartResponse)
 async def start_optimizer_generation(
     payload: GenerateFromOptimizerRequest,
@@ -2908,6 +2914,7 @@ async def start_optimizer_generation(
     )
 
 
+
 @app.get("/optimizer/generate/status/{job_id}")
 async def optimizer_generation_status(
     job_id: str,
@@ -2915,6 +2922,7 @@ async def optimizer_generation_status(
 ):
     uid, _email, claims = require_user(authorization)
     return _read_progress_job(get_db(), "optimizer_jobs", job_id, uid, is_admin(claims))
+
 
 
 # ---------------- Generate Ad ----------------
@@ -3694,7 +3702,9 @@ async def optimize_ad(
     Creative Performance Optimizer.
 
     Existing access and usage behavior is intentionally preserved:
-    - Pro and Business only
+    - Starter, Pro, and Business may run the Optimizer
+    - Starter is limited to Manual Upload and Library sources
+    - Pro and Business may also use Google Ads and Meta Ads
     - Admin bypass
     - One optimizer_runs unit reserved per analysis
     - Failed analyses roll the reserved unit back
@@ -3717,7 +3727,28 @@ async def optimize_ad(
                 status_code=402,
                 detail="Subscription inactive. Please subscribe to continue.",
             )
-        require_pro_or_business(tier)
+        require_optimizer(tier)
+
+        normalized_source = str(
+            getattr(payload, "analysis_source", None) or "manual"
+        ).strip().lower()
+
+        if (
+            tier == "starter_monthly"
+            and normalized_source not in {"manual", "library"}
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": (
+                        "Starter includes Manual Upload and Library optimization. "
+                        "Upgrade to Pro to use Google Ads or Meta Ads sources."
+                    ),
+                    "analysisSource": normalized_source,
+                    "allowedSources": ["manual", "library"],
+                    "upgradePath": "/subscribe?upgrade=1",
+                },
+            )
 
     optimizer_usage_reservation = None
     if not admin:
@@ -4651,11 +4682,23 @@ def _current_usage_period(db, target_uid: str):
     return target_doc, get_usage_period(target_doc)
 
 
-def _resource_admin_fields(resource: str) -> tuple[str, str]:
+def _resource_admin_fields(resource: str) -> tuple[str, str, str]:
     mapping = {
-        "images": ("imageUsed", "bonusImageCredits"),
-        "video_credits": ("videoCreditsUsed", "bonusVideoCredits"),
-        "optimizer_runs": ("optimizerRunsUsed", "bonusOptimizerRuns"),
+        "images": (
+            "imageUsed",
+            "bonusImageCredits",
+            "bonusImageCreditsPeriodKey",
+        ),
+        "video_credits": (
+            "videoCreditsUsed",
+            "bonusVideoCredits",
+            "bonusVideoCreditsPeriodKey",
+        ),
+        "optimizer_runs": (
+            "optimizerRunsUsed",
+            "bonusOptimizerRuns",
+            "bonusOptimizerRunsPeriodKey",
+        ),
     }
 
     if resource not in mapping:
@@ -4675,14 +4718,10 @@ def _grant_bonus_capacity(
     credits: int,
 ):
     """
-    Adds true bonus capacity to the current usage period.
+    Add bonus capacity for the target user's current billing period only.
 
-    Example:
-        plan cap = 10
-        current used = 2
-        grant 1 bonus credit
-        new effective cap = 11
-        displayed usage = 2 / 11
+    The bonus is stamped with a resource-specific period key. When that period
+    ends, usage_caps.py automatically ignores and clears the expired bonus.
     """
     if credits <= 0:
         raise HTTPException(
@@ -4690,12 +4729,16 @@ def _grant_bonus_capacity(
             detail="Credits must be greater than zero.",
         )
 
-    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
+    target_doc = (
+        db.collection("users").document(target_uid).get().to_dict() or {}
+    )
 
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
 
-    used_field, bonus_field = _resource_admin_fields(resource)
+    used_field, bonus_field, bonus_period_field = _resource_admin_fields(
+        resource
+    )
     usage_ref = db.collection("usage").document(target_uid)
 
     @gc_firestore.transactional
@@ -4716,14 +4759,19 @@ def _grant_bonus_capacity(
         else:
             used = int(data.get(used_field, 0) or 0)
 
-        current_bonus = int(data.get(bonus_field, 0) or 0)
+        saved_bonus = int(data.get(bonus_field, 0) or 0)
+        saved_bonus_period = data.get(bonus_period_field)
 
-        # A new billing period starts with fresh usage and no prior bonus.
+        # New usage period: usage and prior bonuses start fresh.
         if current_period != period_key:
             used = 0
-            current_bonus = 0
+            saved_bonus = 0
 
-        new_bonus = current_bonus + credits
+        # A legacy or expired bonus must not be carried forward.
+        if saved_bonus_period != period_key:
+            saved_bonus = 0
+
+        new_bonus = saved_bonus + credits
 
         update = {
             "periodKey": period_key,
@@ -4733,6 +4781,7 @@ def _grant_bonus_capacity(
             "month": usage_period.get("month"),
             used_field: used,
             bonus_field: new_bonus,
+            bonus_period_field: period_key,
             "updatedAt": gc_firestore.SERVER_TIMESTAMP,
         }
 
@@ -4753,6 +4802,7 @@ def _grant_bonus_capacity(
             "used": used,
             "bonus": new_bonus,
             "granted": credits,
+            "bonusPeriodKey": period_key,
             **usage_period,
         }
 
@@ -4767,47 +4817,75 @@ def _reset_resource_usage(
     clear_bonus: bool = False,
 ):
     """
-    Resets consumed usage to zero.
+    Reset consumed usage to zero.
 
-    By default, bonus capacity remains available for the current period.
-    Pass clear_bonus=True only when you explicitly want to remove bonuses too.
+    A valid bonus is preserved only when its resource-specific bonus period key
+    matches the active billing period. Expired and legacy bonuses are cleared
+    automatically. Pass clear_bonus=True to remove a valid current-period bonus.
     """
-    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
+    target_doc = (
+        db.collection("users").document(target_uid).get().to_dict() or {}
+    )
 
     usage_period = get_usage_period(target_doc)
     period_key = usage_period["periodKey"]
 
-    used_field, bonus_field = _resource_admin_fields(resource)
+    used_field, bonus_field, bonus_period_field = _resource_admin_fields(
+        resource
+    )
     usage_ref = db.collection("usage").document(target_uid)
 
-    update = {
-        "periodKey": period_key,
-        "periodStart": usage_period.get("periodStart"),
-        "periodEnd": usage_period.get("periodEnd"),
-        "periodSource": usage_period.get("periodSource"),
-        "month": usage_period.get("month"),
-        used_field: 0,
-        "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-    }
+    @gc_firestore.transactional
+    def _tx(transaction: gc_firestore.Transaction):
+        snapshot = usage_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
 
-    if resource == "images":
-        update["used"] = 0
+        saved_bonus = int(data.get(bonus_field, 0) or 0)
+        saved_bonus_period = data.get(bonus_period_field)
 
-    if clear_bonus:
-        update[bonus_field] = 0
+        preserve_bonus = (
+            not clear_bonus
+            and saved_bonus > 0
+            and saved_bonus_period == period_key
+        )
 
-    usage_ref.set(update, merge=True)
+        update = {
+            "periodKey": period_key,
+            "periodStart": usage_period.get("periodStart"),
+            "periodEnd": usage_period.get("periodEnd"),
+            "periodSource": usage_period.get("periodSource"),
+            "month": usage_period.get("month"),
+            used_field: 0,
+            bonus_field: saved_bonus if preserve_bonus else 0,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        }
 
-    return {
-        "ok": True,
-        "uid": target_uid,
-        "resource": resource,
-        "used": 0,
-        "bonusCleared": bool(clear_bonus),
-        **usage_period,
-    }
+        if preserve_bonus:
+            update[bonus_period_field] = period_key
+        else:
+            update[bonus_period_field] = gc_firestore.DELETE_FIELD
 
+        if resource == "images":
+            update["used"] = 0
 
+        transaction.set(
+            usage_ref,
+            update,
+            merge=True,
+        )
+
+        return {
+            "ok": True,
+            "uid": target_uid,
+            "resource": resource,
+            "used": 0,
+            "bonus": saved_bonus if preserve_bonus else 0,
+            "bonusCleared": not preserve_bonus,
+            "bonusPreserved": preserve_bonus,
+            **usage_period,
+        }
+
+    return _tx(db.transaction())
 
 
 # ---------------- Admin Creative Manager ----------------
@@ -5341,6 +5419,7 @@ def admin_grant_image_credits(
     return {
         **result,
         "bonusImageCredits": result["bonus"],
+        "bonusImageCreditsPeriodKey": result["bonusPeriodKey"],
     }
 
 
@@ -5363,6 +5442,7 @@ def admin_reset_image_usage(
         **result,
         "imageUsed": 0,
         "used": 0,
+        "bonusImageCredits": result["bonus"],
     }
 
 
@@ -5387,6 +5467,7 @@ def admin_grant_video_credits(
     return {
         **result,
         "bonusVideoCredits": result["bonus"],
+        "bonusVideoCreditsPeriodKey": result["bonusPeriodKey"],
         "videoCreditsUsed": result["used"],
         "video_used": result["used"],
     }
@@ -5409,6 +5490,7 @@ def admin_reset_video_usage(
 
     return {
         **result,
+        "bonusVideoCredits": result["bonus"],
         "videoCreditsUsed": 0,
         "video_used": 0,
     }
@@ -5435,6 +5517,7 @@ def admin_grant_optimizer_runs(
     return {
         **result,
         "bonusOptimizerRuns": result["bonus"],
+        "bonusOptimizerRunsPeriodKey": result["bonusPeriodKey"],
         "optimizerRunsUsed": result["used"],
     }
 
@@ -5456,6 +5539,7 @@ def admin_reset_optimizer_usage(
 
     return {
         **result,
+        "bonusOptimizerRuns": result["bonus"],
         "optimizerRunsUsed": 0,
     }
 
@@ -5470,34 +5554,79 @@ def admin_reset_all_usage(
 
     db = get_db()
 
-    target_doc = db.collection("users").document(target_uid).get().to_dict() or {}
+    target_doc = (
+        db.collection("users").document(target_uid).get().to_dict() or {}
+    )
 
     usage_period = get_usage_period(target_doc)
+    period_key = usage_period["periodKey"]
     usage_ref = db.collection("usage").document(target_uid)
 
-    update = {
-        "periodKey": usage_period["periodKey"],
-        "periodStart": usage_period.get("periodStart"),
-        "periodEnd": usage_period.get("periodEnd"),
-        "periodSource": usage_period.get("periodSource"),
-        "month": usage_period.get("month"),
-        "imageUsed": 0,
-        "used": 0,
-        "videoCreditsUsed": 0,
-        "optimizerRunsUsed": 0,
-        "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-    }
+    @gc_firestore.transactional
+    def _tx(transaction: gc_firestore.Transaction):
+        snapshot = usage_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
 
-    if clear_bonus:
-        update.update(
-            {
-                "bonusImageCredits": 0,
-                "bonusVideoCredits": 0,
-                "bonusOptimizerRuns": 0,
-            }
+        update = {
+            "periodKey": period_key,
+            "periodStart": usage_period.get("periodStart"),
+            "periodEnd": usage_period.get("periodEnd"),
+            "periodSource": usage_period.get("periodSource"),
+            "month": usage_period.get("month"),
+            "imageUsed": 0,
+            "used": 0,
+            "videoCreditsUsed": 0,
+            "optimizerRunsUsed": 0,
+            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+        }
+
+        bonus_configs = [
+            (
+                "bonusImageCredits",
+                "bonusImageCreditsPeriodKey",
+            ),
+            (
+                "bonusVideoCredits",
+                "bonusVideoCreditsPeriodKey",
+            ),
+            (
+                "bonusOptimizerRuns",
+                "bonusOptimizerRunsPeriodKey",
+            ),
+        ]
+
+        preserved_bonuses = {}
+
+        for bonus_field, bonus_period_field in bonus_configs:
+            saved_bonus = int(data.get(bonus_field, 0) or 0)
+            saved_bonus_period = data.get(bonus_period_field)
+
+            preserve_bonus = (
+                not clear_bonus
+                and saved_bonus > 0
+                and saved_bonus_period == period_key
+            )
+
+            update[bonus_field] = saved_bonus if preserve_bonus else 0
+
+            if preserve_bonus:
+                update[bonus_period_field] = period_key
+            else:
+                update[bonus_period_field] = gc_firestore.DELETE_FIELD
+
+            preserved_bonuses[bonus_field] = (
+                saved_bonus if preserve_bonus else 0
+            )
+
+        transaction.set(
+            usage_ref,
+            update,
+            merge=True,
         )
 
-    usage_ref.set(update, merge=True)
+        return preserved_bonuses
+
+    preserved = _tx(db.transaction())
 
     return {
         "ok": True,
@@ -5505,6 +5634,9 @@ def admin_reset_all_usage(
         "imagesUsed": 0,
         "videoCreditsUsed": 0,
         "optimizerRunsUsed": 0,
+        "bonusImageCredits": preserved["bonusImageCredits"],
+        "bonusVideoCredits": preserved["bonusVideoCredits"],
+        "bonusOptimizerRuns": preserved["bonusOptimizerRuns"],
         "bonusCleared": bool(clear_bonus),
         **usage_period,
     }

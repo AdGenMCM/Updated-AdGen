@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   BadgeCheck,
@@ -15,7 +15,7 @@ import {
   Video,
 } from "lucide-react";
 import { useAuth } from "../AuthProvider";
-import { createPortalSession } from "../api/payments";
+import { createPortalSession, syncSubscription } from "../api/payments";
 import { auth } from "../firebaseConfig";
 import "./MyAccount.css";
 
@@ -74,6 +74,7 @@ function UsageRow({
 
 export default function MyAccount() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, stripe, userDoc } = useAuth();
 
   const [activeSection, setActiveSection] = useState(SECTION_IDS.account);
@@ -85,9 +86,13 @@ export default function MyAccount() {
   const [videoUsage, setVideoUsage] = useState(null);
   const [videoUsageLoading, setVideoUsageLoading] = useState(false);
   const [videoUsageError, setVideoUsageError] = useState("");
+  const [optimizerUsage, setOptimizerUsage] = useState(null);
+  const [optimizerUsageLoading, setOptimizerUsageLoading] = useState(false);
+  const [optimizerUsageError, setOptimizerUsageError] = useState("");
   const [storageUsage, setStorageUsage] = useState(null);
   const [storageLoading, setStorageLoading] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [billingSyncing, setBillingSyncing] = useState(false);
 
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
@@ -228,6 +233,50 @@ export default function MyAccount() {
     }
   }
 
+  async function fetchOptimizerUsage() {
+    setOptimizerUsageError("");
+    setOptimizerUsageLoading(true);
+
+    try {
+      if (!apiBase) {
+        throw new Error(
+          "Missing REACT_APP_API_BASE_URL at build time. Rebuild frontend."
+        );
+      }
+
+      const token = await getToken();
+      const response = await fetch(`${apiBase}/me/entitlements`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail =
+          data?.detail ||
+          data?.message ||
+          `Failed to load optimizer usage (${response.status})`;
+
+        throw new Error(
+          typeof detail === "string" ? detail : JSON.stringify(detail)
+        );
+      }
+
+      setOptimizerUsage(data?.usage?.optimizerRuns || null);
+
+      if (data?.usage?.storage) {
+        setStorageUsage(data.usage.storage);
+      }
+    } catch (requestError) {
+      setOptimizerUsage(null);
+      setOptimizerUsageError(
+        requestError?.message || "Failed to load optimizer usage."
+      );
+    } finally {
+      setOptimizerUsageLoading(false);
+    }
+  }
+
   async function fetchStorageUsage() {
     setStorageLoading(true);
 
@@ -253,6 +302,7 @@ export default function MyAccount() {
     await Promise.all([
       fetchUsage(),
       fetchVideoUsage(),
+      fetchOptimizerUsage(),
       fetchStorageUsage(),
     ]);
   };
@@ -263,6 +313,54 @@ export default function MyAccount() {
     refreshUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const params = new URLSearchParams(location.search);
+    const returnedFromBilling =
+      params.get("billing_return") === "1" ||
+      localStorage.getItem("adgen_billing_portal_return") === "1";
+
+    if (!returnedFromBilling) return;
+
+    let cancelled = false;
+
+    const synchronizeBillingReturn = async () => {
+      try {
+        setBillingSyncing(true);
+        setError("");
+
+        const token = await currentUser.getIdToken(true);
+        await syncSubscription({ token });
+
+        if (!cancelled) {
+          await refreshUsage();
+          localStorage.removeItem("adgen_billing_portal_return");
+          navigate("/account", { replace: true });
+        }
+      } catch (syncError) {
+        if (!cancelled) {
+          setError(
+            syncError?.message ||
+              "Your Stripe change succeeded, but ADGen could not refresh access yet."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setBillingSyncing(false);
+        }
+      }
+    };
+
+    void synchronizeBillingReturn();
+
+    return () => {
+      cancelled = true;
+    };
+    // refreshUsage intentionally uses the current authenticated account.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid, location.search, navigate]);
 
   if (!currentUser) {
     return (
@@ -288,7 +386,6 @@ export default function MyAccount() {
 
   const status = (stripe?.status ?? "inactive").toLowerCase();
   const tier = stripe?.tier ?? "—";
-  const customerId = stripe?.customerId ?? null;
   const requestedTier = (stripe?.requestedTier || "").trim();
   const hasRequestedTier = Boolean(requestedTier);
   const requestedLabel = tierLabels[requestedTier] || requestedTier;
@@ -316,8 +413,8 @@ export default function MyAccount() {
   const imageCap = Number(usage?.cap || 0);
   const videoUsed = Number(videoUsage?.used || 0);
   const videoCap = Number(videoUsage?.cap || 0);
-  const optimizerUsed = Number(usage?.optimizerUsed || 0);
-  const optimizerCap = Number(usage?.optimizerCap || 0);
+  const optimizerUsed = Number(optimizerUsage?.used || 0);
+  const optimizerCap = Number(optimizerUsage?.cap || 0);
   const storageUsedBytes = Number(storageUsage?.usedBytes || 0);
   const storageLimitBytes = Number(storageUsage?.limitBytes || 0);
 
@@ -330,31 +427,16 @@ export default function MyAccount() {
       if (!user) throw new Error("Not logged in.");
 
       const token = await user.getIdToken(true);
-      let url;
+      localStorage.setItem("adgen_billing_portal_return", "1");
 
-      const arity =
-        typeof createPortalSession === "function"
-          ? createPortalSession.length
-          : 0;
-
-      if (arity >= 2) {
-        const response = await createPortalSession(apiBase, token);
-        url = response?.url || response;
-      } else {
-        if (!customerId) {
-          throw new Error(
-            "No Stripe customer found yet. Subscribe first or try again shortly."
-          );
-        }
-
-        const response = await createPortalSession(customerId);
-        url = response?.url || response;
-      }
+      const response = await createPortalSession(token);
+      const url = response?.url || response;
 
       if (!url) throw new Error("No billing portal URL returned.");
 
       window.location.href = url;
     } catch (portalError) {
+      localStorage.removeItem("adgen_billing_portal_return");
       setError(portalError?.message || "Could not open billing portal.");
     } finally {
       setLoadingPortal(false);
@@ -440,6 +522,12 @@ export default function MyAccount() {
             <strong className={`status-${status}`}>{statusLabel}</strong>
           </div>
         </header>
+
+        {billingSyncing && (
+          <div className="acct-v2-inline-error" role="status">
+            Refreshing your Stripe plan and ADGen access…
+          </div>
+        )}
 
         {error && (
           <div className="acct-v2-error" role="alert">
@@ -725,6 +813,7 @@ export default function MyAccount() {
                   disabled={
                     usageLoading ||
                     videoUsageLoading ||
+                    optimizerUsageLoading ||
                     storageLoading
                   }
                 >
@@ -733,6 +822,7 @@ export default function MyAccount() {
                     className={
                       usageLoading ||
                       videoUsageLoading ||
+                      optimizerUsageLoading ||
                       storageLoading
                         ? "is-spinning"
                         : ""
@@ -742,9 +832,13 @@ export default function MyAccount() {
                 </button>
               </div>
 
-              {(usageError || videoUsageError) && (
+              {(usageError ||
+                videoUsageError ||
+                optimizerUsageError) && (
                 <div className="acct-v2-inline-error">
-                  {usageError || videoUsageError}
+                  {usageError ||
+                    videoUsageError ||
+                    optimizerUsageError}
                 </div>
               )}
 
@@ -795,8 +889,8 @@ export default function MyAccount() {
                   cap={optimizerCap}
                   helper={
                     optimizerCap > 0
-                      ? formatResetText(usage)
-                      : "Available on Pro and Business"
+                      ? formatResetText(optimizerUsage)
+                      : "Not included with this plan"
                   }
                   warning={
                     optimizerCap > 0 &&

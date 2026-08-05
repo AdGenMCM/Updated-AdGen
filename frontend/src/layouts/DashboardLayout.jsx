@@ -85,6 +85,7 @@ export default function DashboardLayout({ children }) {
   const {
     usage,
     videoUsage,
+    optimizerUsage,
     planLabel,
     stripe,
     userDoc,
@@ -128,6 +129,8 @@ export default function DashboardLayout({ children }) {
   const imageCap = usage?.cap ?? 0;
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
+  const optimizerUsed = optimizerUsage?.used ?? 0;
+  const optimizerCap = optimizerUsage?.cap ?? 0;
 
   const imagePct = imageCap
     ? Math.min(100, Math.round((imageUsed / imageCap) * 100))
@@ -135,6 +138,13 @@ export default function DashboardLayout({ children }) {
 
   const videoPct = videoCap
     ? Math.min(100, Math.round((videoUsed / videoCap) * 100))
+    : 0;
+
+  const optimizerPct = optimizerCap
+    ? Math.min(
+        100,
+        Math.round((optimizerUsed / optimizerCap) * 100)
+      )
     : 0;
 
   const navItems = isFreePlan
@@ -573,6 +583,20 @@ const getSafeNotificationDestination = (notification) => {
                 <span style={{ width: `${videoPct}%` }} />
               </div>
             </div>
+
+            {optimizerCap > 0 && (
+              <div className="dash-usage-group">
+                <div className="dash-usage-row">
+                  <span>Optimizer runs</span>
+                  <strong>
+                    {optimizerUsed} / {optimizerCap}
+                  </strong>
+                </div>
+                <div className="dash-usage-bar">
+                  <span style={{ width: `${optimizerPct}%` }} />
+                </div>
+              </div>
+            )}
             {isFreePlan && (
               <Link
                 to="/subscribe?upgrade=1"

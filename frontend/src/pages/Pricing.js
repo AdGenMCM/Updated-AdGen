@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../AuthProvider";
 import "./Pricing.css";
 
 import Reveal from "../components/motion/Reveal";
@@ -64,13 +65,14 @@ const TIERS = [
       "For freelancers, small businesses, and operators who need a dependable monthly creative workflow.",
     images: "40",
     videos: "6",
-    optimizer: "—",
+    optimizer: "10",
     brands: "1",
     storage: "10 GB",
     cta: "Choose Starter",
     href: "/subscribe?tier=starter_monthly",
     includes: [
       "Everything in Trial",
+      "Creative Optimizer",
       "Higher image generation limits",
       "More premium video credits",
       "Brand-aware creative defaults",
@@ -95,7 +97,6 @@ const TIERS = [
     highlighted: true,
     includes: [
       "Everything in Starter",
-      "Creative Optimizer",
       "Performance Intelligence",
       "Campaign Intelligence",
       "Manual tracking, Google Ads, Meta Ads",
@@ -133,7 +134,7 @@ const TIERS = [
 const COMPARISON_ROWS = [
   ["Image generations", "2 lifetime", "10", "40", "100", "250"],
   ["Video credits", "1 lifetime", "3", "6", "14", "32"],
-  ["Optimizer runs", "—", "—", "—", "20", "75"],
+  ["Optimizer runs", "—", "—", "10", "20", "75"],
   ["Brand Kits", "—", "1", "1", "3", "10"],
   ["Creative storage", "250 MB", "2 GB", "10 GB", "50 GB", "200 GB"],
   ["Image generation", true, true, true, true, true],
@@ -214,13 +215,35 @@ function CheckCell({ value }) {
 
 export default function Pricing() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     trackEvent("view_pricing");
   }, []);
 
+  const getSubscribeDestination = (tier) => {
+    const search = `?upgrade=1&tier=${encodeURIComponent(tier.id)}`;
+
+    if (currentUser) {
+      return {
+        pathname: "/subscribe",
+        search,
+      };
+    }
+
+    return {
+      pathname: "/login",
+      state: {
+        from: {
+          pathname: "/subscribe",
+          search,
+        },
+      },
+    };
+  };
+
   const openTier = (tier) => {
-    navigate(tier.href || `/subscribe?tier=${tier.id}`);
+    navigate(getSubscribeDestination(tier));
   };
 
   return (
@@ -306,7 +329,11 @@ export default function Pricing() {
                   </div>
 
                   <MarketingButton
-                    href={tier.href || `/subscribe?tier=${tier.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openTier(tier);
+                    }}
                     size="lg"
                     variant={tier.highlighted ? "primary" : "secondary"}
                     className="pricing-v2-card-cta"

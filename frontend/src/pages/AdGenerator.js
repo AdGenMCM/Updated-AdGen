@@ -51,6 +51,7 @@ const STYLE_MAP = {
 };
 
 const MAX_REFERENCE_IMAGES = 3;
+const IMAGE_GENERATOR_MODE_KEY = "adgen:image-generator-mode";
 
 const IMAGE_TEMPLATES = [
   {
@@ -244,10 +245,17 @@ function AdGenerator() {
   const navigate = useNavigate();
   const referenceInputRef = useRef(null);
   const firstWorkspaceSectionRef = useRef(null);
+  const templateSectionRef = useRef(null);
 
   const [form, setForm] = useState(INITIAL_FORM);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [hasGeneratedBefore, setHasGeneratedBefore] = useState(false);
+  const [usageLoaded, setUsageLoaded] = useState(false);
+  const [imageLimitReached, setImageLimitReached] = useState(false);
+  const [imageUsageUsed, setImageUsageUsed] = useState(null);
+  const [imageUsageCap, setImageUsageCap] = useState(null);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
@@ -298,6 +306,80 @@ function AdGenerator() {
     };
     loadPlan();
   }, [apiBase]);
+
+  useEffect(() => {
+    const loadUsageAndPreference = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user || !apiBase) {
+          setUsageLoaded(true);
+          return;
+        }
+
+        const token = await user.getIdToken();
+        const response = await fetch(`${apiBase}/usage`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const data = await response.json().catch(() => null);
+        const used = Number(
+          data?.used ??
+          data?.imageUsed ??
+          data?.image_used ??
+          data?.usage ??
+          0
+        );
+        const rawCap =
+          data?.cap ??
+          data?.limit ??
+          data?.imageCap ??
+          data?.image_cap ??
+          null;
+        const cap =
+          rawCap === null || rawCap === undefined || rawCap === ""
+            ? null
+            : Number(rawCap);
+        const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+        const exhausted =
+          response.ok &&
+          hasFiniteCap &&
+          Number.isFinite(used) &&
+          used >= cap;
+        const hasPreviousGeneration =
+          response.ok && Number.isFinite(used) && used > 0;
+
+        setImageUsageUsed(Number.isFinite(used) ? used : null);
+        setImageUsageCap(hasFiniteCap ? cap : null);
+        setImageLimitReached(exhausted);
+        setHasGeneratedBefore(hasPreviousGeneration);
+
+        if (hasPreviousGeneration) {
+          const savedMode = window.localStorage.getItem(
+            IMAGE_GENERATOR_MODE_KEY
+          );
+
+          if (savedMode === "advanced") {
+            setAdvancedOpen(true);
+          }
+        }
+      } catch {
+        // Usage detection is only for presentation. Generation remains available.
+      } finally {
+        setUsageLoaded(true);
+      }
+    };
+
+    loadUsageAndPreference();
+  }, [apiBase]);
+
+  useEffect(() => {
+    if (!usageLoaded) return;
+
+    window.localStorage.setItem(
+      IMAGE_GENERATOR_MODE_KEY,
+      advancedOpen ? "advanced" : "quick"
+    );
+  }, [advancedOpen, usageLoaded]);
 
   useEffect(() => {
     if (
@@ -411,6 +493,7 @@ function AdGenerator() {
 
   const applyImageTemplate = (template) => {
     setSelectedTemplateId(template.id);
+    setAdvancedOpen(true);
     setUiError(null);
     setResult(null);
 
@@ -426,6 +509,7 @@ function AdGenerator() {
 
   const startImageFromScratch = () => {
     setSelectedTemplateId("scratch");
+    setAdvancedOpen(true);
     setUiError(null);
     setResult(null);
     setForm(INITIAL_FORM);
@@ -578,6 +662,20 @@ function AdGenerator() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (imageLimitReached) {
+      setUiError({
+        type: "cap",
+        message: `You've used all available image generations${
+          Number.isFinite(imageUsageCap)
+            ? ` (${imageUsageUsed ?? imageUsageCap}/${imageUsageCap})`
+            : ""
+        }. Upgrade to continue creating.`,
+        upgradePath: "/subscribe?upgrade=1",
+      });
+      return;
+    }
+
     setLoading(true);
     setProgress({
       stage: "queued",
@@ -644,7 +742,12 @@ function AdGenerator() {
 
         if (response.status === 429) {
           const cap = detail?.cap;
+          const used = detail?.used;
           const isFreeLimit = Number(cap) === 2;
+
+          setImageLimitReached(true);
+          if (Number.isFinite(Number(used))) setImageUsageUsed(Number(used));
+          if (Number.isFinite(Number(cap))) setImageUsageCap(Number(cap));
 
           setUiError({
             type: "cap",
@@ -692,6 +795,18 @@ function AdGenerator() {
       }
 
       setResult(data);
+      setHasGeneratedBefore(true);
+      setImageUsageUsed((current) => {
+        const next = Number.isFinite(current) ? current + 1 : current;
+        if (
+          Number.isFinite(next) &&
+          Number.isFinite(imageUsageCap) &&
+          next >= imageUsageCap
+        ) {
+          setImageLimitReached(true);
+        }
+        return next;
+      });
     } catch (err) {
       console.error("[AdGen] Generation error:", err);
 
@@ -716,6 +831,10 @@ function AdGenerator() {
 
       if (isLimitError) {
         const isFreeLimit = Number(cap) === 2;
+
+        setImageLimitReached(true);
+        if (Number.isFinite(Number(used))) setImageUsageUsed(Number(used));
+        if (Number.isFinite(Number(cap))) setImageUsageCap(Number(cap));
 
         setUiError({
           type: "cap",
@@ -819,19 +938,195 @@ function AdGenerator() {
             </div>
           </div>
 
-          {!isFreePlan && (
-          <BrandKitSelector
-            value={brandKitId}
-            onChange={setBrandKitId}
-            onKitChange={(selectedKit) => {
-              setBrandKit(selectedKit);
-              setBrandKitLoading(false);
-            }}
-            disabled={loading || !useBrandKit}
-          />
+          {advancedOpen ? (
+            <section className="adgen-quick-collapsed" aria-label="Quick Create">
+              <div>
+                <span className="adgen-quick-start-kicker">Quick Create</span>
+                <h2>Full Creative Workspace is open</h2>
+                <p>
+                  The simplified inputs are hidden so there is only one active
+                  generation path and one Create button.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="adgen-switch-quick-button"
+                onClick={() => {
+                  setAdvancedOpen(false);
+                  setTemplatesOpen(false);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                disabled={loading || referenceUploading}
+              >
+                Switch to Quick Create
+                <span aria-hidden="true">↑</span>
+              </button>
+            </section>
+          ) : (
+            <section className="adgen-quick-start" aria-labelledby="quick-start-title">
+              <div className="adgen-quick-start-head">
+                <div>
+                  <span className="adgen-quick-start-kicker">
+                    {hasGeneratedBefore ? "Quick Create" : "Fastest way to begin"}
+                  </span>
+                  <h2 id="quick-start-title">
+                    {hasGeneratedBefore
+                      ? "Create Another Ad"
+                      : "Create Your First Ad"}
+                  </h2>
+                  <p>
+                    {hasGeneratedBefore
+                      ? "Add the essentials for a fast generation, or open the full creative workspace for complete control."
+                      : "Add the essentials and generate immediately. The full creative workspace is available below whenever you need more control."}
+                  </p>
+                </div>
+              </div>
+
+              <form className="adgen-quick-form" onSubmit={handleSubmit}>
+                <div className="adgen-quick-fields">
+                  <label className="field">
+                    <span className="field-label">Product or Company</span>
+                    <input
+                      name="product_name"
+                      placeholder="What are you advertising?"
+                      value={form.product_name}
+                      onChange={handleChange}
+                      disabled={loading}
+                      required
+                    />
+                  </label>
+
+                  <label className="field adgen-quick-description">
+                    <span className="field-label">What are you promoting?</span>
+                    <textarea
+                      name="description"
+                      placeholder="Describe the product, service, offer, or main benefit."
+                      value={form.description}
+                      onChange={handleChange}
+                      disabled={loading}
+                      required
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Who is this for?</span>
+                    <input
+                      name="audience"
+                      placeholder="Example: busy parents, skincare shoppers, small businesses"
+                      value={form.audience}
+                      onChange={handleChange}
+                      disabled={loading}
+                      required
+                    />
+                  </label>
+                </div>
+
+                {imageLimitReached && (
+                  <div className="generatorUsageLimitCard" role="alert">
+                    <div>
+                      <strong>Image generations used</strong>
+                      <p>
+                        You've used all available image generations
+                        {Number.isFinite(imageUsageCap)
+                          ? ` (${imageUsageUsed ?? imageUsageCap}/${imageUsageCap})`
+                          : ""}.
+                        Upgrade to continue creating ads.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/subscribe?upgrade=1")}
+                    >
+                      Upgrade to Continue
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="adgen-quick-generate"
+                  disabled={loading || referenceUploading || imageLimitReached}
+                >
+                  {loading
+                    ? "Creating..."
+                    : hasGeneratedBefore
+                      ? "✨ Generate Ad"
+                      : "✨ Generate My First Ad"}
+                </button>
+
+                <div className="adgen-quick-divider">
+                  <span>or</span>
+                </div>
+
+                <div className="adgen-quick-template-action">
+                  <button
+                    type="button"
+                    className="adgen-quick-secondary"
+                    onClick={() => {
+                      setTemplatesOpen(true);
+
+                      window.setTimeout(() => {
+                        templateSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }, 120);
+                    }}
+                    disabled={loading || referenceUploading}
+                    aria-expanded={templatesOpen}
+                    aria-controls="image-template-options"
+                  >
+                    Need Inspiration? 🎨 Start with a Template
+                  </button>
+                </div>
+
+                <div className="adgen-full-workspace-callout">
+                  <div className="adgen-full-workspace-copy">
+                    <span className="adgen-full-workspace-kicker">
+                      Full creative workspace
+                    </span>
+                    <h3>Need complete creative control?</h3>
+                    <p>
+                      Configure copy, style, platform, aspect ratio, Brand Kit,
+                      Performance Intelligence, reference images, campaign details,
+                      and every advanced image-generation setting.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="adgen-full-workspace-button"
+                    onClick={() => {
+                      setTemplatesOpen(false);
+                      setAdvancedOpen(true);
+                      window.setTimeout(() => {
+                        firstWorkspaceSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }, 80);
+                    }}
+                    disabled={loading || referenceUploading}
+                    aria-expanded={advancedOpen}
+                    aria-controls="adgen-advanced-workspace"
+                  >
+                    Open Full Creative Workspace
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </form>
+            </section>
           )}
 
-          <section className={`template-starter ${templatesOpen ? "is-open" : "is-collapsed"}`} aria-labelledby="image-template-title">
+          {(!advancedOpen ? templatesOpen : true) && (
+          <section
+            ref={templateSectionRef}
+            className={`template-starter ${
+              templatesOpen ? "is-open" : "is-collapsed"
+            }`}
+            aria-labelledby="image-template-title"
+          >
             <button
               type="button"
               className="template-starter-toggle"
@@ -913,8 +1208,23 @@ function AdGenerator() {
             </div>
             </div>
           </section>
+          )}
 
+          {advancedOpen && (
+          <div id="adgen-advanced-workspace" className="adgen-advanced-workspace">
           <form className="adgen-form" onSubmit={handleSubmit}>
+            {!isFreePlan && (
+              <BrandKitSelector
+                value={brandKitId}
+                onChange={setBrandKitId}
+                onKitChange={(selectedKit) => {
+                  setBrandKit(selectedKit);
+                  setBrandKitLoading(false);
+                }}
+                disabled={loading || !useBrandKit}
+              />
+            )}
+
             <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
             <StepSection
               step="1"
@@ -981,144 +1291,6 @@ function AdGenerator() {
 
             <StepSection
               step="2"
-              title="Creative Copy"
-              description="Optionally provide exact copy for the creative, or leave these fields blank and let AdGen write it for you."
-            >
-              <div className="field">
-                <div className="field-label">
-                  Headline <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter a specific headline to preserve it. Leave blank and AdGen will generate one for you." />
-                </div>
-                <input
-                  name="headline"
-                  placeholder="Leave blank to let AdGen generate a headline"
-                  value={form.headline}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={35}
-                />
-                <small className="field-helper">
-                  {form.headline.length}/35 characters · Best results are usually under 30 characters.
-                </small>
-              </div>
-
-              <div className="field">
-                <div className="field-label">
-                  Body Text <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter supporting copy you want preserved in the creative. Leave blank and AdGen will write it for you." />
-                </div>
-                <textarea
-                  name="primaryText"
-                  placeholder="Leave blank to let AdGen write the body text"
-                  value={form.primaryText}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={100}
-                />
-                <small className="field-helper">
-                  {form.primaryText.length}/100 characters · Shorter copy creates cleaner, more readable ads.
-                </small>
-              </div>
-
-              <div className="field">
-                <div className="field-label">
-                  Call to Action {fieldBadge("cta")} <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter the action you want viewers to take such as Learn More, Shop now, Get Offer, ect... Brand Kit can fill this automatically, or AdGen can choose one when left blank." />
-                </div>
-                <input
-                  name="cta"
-                  placeholder="Leave blank to let AdGen choose a CTA"
-                  value={form.cta}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={20}
-                />
-                <small className="field-helper">
-                  {form.cta.length}/20 characters · Keep CTAs concise and action-oriented.
-                </small>
-              </div>
-            </StepSection>
-
-            <StepSection
-              step="3"
-              title="Creative Details"
-              description="Control the tone, visual style, and campaign format."
-            >
-
-              <div className="field-grid three">
-                <div className="field">
-                  <div className="field-label">
-                    Tone {fieldBadge("tone")} <InfoTip text="Controls how the ad sounds. Example: motivational, luxury, friendly, bold, professional, or playful." />
-                  </div>
-                  <input name="tone" placeholder="Motivational" value={form.tone} onChange={handleChange} disabled={loading} />
-                </div>
-
-                <div className="field">
-                  <div className="field-label">
-                    Style {fieldBadge("stylePreset")} <InfoTip text="Controls the visual direction of the generated image, such as minimal, lifestyle, premium, UGC, or bold." />
-                  </div>
-                  <select name="stylePreset" value={form.stylePreset} onChange={handleChange} disabled={loading}>
-                    <option value="Minimal">Minimal</option>
-                    <option value="Lifestyle">Lifestyle</option>
-                    <option value="UGC">UGC</option>
-                    <option value="Premium">Premium</option>
-                    <option value="Bold">Bold</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <div className="field-label">
-                    Aspect Ratio {fieldBadge("imageSize")} <InfoTip text="Choose the format based on where the ad will appear. Square for feeds, portrait for stories/reels, landscape for wide placements." />
-                  </div>
-                  <select name="imageSize" value={form.imageSize} onChange={handleChange} disabled={loading}>
-                    <option value="1024x1024">1:1 Square</option>
-                    <option value="1024x1792">9:16 Portrait</option>
-                    <option value="1792x1024">16:9 Landscape</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="field-grid">
-                <div className="field">
-                  <div className="field-label">
-                    Product Type <InfoTip text="Helps AdGen understand what kind of product or service you are promoting. Leave Auto-detect if unsure." />
-                  </div>
-                  <select name="productType" value={form.productType} onChange={handleChange} disabled={loading}>
-                    <option value="auto">Auto-detect</option>
-                    <option value="App / Software">App / Software</option>
-                    <option value="Electronics / Device">Electronics / Device</option>
-                    <option value="Home Appliance">Home Appliance</option>
-                    <option value="Skincare / Beauty">Skincare / Beauty</option>
-                    <option value="Supplement">Supplement</option>
-                    <option value="Beverage / Food">Beverage / Food</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Service">Service</option>
-                    <option value="Other Physical Product">Other Physical Product</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <div className="field-label">
-                    Campaign Objective <InfoTip text="Adds context about the campaign, such as launch, retargeting, seasonal promotion, or lead generation." />
-                  </div>
-                  <select name="campaignObjective" value={form.campaignObjective} onChange={handleChange} disabled={loading}>
-                    <option value="Auto">Auto</option>
-                    <option value="Product Launch">Product Launch</option>
-                    <option value="Seasonal Promotion">Seasonal Promotion</option>
-                    <option value="Limited-Time Offer">Limited-Time Offer</option>
-                    <option value="Brand Awareness">Brand Awareness</option>
-                    <option value="Retargeting">Retargeting</option>
-                    <option value="Lead Generation">Lead Generation</option>
-                    <option value="App Promotion">App Promotion</option>
-                    <option value="Event">Event</option>
-                    <option value="Evergreen">Evergreen</option>
-                  </select>
-                </div>
-              </div>
-            </StepSection>
-
-            <StepSection
-              step="4"
               title="Brand & Assets"
               description="Apply your Brand Kit and upload optional reference images."
             >
@@ -1149,10 +1321,7 @@ function AdGenerator() {
                 }`}>
                   {!canUsePerformanceIntelligence ? (
                     <div className="performance-intelligence-locked">
-                      <strong>
-                        🔒 Performance Intelligence{" "}
-                        <InfoTip text="Applies the colors, visual styles, compositions, messaging patterns, CTA language, and headline structure ADGen has learned from your qualified performance data." />
-                      </strong>
+                      <strong>🔒 Performance Intelligence</strong>
                       <small>Available on Pro &amp; Business plans.</small>
                     </div>
                   ) : (
@@ -1250,13 +1419,176 @@ function AdGenerator() {
               </div>
             </StepSection>
 
+            <StepSection
+              step="3"
+              title="Creative Copy"
+              description="Optionally provide exact copy for the creative, or leave these fields blank and let AdGen write it for you."
+            >
+              <div className="field">
+                <div className="field-label">
+                  Headline <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter a specific headline to preserve it. Leave blank and AdGen will generate one for you." />
+                </div>
+                <input
+                  name="headline"
+                  placeholder="Leave blank to let AdGen generate a headline"
+                  value={form.headline}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={35}
+                />
+                <small className="field-helper">
+                  {form.headline.length}/35 characters · Best results are usually under 30 characters.
+                </small>
+              </div>
+
+              <div className="field">
+                <div className="field-label">
+                  Body Text <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter supporting copy you want preserved in the creative. Leave blank and AdGen will write it for you." />
+                </div>
+                <textarea
+                  name="primaryText"
+                  placeholder="Leave blank to let AdGen write the body text"
+                  value={form.primaryText}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={100}
+                />
+                <small className="field-helper">
+                  {form.primaryText.length}/100 characters · Shorter copy creates cleaner, more readable ads.
+                </small>
+              </div>
+
+              <div className="field">
+                <div className="field-label">
+                  Call to Action {fieldBadge("cta")} <span className="field-optional">Optional</span>
+                  <InfoTip text="Enter the action you want viewers to take such as Learn More, Shop now, Get Offer, ect... Brand Kit can fill this automatically, or AdGen can choose one when left blank." />
+                </div>
+                <input
+                  name="cta"
+                  placeholder="Leave blank to let AdGen choose a CTA"
+                  value={form.cta}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={20}
+                />
+                <small className="field-helper">
+                  {form.cta.length}/20 characters · Keep CTAs concise and action-oriented.
+                </small>
+              </div>
+            </StepSection>
+
+            <StepSection
+              step="4"
+              title="Creative Details"
+              description="Control the tone, visual style, and campaign format."
+            >
+
+              <div className="field-grid three">
+                <div className="field">
+                  <div className="field-label">
+                    Tone {fieldBadge("tone")} <InfoTip text="Controls how the ad sounds. Example: motivational, luxury, friendly, bold, professional, or playful." />
+                  </div>
+                  <input name="tone" placeholder="Motivational" value={form.tone} onChange={handleChange} disabled={loading} />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Style {fieldBadge("stylePreset")} <InfoTip text="Controls the visual direction of the generated image, such as minimal, lifestyle, premium, UGC, or bold." />
+                  </div>
+                  <select name="stylePreset" value={form.stylePreset} onChange={handleChange} disabled={loading}>
+                    <option value="Minimal">Minimal</option>
+                    <option value="Lifestyle">Lifestyle</option>
+                    <option value="UGC">UGC</option>
+                    <option value="Premium">Premium</option>
+                    <option value="Bold">Bold</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Aspect Ratio {fieldBadge("imageSize")} <InfoTip text="Choose the format based on where the ad will appear. Square for feeds, portrait for stories/reels, landscape for wide placements." />
+                  </div>
+                  <select name="imageSize" value={form.imageSize} onChange={handleChange} disabled={loading}>
+                    <option value="1024x1024">1:1 Square</option>
+                    <option value="1024x1792">9:16 Portrait</option>
+                    <option value="1792x1024">16:9 Landscape</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="field-grid">
+                <div className="field">
+                  <div className="field-label">
+                    Product Type <InfoTip text="Helps AdGen understand what kind of product or service you are promoting. Leave Auto-detect if unsure." />
+                  </div>
+                  <select name="productType" value={form.productType} onChange={handleChange} disabled={loading}>
+                    <option value="auto">Auto-detect</option>
+                    <option value="App / Software">App / Software</option>
+                    <option value="Electronics / Device">Electronics / Device</option>
+                    <option value="Home Appliance">Home Appliance</option>
+                    <option value="Skincare / Beauty">Skincare / Beauty</option>
+                    <option value="Supplement">Supplement</option>
+                    <option value="Beverage / Food">Beverage / Food</option>
+                    <option value="Apparel">Apparel</option>
+                    <option value="Service">Service</option>
+                    <option value="Other Physical Product">Other Physical Product</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <div className="field-label">
+                    Campaign Objective <InfoTip text="Adds context about the campaign, such as launch, retargeting, seasonal promotion, or lead generation." />
+                  </div>
+                  <select name="campaignObjective" value={form.campaignObjective} onChange={handleChange} disabled={loading}>
+                    <option value="Auto">Auto</option>
+                    <option value="Product Launch">Product Launch</option>
+                    <option value="Seasonal Promotion">Seasonal Promotion</option>
+                    <option value="Limited-Time Offer">Limited-Time Offer</option>
+                    <option value="Brand Awareness">Brand Awareness</option>
+                    <option value="Retargeting">Retargeting</option>
+                    <option value="Lead Generation">Lead Generation</option>
+                    <option value="App Promotion">App Promotion</option>
+                    <option value="Event">Event</option>
+                    <option value="Evergreen">Evergreen</option>
+                  </select>
+                </div>
+              </div>
+            </StepSection>
+            
+            
+
+            
+
+            
+
+
+            {imageLimitReached && (
+              <div className="generatorUsageLimitCard" role="alert">
+                <div>
+                  <strong>Image generations used</strong>
+                  <p>
+                    Upgrade your plan to continue creating image ads.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/subscribe?upgrade=1")}
+                >
+                  Upgrade to Continue
+                </button>
+              </div>
+            )}
 
             <div className="button-row">
-              <button type="submit" disabled={loading || referenceUploading}>
+              <button type="submit" disabled={loading || referenceUploading || imageLimitReached}>
                 {loading ? "Creating..." : referenceUploading ? "Uploading..." : "✨ Create My Ad"}
               </button>
             </div>
           </form>
+          </div>
+          )}
         </main>
 
         <aside className="adgen-side">

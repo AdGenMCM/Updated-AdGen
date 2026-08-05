@@ -17,11 +17,19 @@ def require_feature(tier: Optional[str], feature: str, message: str) -> None:
         )
 
 
-def require_pro_or_business(tier: Optional[str]) -> None:
+def require_optimizer(tier: Optional[str]) -> None:
     require_feature(
         tier,
         "optimizer",
-        "Ad Performance Optimization is available on Pro and Business plans.",
+        "Ad Performance Optimization is available on Starter, Pro, and Business plans.",
+    )
+
+
+def require_pro_or_business(tier: Optional[str]) -> None:
+    require_feature(
+        tier,
+        "performance_tracking",
+        "This feature is available on Pro and Business plans.",
     )
 
 

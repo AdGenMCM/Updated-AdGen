@@ -53,13 +53,13 @@ PLAN_CONFIG: Dict[str, Dict[str, Any]] = {
         "limits": {
             "images": 40,
             "video_credits": 6,
-            "optimizer_runs": 0,
+            "optimizer_runs": 10,
             "brand_kits": 1,
             "storage_bytes": 10 * GIB,
         },
         "features": {
             "video_generation": True,
-            "optimizer": False,
+            "optimizer": True,
             "performance_tracking": False,
             "winner_analysis": False,
             "advanced_insights": False,
