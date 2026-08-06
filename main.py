@@ -555,6 +555,103 @@ def set_generation_progress(
     db.collection(_progress_collection(kind)).document(job_id).set(payload, merge=True)
 
 
+def rollback_reserved_usage_with_logging(
+    *,
+    db,
+    uid: str,
+    resource: str,
+    reservation: Optional[Dict[str, Any]],
+    amount: int,
+    job_id: Optional[str],
+    context: str,
+) -> bool:
+    """
+    Attempt to refund a previously reserved usage unit and always log the result.
+
+    This helper intentionally does not raise. The original generation error must
+    remain the user-facing failure, while rollback problems are made visible in
+    backend logs for investigation.
+    """
+    if not reservation:
+        print(
+            "USAGE ROLLBACK SKIPPED:",
+            {
+                "context": context,
+                "uid": uid,
+                "jobId": job_id,
+                "resource": resource,
+                "reason": "no reservation",
+            },
+            flush=True,
+        )
+        return False
+
+    period_key = (
+        reservation.get("periodKey")
+        or reservation.get("month")
+    )
+
+    try:
+        refunded = rollback_resource(
+            db,
+            uid,
+            resource,
+            period_key,
+            amount,
+        )
+
+        print(
+            "USAGE ROLLBACK RESULT:",
+            {
+                "context": context,
+                "uid": uid,
+                "jobId": job_id,
+                "resource": resource,
+                "amount": amount,
+                "periodKey": period_key,
+                "refunded": bool(refunded),
+                "reservationUsed": reservation.get("used"),
+                "reservationCap": reservation.get("cap"),
+            },
+            flush=True,
+        )
+
+        if not refunded:
+            print(
+                "USAGE ROLLBACK WARNING:",
+                {
+                    "context": context,
+                    "uid": uid,
+                    "jobId": job_id,
+                    "resource": resource,
+                    "periodKey": period_key,
+                    "message": (
+                        "rollback_resource returned False; "
+                        "the reserved usage may still be charged."
+                    ),
+                },
+                flush=True,
+            )
+
+        return bool(refunded)
+
+    except Exception as rollback_error:
+        print(
+            "USAGE ROLLBACK ERROR:",
+            {
+                "context": context,
+                "uid": uid,
+                "jobId": job_id,
+                "resource": resource,
+                "periodKey": period_key,
+                "error": repr(rollback_error),
+            },
+            flush=True,
+        )
+        traceback.print_exc()
+        return False
+
+
 async def _run_image_generation_job(
     job_id: str, payload: AdRequest, authorization: str
 ):
@@ -569,6 +666,16 @@ async def _run_image_generation_job(
             extra={"status": "succeeded", "result": result, "error": None},
         )
     except HTTPException as exc:
+        print(
+            "IMAGE BACKGROUND JOB FAILED:",
+            {
+                "jobId": job_id,
+                "statusCode": exc.status_code,
+                "detail": exc.detail,
+            },
+            flush=True,
+        )
+
         error_message = (
             str(exc.detail)
             if isinstance(exc.detail, str)
@@ -598,6 +705,16 @@ async def _run_image_generation_job(
             metadata={"jobId": job_id},
         )
     except Exception as exc:
+        print(
+            "IMAGE BACKGROUND JOB UNEXPECTED ERROR:",
+            {
+                "jobId": job_id,
+                "error": repr(exc),
+            },
+            flush=True,
+        )
+        traceback.print_exc()
+
         set_generation_progress(
             db,
             "image",
@@ -655,6 +772,16 @@ async def _run_optimizer_job(
         )
 
     except HTTPException as exc:
+        print(
+            "OPTIMIZER BACKGROUND JOB FAILED:",
+            {
+                "jobId": job_id,
+                "statusCode": exc.status_code,
+                "detail": exc.detail,
+            },
+            flush=True,
+        )
+
         set_generation_progress(
             db,
             "optimizer",
@@ -690,6 +817,16 @@ async def _run_optimizer_job(
         )
 
     except Exception as exc:
+        print(
+            "OPTIMIZER BACKGROUND JOB UNEXPECTED ERROR:",
+            {
+                "jobId": job_id,
+                "error": repr(exc),
+            },
+            flush=True,
+        )
+        traceback.print_exc()
+
         set_generation_progress(
             db,
             "optimizer",
@@ -751,6 +888,16 @@ async def _run_optimizer_generation_job(
         )
 
     except HTTPException as exc:
+        print(
+            "OPTIMIZER IMAGE BACKGROUND JOB FAILED:",
+            {
+                "jobId": job_id,
+                "statusCode": exc.status_code,
+                "detail": exc.detail,
+            },
+            flush=True,
+        )
+
         set_generation_progress(
             db,
             "optimizer_generation",
@@ -786,6 +933,16 @@ async def _run_optimizer_generation_job(
         )
 
     except Exception as exc:
+        print(
+            "OPTIMIZER IMAGE BACKGROUND JOB UNEXPECTED ERROR:",
+            {
+                "jobId": job_id,
+                "error": repr(exc),
+            },
+            flush=True,
+        )
+        traceback.print_exc()
+
         set_generation_progress(
             db,
             "optimizer_generation",
@@ -2998,69 +3155,12 @@ async def generate_ad(
         require_pro_or_business(tier)
 
     image_usage_reservation = None
-
-    if not admin:
-        allowed_statuses = {"active", "trialing"}
-        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(
-                status_code=402,
-                detail="Subscription inactive. Please subscribe to continue.",
-            )
-
-        cap_result = check_and_increment_usage(db, uid, tier)
-
-        if not cap_result["allowed"]:
-            track_event(
-                db,
-                uid,
-                "usage.limit_reached",
-                event_id=(
-                    f"images:{cap_result.get('periodKey') or cap_result.get('month')}:limit"
-                ),
-                metadata={
-                    "resource": "images",
-                    "used": cap_result.get("used"),
-                    "cap": cap_result.get("cap"),
-                },
-            )
-
-            create_usage_notifications(
-                db,
-                uid,
-                resource="images",
-                used=int(cap_result.get("used") or 0),
-                cap=int(cap_result.get("cap") or 0),
-                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
-                link="/account",
-            )
-
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "message": (
-                        "You’ve reached your monthly ad generation "
-                        "limit. Upgrade to continue."
-                    ),
-                    "used": cap_result["used"],
-                    "cap": cap_result["cap"],
-                    "month": cap_result["month"],
-                    "upgradePath": "/account",
-                },
-            )
-
-        image_usage_reservation = cap_result
-
-        create_usage_notifications(
-            db,
-            uid,
-            resource="images",
-            used=int(cap_result.get("used") or 0),
-            cap=int(cap_result.get("cap") or 0),
-            period_key=cap_result.get("periodKey") or cap_result.get("month"),
-            link="/account",
-        )
-    else:
-        cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
+    cap_result = {
+        "used": 0,
+        "cap": 0,
+        "month": None,
+        "allowed": True,
+    }
 
     product_name = (payload.product_name or "").strip()[:80]
     if not product_name:
@@ -3537,6 +3637,72 @@ It should be visually impressive enough to appear in a professional design portf
                 detail=public_image_generation_error(exc),
             ) from exc
 
+    # Reserve usage only after request validation, Brand Kit resolution,
+    # Performance Intelligence loading, and prompt construction have completed.
+    # This prevents validation/setup failures from consuming a credit.
+    if not admin:
+        allowed_statuses = {"active", "trialing"}
+        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
+
+        cap_result = check_and_increment_usage(db, uid, tier)
+
+        if not cap_result["allowed"]:
+            track_event(
+                db,
+                uid,
+                "usage.limit_reached",
+                event_id=(
+                    f"images:{cap_result.get('periodKey') or cap_result.get('month')}:limit"
+                ),
+                metadata={
+                    "resource": "images",
+                    "used": cap_result.get("used"),
+                    "cap": cap_result.get("cap"),
+                },
+            )
+
+            create_usage_notifications(
+                db,
+                uid,
+                resource="images",
+                used=int(cap_result.get("used") or 0),
+                cap=int(cap_result.get("cap") or 0),
+                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
+                link="/account",
+            )
+
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": (
+                        "You’ve reached your monthly ad generation "
+                        "limit. Upgrade to continue."
+                    ),
+                    "used": cap_result["used"],
+                    "cap": cap_result["cap"],
+                    "month": cap_result["month"],
+                    "upgradePath": "/account",
+                },
+            )
+
+        image_usage_reservation = cap_result
+
+        create_usage_notifications(
+            db,
+            uid,
+            resource="images",
+            used=int(cap_result.get("used") or 0),
+            cap=int(cap_result.get("cap") or 0),
+            period_key=cap_result.get("periodKey") or cap_result.get("month"),
+            link="/account",
+        )
+    else:
+        cap_result = {"used": 0, "cap": 0, "month": None, "allowed": True}
+
     try:
         set_generation_progress(db, "image", progress_job_id, "generating_creative")
         copy_obj, image_asset = await asyncio.gather(_gen_copy(), _gen_image_and_upload())
@@ -3658,25 +3824,27 @@ It should be visually impressive enough to appear in a professional design portf
 
     except HTTPException:
         if not admin and image_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "images",
-                image_usage_reservation.get("periodKey")
-                or image_usage_reservation.get("month"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="images",
+                reservation=image_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="generate_ad",
             )
         raise
 
     except Exception as exc:
         if not admin and image_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "images",
-                image_usage_reservation.get("periodKey")
-                or image_usage_reservation.get("month"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="images",
+                reservation=image_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="generate_ad",
             )
 
         print(
@@ -4125,22 +4293,26 @@ confidence
 
     except HTTPException:
         if not admin and optimizer_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "optimizer_runs",
-                optimizer_usage_reservation.get("periodKey"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="optimizer_runs",
+                reservation=optimizer_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="optimize_ad",
             )
         raise
     except Exception as exc:
         if not admin and optimizer_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "optimizer_runs",
-                optimizer_usage_reservation.get("periodKey"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="optimizer_runs",
+                reservation=optimizer_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="optimize_ad",
             )
         print("OPTIMIZER ANALYSIS ERROR:", repr(exc), flush=True)
 
@@ -4179,61 +4351,12 @@ async def generate_from_optimizer(
     tier, status = get_tier_and_status(user_doc)
 
     image_usage_reservation = None
-
-    if not admin:
-        allowed_statuses = {"active", "trialing"}
-
-        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
-            raise HTTPException(
-                status_code=402,
-                detail="Subscription inactive. Please subscribe to continue.",
-            )
-
-        require_pro_or_business(tier)
-
-        cap_result = check_and_increment_usage(db, uid, tier)
-
-        if not cap_result["allowed"]:
-            create_usage_notifications(
-                db,
-                uid,
-                resource="images",
-                used=int(cap_result.get("used") or 0),
-                cap=int(cap_result.get("cap") or 0),
-                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
-                link="/account",
-            )
-
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
-                    "used": cap_result["used"],
-                    "cap": cap_result["cap"],
-                    "month": cap_result["month"],
-                    "upgradePath": "/account",
-                },
-            )
-
-        image_usage_reservation = cap_result
-
-        create_usage_notifications(
-            db,
-            uid,
-            resource="images",
-            used=int(cap_result.get("used") or 0),
-            cap=int(cap_result.get("cap") or 0),
-            period_key=(cap_result.get("periodKey") or cap_result.get("month")),
-            link="/account",
-        )
-
-    else:
-        cap_result = {
-            "used": 0,
-            "cap": 0,
-            "month": None,
-            "allowed": True,
-        }
+    cap_result = {
+        "used": 0,
+        "cap": 0,
+        "month": None,
+        "allowed": True,
+    }
 
     aspect_ratio = size_to_aspect_ratio(payload.imageSize)
 
@@ -4456,6 +4579,63 @@ Improve it.
 
 """.strip()
 
+    # Reserve image usage only after all request validation, Brand Kit
+    # resolution, and optimized prompt construction have completed.
+    if not admin:
+        allowed_statuses = {"active", "trialing"}
+
+        if status not in allowed_statuses and tier not in (None, "trial_monthly"):
+            raise HTTPException(
+                status_code=402,
+                detail="Subscription inactive. Please subscribe to continue.",
+            )
+
+        require_pro_or_business(tier)
+
+        cap_result = check_and_increment_usage(db, uid, tier)
+
+        if not cap_result["allowed"]:
+            create_usage_notifications(
+                db,
+                uid,
+                resource="images",
+                used=int(cap_result.get("used") or 0),
+                cap=int(cap_result.get("cap") or 0),
+                period_key=(cap_result.get("periodKey") or cap_result.get("month")),
+                link="/account",
+            )
+
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "You’ve reached your monthly ad generation limit. Upgrade to continue.",
+                    "used": cap_result["used"],
+                    "cap": cap_result["cap"],
+                    "month": cap_result["month"],
+                    "upgradePath": "/account",
+                },
+            )
+
+        image_usage_reservation = cap_result
+
+        create_usage_notifications(
+            db,
+            uid,
+            resource="images",
+            used=int(cap_result.get("used") or 0),
+            cap=int(cap_result.get("cap") or 0),
+            period_key=(cap_result.get("periodKey") or cap_result.get("month")),
+            link="/account",
+        )
+
+    else:
+        cap_result = {
+            "used": 0,
+            "cap": 0,
+            "month": None,
+            "allowed": True,
+        }
+
     try:
         reference_image_urls = (payload.creative_image_urls or [])[:3]
 
@@ -4568,25 +4748,27 @@ Improve it.
 
     except HTTPException:
         if not admin and image_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "images",
-                image_usage_reservation.get("periodKey")
-                or image_usage_reservation.get("month"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="images",
+                reservation=image_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="generate_from_optimizer",
             )
         raise
 
     except Exception as exc:
         if not admin and image_usage_reservation:
-            rollback_resource(
-                db,
-                uid,
-                "images",
-                image_usage_reservation.get("periodKey")
-                or image_usage_reservation.get("month"),
-                1,
+            rollback_reserved_usage_with_logging(
+                db=db,
+                uid=uid,
+                resource="images",
+                reservation=image_usage_reservation,
+                amount=1,
+                job_id=progress_job_id,
+                context="generate_from_optimizer",
             )
 
         print(
