@@ -652,6 +652,239 @@ def rollback_reserved_usage_with_logging(
         return False
 
 
+# ---------------- Image failure cost protection ----------------
+IMAGE_FAILURE_COOLDOWN_SECONDS = int(os.getenv("IMAGE_FAILURE_COOLDOWN_SECONDS", "90"))
+IMAGE_FAILURE_WINDOW_SECONDS = int(os.getenv("IMAGE_FAILURE_WINDOW_SECONDS", "1800"))
+IMAGE_FAILURE_MAX_PER_WINDOW = int(os.getenv("IMAGE_FAILURE_MAX_PER_WINDOW", "3"))
+IMAGE_GLOBAL_FAILURE_WINDOW_SECONDS = int(os.getenv("IMAGE_GLOBAL_FAILURE_WINDOW_SECONDS", "300"))
+IMAGE_GLOBAL_FAILURE_THRESHOLD = int(os.getenv("IMAGE_GLOBAL_FAILURE_THRESHOLD", "5"))
+IMAGE_GLOBAL_PAUSE_SECONDS = int(os.getenv("IMAGE_GLOBAL_PAUSE_SECONDS", "300"))
+
+IMAGE_FAILURE_GUARD_COLLECTION = "generation_failure_guards"
+IMAGE_FAILURE_CATEGORIES = ("provider", "storage", "copy", "unexpected")
+
+
+def _safe_failure_timestamps(value: Any) -> List[int]:
+    if not isinstance(value, list):
+        return []
+    timestamps: List[int] = []
+    for item in value:
+        try:
+            timestamps.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return timestamps
+
+
+def _classify_image_failure(detail: Any) -> str:
+    message = str(detail or "").lower()
+    if any(marker in message for marker in (
+        "firebase", "storage", "upload", "bucket", "blob", "file size", "storage limit",
+    )):
+        return "storage"
+    if any(marker in message for marker in (
+        "copy", "chat.completions", "ad copy", "prepare the ad copy", "text model",
+    )):
+        return "copy"
+    if any(marker in message for marker in (
+        "openai", "image generation", "rate limit", "rate_limit", "timeout", "timed out",
+        "service unavailable", "service_unavailable", "server error", "server_error",
+        "quota", "billing", "provider",
+    )):
+        return "provider"
+    return "unexpected"
+
+
+def _image_user_failure_ref(db, uid: str):
+    return db.collection(IMAGE_FAILURE_GUARD_COLLECTION).document(f"image_user_{uid}")
+
+
+def _image_global_failure_ref(db, category: str):
+    safe_category = category if category in IMAGE_FAILURE_CATEGORIES else "unexpected"
+    return db.collection(IMAGE_FAILURE_GUARD_COLLECTION).document(
+        f"image_global_{safe_category}"
+    )
+
+
+def _record_image_generation_failure(
+    *, db, uid: Optional[str], job_id: Optional[str], category: str, detail: Any,
+) -> None:
+    """Record a server-side image failure without ever masking the original error."""
+    if not uid:
+        print(
+            "IMAGE FAILURE GUARD RECORD SKIPPED:",
+            {"jobId": job_id, "category": category, "reason": "missing uid"},
+            flush=True,
+        )
+        return
+
+    now = int(time.time())
+    safe_category = category if category in IMAGE_FAILURE_CATEGORIES else "unexpected"
+    user_ref = _image_user_failure_ref(db, uid)
+    global_ref = _image_global_failure_ref(db, safe_category)
+
+    try:
+        @gc_firestore.transactional
+        def _tx(transaction: gc_firestore.Transaction):
+            user_snap = user_ref.get(transaction=transaction)
+            global_snap = global_ref.get(transaction=transaction)
+            user_data = user_snap.to_dict() or {}
+            global_data = global_snap.to_dict() or {}
+
+            user_cutoff = now - IMAGE_FAILURE_WINDOW_SECONDS
+            user_timestamps = [
+                ts for ts in _safe_failure_timestamps(user_data.get("failureTimestamps"))
+                if ts >= user_cutoff
+            ]
+            user_timestamps.append(now)
+
+            user_blocked_until = now + IMAGE_FAILURE_COOLDOWN_SECONDS
+            if len(user_timestamps) >= IMAGE_FAILURE_MAX_PER_WINDOW:
+                oldest_counted = user_timestamps[-IMAGE_FAILURE_MAX_PER_WINDOW]
+                user_blocked_until = max(
+                    user_blocked_until,
+                    oldest_counted + IMAGE_FAILURE_WINDOW_SECONDS,
+                )
+
+            global_cutoff = now - IMAGE_GLOBAL_FAILURE_WINDOW_SECONDS
+            global_timestamps = [
+                ts for ts in _safe_failure_timestamps(global_data.get("failureTimestamps"))
+                if ts >= global_cutoff
+            ]
+            global_timestamps.append(now)
+
+            existing_global_block = int(global_data.get("blockedUntil") or 0)
+            global_blocked_until = existing_global_block
+            if len(global_timestamps) >= IMAGE_GLOBAL_FAILURE_THRESHOLD:
+                global_blocked_until = max(
+                    existing_global_block,
+                    now + IMAGE_GLOBAL_PAUSE_SECONDS,
+                )
+
+            transaction.set(
+                user_ref,
+                {
+                    "scope": "user",
+                    "resource": "images",
+                    "uid": uid,
+                    "failureTimestamps": user_timestamps,
+                    "failureCountInWindow": len(user_timestamps),
+                    "lastFailureAt": now,
+                    "lastFailureCategory": safe_category,
+                    "lastFailureJobId": job_id,
+                    "lastFailureDetail": str(detail or "")[:1000],
+                    "blockedUntil": user_blocked_until,
+                    "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            transaction.set(
+                global_ref,
+                {
+                    "scope": "global",
+                    "resource": "images",
+                    "category": safe_category,
+                    "failureTimestamps": global_timestamps,
+                    "failureCountInWindow": len(global_timestamps),
+                    "lastFailureAt": now,
+                    "lastFailureJobId": job_id,
+                    "lastFailureDetail": str(detail or "")[:1000],
+                    "blockedUntil": global_blocked_until,
+                    "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            return {
+                "userFailureCount": len(user_timestamps),
+                "userBlockedUntil": user_blocked_until,
+                "globalFailureCount": len(global_timestamps),
+                "globalBlockedUntil": global_blocked_until,
+            }
+
+        result = _tx(db.transaction())
+        print(
+            "IMAGE FAILURE GUARD RECORDED:",
+            {"uid": uid, "jobId": job_id, "category": safe_category, **result},
+            flush=True,
+        )
+        if int(result.get("globalBlockedUntil") or 0) > now:
+            print(
+                "IMAGE GLOBAL CIRCUIT BREAKER OPENED:",
+                {
+                    "category": safe_category,
+                    "blockedUntil": result.get("globalBlockedUntil"),
+                    "failureCount": result.get("globalFailureCount"),
+                },
+                flush=True,
+            )
+    except Exception as guard_error:
+        print(
+            "IMAGE FAILURE GUARD RECORD ERROR:",
+            {"uid": uid, "jobId": job_id, "category": safe_category, "error": repr(guard_error)},
+            flush=True,
+        )
+        traceback.print_exc()
+
+
+def _check_image_generation_failure_guard(*, db, uid: str) -> None:
+    """Block costly retries before usage is reserved or an API call is made."""
+    now = int(time.time())
+    try:
+        user_data = _image_user_failure_ref(db, uid).get().to_dict() or {}
+        user_blocked_until = int(user_data.get("blockedUntil") or 0)
+        if user_blocked_until > now:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": (
+                        "Image generation is temporarily paused after several unsuccessful "
+                        "attempts. Please try again shortly."
+                    ),
+                    "code": "IMAGE_USER_FAILURE_COOLDOWN",
+                    "retryAfterSeconds": max(1, user_blocked_until - now),
+                    "blockedUntil": user_blocked_until,
+                    "failureCount": int(user_data.get("failureCountInWindow") or 0),
+                },
+            )
+
+        active_global_blocks = []
+        for category in IMAGE_FAILURE_CATEGORIES:
+            data = _image_global_failure_ref(db, category).get().to_dict() or {}
+            blocked_until = int(data.get("blockedUntil") or 0)
+            if blocked_until > now:
+                active_global_blocks.append({
+                    "category": category,
+                    "blockedUntil": blocked_until,
+                    "failureCount": int(data.get("failureCountInWindow") or 0),
+                })
+
+        if active_global_blocks:
+            latest = max(active_global_blocks, key=lambda item: item["blockedUntil"])
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": (
+                        "Image generation is temporarily paused while ADGen recovers from "
+                        "repeated service failures. Please try again shortly. Your image "
+                        "credit was not used."
+                    ),
+                    "code": "IMAGE_GLOBAL_CIRCUIT_OPEN",
+                    "retryAfterSeconds": max(1, latest["blockedUntil"] - now),
+                    "blockedUntil": latest["blockedUntil"],
+                    "category": latest["category"],
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as guard_error:
+        print(
+            "IMAGE FAILURE GUARD CHECK ERROR:",
+            {"uid": uid, "error": repr(guard_error)},
+            flush=True,
+        )
+        traceback.print_exc()
+
+
 async def _run_image_generation_job(
     job_id: str, payload: AdRequest, authorization: str
 ):
@@ -675,6 +908,23 @@ async def _run_image_generation_job(
             },
             flush=True,
         )
+
+        job_data = (
+            db.collection("image_generation_jobs")
+            .document(job_id)
+            .get()
+            .to_dict()
+            or {}
+        )
+
+        if int(exc.status_code or 0) >= 500:
+            _record_image_generation_failure(
+                db=db,
+                uid=job_data.get("uid"),
+                job_id=job_id,
+                category=_classify_image_failure(exc.detail),
+                detail=exc.detail,
+            )
 
         error_message = (
             str(exc.detail)
@@ -714,6 +964,22 @@ async def _run_image_generation_job(
             flush=True,
         )
         traceback.print_exc()
+
+        job_data = (
+            db.collection("image_generation_jobs")
+            .document(job_id)
+            .get()
+            .to_dict()
+            or {}
+        )
+
+        _record_image_generation_failure(
+            db=db,
+            uid=job_data.get("uid"),
+            job_id=job_id,
+            category=_classify_image_failure(exc),
+            detail=repr(exc),
+        )
 
         set_generation_progress(
             db,
@@ -898,6 +1164,23 @@ async def _run_optimizer_generation_job(
             flush=True,
         )
 
+        job_data = (
+            db.collection("optimizer_jobs")
+            .document(job_id)
+            .get()
+            .to_dict()
+            or {}
+        )
+
+        if int(exc.status_code or 0) >= 500:
+            _record_image_generation_failure(
+                db=db,
+                uid=job_data.get("uid"),
+                job_id=job_id,
+                category=_classify_image_failure(exc.detail),
+                detail=exc.detail,
+            )
+
         set_generation_progress(
             db,
             "optimizer_generation",
@@ -942,6 +1225,22 @@ async def _run_optimizer_generation_job(
             flush=True,
         )
         traceback.print_exc()
+
+        job_data = (
+            db.collection("optimizer_jobs")
+            .document(job_id)
+            .get()
+            .to_dict()
+            or {}
+        )
+
+        _record_image_generation_failure(
+            db=db,
+            uid=job_data.get("uid"),
+            job_id=job_id,
+            category=_classify_image_failure(exc),
+            detail=repr(exc),
+        )
 
         set_generation_progress(
             db,
@@ -2946,8 +3245,10 @@ async def start_image_generation(
     uid, _email, claims = require_user(authorization)
     db = get_db()
 
-    # Prevent duplicate simultaneous image generations.
+    # Prevent duplicate simultaneous image generations and repeated
+    # costly retries after server-side failures.
     if not is_admin(claims):
+        _check_image_generation_failure_guard(db=db, uid=uid)
         require_no_active_image_generation(db, uid)
 
     job_id = uuid.uuid4().hex
@@ -3037,8 +3338,10 @@ async def start_optimizer_generation(
     uid, _email, claims = require_user(authorization)
     db = get_db()
 
-    # Prevent simultaneous Ad Generator and Optimizer image generations.
+    # Prevent simultaneous image generations and repeated costly retries
+    # after server-side failures.
     if not is_admin(claims):
+        _check_image_generation_failure_guard(db=db, uid=uid)
         require_no_active_image_generation(db, uid)
 
     job_id = uuid.uuid4().hex
@@ -3093,6 +3396,10 @@ async def generate_ad(
     admin = is_admin(claims)
 
     db = get_db()
+
+    if not admin:
+        _check_image_generation_failure_guard(db=db, uid=uid)
+
     set_generation_progress(db, "image", progress_job_id, "validated")
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
@@ -4336,7 +4643,13 @@ async def generate_from_optimizer(
     admin = is_admin(claims)
 
     db = get_db()
-    set_generation_progress(db, "optimizer_generation", progress_job_id, "validated")
+
+    if not admin:
+        _check_image_generation_failure_guard(db=db, uid=uid)
+
+    set_generation_progress(
+        db, "optimizer_generation", progress_job_id, "validated"
+    )
     user_snap = db.collection("users").document(uid).get()
     user_doc = user_snap.to_dict() or {}
     set_generation_progress(
