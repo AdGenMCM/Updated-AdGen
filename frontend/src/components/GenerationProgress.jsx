@@ -6,7 +6,7 @@ const STEP_MAP = {
     { stage: "queued", label: "Request prepared" },
     { stage: "loading_brand_kit", label: "Active Brand applied" },
     { stage: "building_prompt", label: "Creative direction built" },
-    { stage: "submitting_to_runway", label: "Request sent to Runway" },
+    { stage: "submitting_to_runway", label: "Request sent" },
     { stage: "waiting_for_runway", label: "Video rendering" },
     { stage: "processing_video", label: "Final video processed" },
     { stage: "generating_voiceover", label: "Voiceover generated", voiceoverOnly: true },
@@ -140,7 +140,7 @@ const HELPER_MESSAGES = {
     ],
     submitting_to_runway: [
       "Establishing the generation request...",
-      "Sending your creative direction to Runway...",
+      "Sending your creative direction to server...",
       "Preparing the render job...",
     ],
     waiting_for_runway: [

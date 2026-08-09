@@ -183,6 +183,24 @@ function safeDetailMessage(detail) {
   return String(detail);
 }
 
+function customerSafeMessage(detail, fallback = "Something went wrong. Please try again.") {
+  const message = safeDetailMessage(detail);
+  if (!message) return fallback;
+
+  const blockedTechnicalTerms =
+    /runway|openai|open ai|gpt(?:-|\s)?(?:image|\d)|gen4|model[_\s-]?id|api[_\s-]?key|api error|provider|firebase|firestore|storage\.googleapis|httpx|uvicorn|pydantic|ffmpeg|ffprobe|traceback|stack trace|exception|internal server error|task[_\s-]?id|request[_\s-]?id/i;
+
+  const looksLikeRawPayload =
+    /^[[{]/.test(message.trim()) ||
+    /(?:status[_\s-]?code|error[_\s-]?code|response body|raw response)/i.test(message);
+
+  if (blockedTechnicalTerms.test(message) || looksLikeRawPayload) {
+    return fallback;
+  }
+
+  return message;
+}
+
 async function safeJson(res) {
   try {
     return await res.json();
@@ -640,7 +658,12 @@ export default function VideoAds() {
 
     const data = await safeJson(res);
     if (!res.ok) {
-      throw new Error(data?.detail?.message || safeDetailMessage(data?.detail) || "Upload failed");
+      throw new Error(
+        customerSafeMessage(
+          data?.detail,
+          "We couldn't upload that image. Please try again."
+        )
+      );
     }
     const url = data?.urls?.[0];
     if (!url) throw new Error("Upload succeeded but no URL returned.");
@@ -672,7 +695,12 @@ export default function VideoAds() {
 
       const data = await safeJson(res);
       if (!res.ok) {
-        throw new Error(data?.detail?.message || safeDetailMessage(data?.detail) || "Voice preview failed");
+        throw new Error(
+          customerSafeMessage(
+            data?.detail,
+            "The voice preview is temporarily unavailable. Please try again."
+          )
+        );
       }
 
       if (!data.audioUrl) throw new Error("Preview succeeded but no audioUrl returned.");
@@ -688,7 +716,12 @@ export default function VideoAds() {
         } catch {}
       }, 50);
     } catch (e) {
-      setError(e?.message || "Voice preview failed.");
+      setError(
+        customerSafeMessage(
+          e?.message,
+          "The voice preview is temporarily unavailable. Please try again."
+        )
+      );
     } finally {
       setPreviewLoading(false);
     }
@@ -770,8 +803,10 @@ export default function VideoAds() {
           data?.message;
 
         const message =
-          safeDetailMessage(detail) ||
-          `Video generation failed (${res.status})`;
+          customerSafeMessage(
+            detail,
+            "We couldn't start your video generation. Please try again."
+          );
 
         if (res.status === 429) {
           setVideoLimitReached(true);
@@ -807,7 +842,12 @@ export default function VideoAds() {
       setProgressMessage(data.progressMessage || "Generating your video.");
       setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
-      setError(e?.message || "Failed to start video job.");
+      setError(
+        customerSafeMessage(
+          e?.message,
+          "We couldn't start your video generation. Please try again."
+        )
+      );
       throw e;
     } finally {
       setLoading(false);
@@ -891,8 +931,10 @@ export default function VideoAds() {
           data?.message;
 
         const message =
-          safeDetailMessage(detail) ||
-          `Video generation failed (${res.status})`;
+          customerSafeMessage(
+            detail,
+            "We couldn't start your video generation. Please try again."
+          );
 
         if (res.status === 429) {
           setVideoLimitReached(true);
@@ -929,7 +971,12 @@ export default function VideoAds() {
       setProgressMessage(data.progressMessage || "Generating your video.");
       setProgressPercent(data.progressPercent ?? 45);
     } catch (e) {
-      setError(e?.message || "Failed to start video job.");
+      setError(
+        customerSafeMessage(
+          e?.message,
+          "We couldn't start your video generation. Please try again."
+        )
+      );
       throw e;
     } finally {
       setLoading(false);
@@ -951,7 +998,14 @@ export default function VideoAds() {
         });
 
         const data = await safeJson(res);
-        if (!res.ok) throw new Error(data?.detail?.message || safeDetailMessage(data?.detail) || "Status check failed");
+        if (!res.ok) {
+          throw new Error(
+            customerSafeMessage(
+              data?.detail,
+              "We couldn't check your video status. Please try again."
+            )
+          );
+        }
 
         if (cancelled) return;
 
@@ -965,14 +1019,24 @@ export default function VideoAds() {
           return;
         }
         if (data.status === "failed") {
-          setError(data.error || "Video generation failed.");
+          setError(
+            customerSafeMessage(
+              data.error,
+              "We couldn't create your video. Please try again."
+            )
+          );
           return;
         }
 
         timer = setTimeout(poll, 1500);
       } catch (e) {
         if (cancelled) return;
-        setError(e?.message || "Polling failed.");
+        setError(
+          customerSafeMessage(
+            e?.message,
+            "We couldn't check your video status. Please try again."
+          )
+        );
       }
     };
 

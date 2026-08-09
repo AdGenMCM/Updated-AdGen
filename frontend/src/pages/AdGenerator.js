@@ -529,6 +529,24 @@ function AdGenerator() {
     return String(detail);
   };
 
+  const customerSafeMessage = (detail, fallback = "Something went wrong. Please try again.") => {
+    const message = safeDetailMessage(detail);
+    if (!message) return fallback;
+
+    const blockedTechnicalTerms =
+      /runway|openai|open ai|gpt(?:-|\s)?(?:image|\d)|gen4|model[_\s-]?id|api[_\s-]?key|api error|provider|firebase|firestore|storage\.googleapis|httpx|uvicorn|pydantic|ffmpeg|ffprobe|traceback|stack trace|exception|internal server error|chat\.completions|client\.images|b64_json/i;
+
+    const looksLikeRawPayload =
+      /^[[{]/.test(message.trim()) ||
+      /(?:status[_\s-]?code|request[_\s-]?id|error[_\s-]?code|response body|raw response)/i.test(message);
+
+    if (blockedTechnicalTerms.test(message) || looksLikeRawPayload) {
+      return fallback;
+    }
+
+    return message;
+  };
+
 
   const fieldBadge = (name) => {
     if (!useBrandKit || !brandKitAppliedFields[name]) return null;
@@ -629,8 +647,10 @@ function AdGenerator() {
 
       if (!statusRes.ok) {
         throw new Error(
-          safeDetailMessage(statusData?.detail) ||
-            `Could not load generation status (${statusRes.status})`
+          customerSafeMessage(
+            statusData?.detail,
+            "We couldn't check your generation status. Please try again."
+          )
         );
       }
 
@@ -649,7 +669,10 @@ function AdGenerator() {
       if (statusData.status === "failed") {
         const detail = statusData.error;
         const error = new Error(
-          safeDetailMessage(detail) || "Creative generation failed."
+          customerSafeMessage(
+            detail,
+            "We couldn't create your ad. Please try again."
+          )
         );
         error.detail = detail;
         await new Promise((resolve) => setTimeout(resolve, 650));
@@ -753,8 +776,10 @@ function AdGenerator() {
             type: "cap",
             message: isFreeLimit
               ? "You've used your 2 free image generations. Upgrade to continue creating."
-              : safeDetailMessage(detail) ||
-                "You've reached your image generation limit.",
+              : customerSafeMessage(
+                  detail,
+                  "You've reached your image generation limit."
+                ),
             upgradePath: "/subscribe?upgrade=1",
           });
 
@@ -764,7 +789,10 @@ function AdGenerator() {
         if (response.status === 401) {
           setUiError({
             type: "auth",
-            message: safeDetailMessage(detail) || "Session expired. Please log in again.",
+            message: customerSafeMessage(
+              detail,
+              "Session expired. Please log in again."
+            ),
             upgradePath: "/login",
           });
           return;
@@ -773,13 +801,21 @@ function AdGenerator() {
         if (response.status === 402 || response.status === 403) {
           setUiError({
             type: "sub",
-            message: safeDetailMessage(detail) || "This feature requires an active plan.",
+            message: customerSafeMessage(
+              detail,
+              "This feature requires an active plan."
+            ),
             upgradePath: "/account",
           });
           return;
         }
 
-        alert(safeDetailMessage(detail) || `Request failed (${response.status})`);
+        alert(
+          customerSafeMessage(
+            detail,
+            "We couldn't start your ad generation. Please try again."
+          )
+        );
         return;
       }
 
@@ -812,9 +848,10 @@ function AdGenerator() {
 
       const detail = err?.detail;
       const message =
-        safeDetailMessage(detail) ||
-        err?.message ||
-        "Creative generation failed.";
+        customerSafeMessage(
+          detail || err?.message,
+          "We couldn't create your ad. Please try again."
+        );
 
       const used = detail?.used;
       const cap = detail?.cap;
