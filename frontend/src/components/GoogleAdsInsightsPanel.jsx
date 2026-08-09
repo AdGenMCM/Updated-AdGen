@@ -8,6 +8,7 @@ import {
   selectGoogleAdsCustomer,
   syncGoogleAds,
 } from "../services/googleAdsService";
+import { isAdDataStale } from "../services/adSyncFreshness";
 import "./GoogleAdsInsightsPanel.css";
 
 const DATE_OPTIONS = [
@@ -379,13 +380,9 @@ export default function GoogleAdsInsightsPanel({
       return;
     }
 
-    const key = `adgen-google-auto-refresh:${status.selectedCustomerId}:${dateRange}`;
-    const last = Number(window.sessionStorage.getItem(key) || 0);
-    const cooldownMs = 60 * 1000;
-    if (Date.now() - last < cooldownMs) return;
+    if (!isAdDataStale(status.lastSyncAt)) return;
 
     autoRefreshInFlightRef.current = true;
-    window.sessionStorage.setItem(key, String(Date.now()));
 
     (async () => {
       try {
@@ -400,7 +397,14 @@ export default function GoogleAdsInsightsPanel({
         autoRefreshInFlightRef.current = false;
       }
     })();
-  }, [isActive, status?.connected, status?.selectedCustomerId, dateRange, syncing]);
+  }, [
+    isActive,
+    status?.connected,
+    status?.selectedCustomerId,
+    status?.lastSyncAt,
+    dateRange,
+    syncing,
+  ]);
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect Google Ads from AdGen MCM?")) return;
@@ -461,7 +465,13 @@ export default function GoogleAdsInsightsPanel({
             {status?.selectedCustomerId
               ? `${accountId(status.selectedCustomerId)} · Last synced ${timestamp(
                   status.lastSyncAt
-                )}`
+                )} · ${
+                  syncing
+                    ? "Updating…"
+                    : isAdDataStale(status.lastSyncAt)
+                    ? "Refresh recommended"
+                    : "Current"
+                }`
               : "Select the advertiser account whose performance you want to analyze."}
           </p>
         </div>

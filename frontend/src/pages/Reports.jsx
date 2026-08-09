@@ -25,7 +25,9 @@ import {
   downloadReport,
   loadReportPreview,
   loadReportingStatus,
+  refreshStaleReportingSources,
 } from "../services/reportingService";
+import { isAdDataStale } from "../services/adSyncFreshness";
 
 import "./Reports.css";
 
@@ -384,6 +386,7 @@ export default function Reports() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [metricsOpen, setMetricsOpen] = useState(true);
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
 
   const [reportType, setReportType] = useState("campaign");
   const [providers, setProviders] = useState([]);
@@ -398,24 +401,53 @@ export default function Reports() {
     REPORT_TYPES.find((item) => item.id === "campaign").defaultMetrics
   );
 
-  const load = async () => {
+  const applyReportingStatus = (next) => {
+    setData(next);
+
+    const available = [];
+    if (next?.googleAds?.selected) available.push("googleAds");
+    if (next?.metaAds?.selected) available.push("metaAds");
+    if (next?.libraryPerformance?.selected) {
+      available.push("libraryPerformance");
+    }
+    setProviders(available);
+  };
+
+  const load = async ({ forceRefresh = false } = {}) => {
     setLoading(true);
     setError("");
 
     try {
-      const next = await loadReportingStatus();
-      setData(next);
+      let next = await loadReportingStatus();
+      applyReportingStatus(next);
 
-      const available = [];
-      if (next?.googleAds?.selected) available.push("googleAds");
-      if (next?.metaAds?.selected) available.push("metaAds");
-      if (next?.libraryPerformance?.selected) {
-        available.push("libraryPerformance");
+      const shouldRefresh =
+        forceRefresh ||
+        (next?.googleAds?.selected && isAdDataStale(next.googleAds.lastSyncedAt)) ||
+        (next?.metaAds?.selected && isAdDataStale(next.metaAds.lastSyncedAt));
+
+      if (shouldRefresh) {
+        setAutoRefreshing(true);
+        const refreshResult = await refreshStaleReportingSources(next, {
+          datePreset,
+          forceRefresh,
+        });
+
+        if (refreshResult.refreshed.length) {
+          next = await loadReportingStatus();
+          applyReportingStatus(next);
+        }
+
+        if (refreshResult.errors.length) {
+          setError(
+            refreshResult.errors.map((item) => item.message).join(" ")
+          );
+        }
       }
-      setProviders(available);
     } catch (nextError) {
       setError(nextError?.message || "Could not load your report data.");
     } finally {
+      setAutoRefreshing(false);
       setLoading(false);
     }
   };
@@ -622,10 +654,12 @@ export default function Reports() {
           <button
             type="button"
             className="reports-refresh"
-            onClick={load}
-            disabled={loading}
+            onClick={() => load({ forceRefresh: true })}
+            disabled={loading || autoRefreshing}
           >
-            <RefreshCw size={15} /> {loading ? "Refreshing…" : "Refresh data"}
+            <RefreshCw size={15} /> {
+              loading || autoRefreshing ? "Refreshing…" : "Refresh data"
+            }
           </button>
         )}
       </header>
@@ -719,7 +753,15 @@ export default function Reports() {
                       <strong>{source.label}</strong>
                       <small>
                         {available
-                          ? `Updated ${formatSync(source.data?.lastSyncedAt)}`
+                          ? autoRefreshing &&
+                            ["googleAds", "metaAds"].includes(source.id) &&
+                            isAdDataStale(source.data?.lastSyncedAt)
+                            ? "Updating connected data…"
+                            : `Updated ${formatSync(source.data?.lastSyncedAt)} · ${
+                                isAdDataStale(source.data?.lastSyncedAt)
+                                  ? "Refresh recommended"
+                                  : "Current"
+                              }`
                           : "Connect or sync first"}
                       </small>
                     </span>

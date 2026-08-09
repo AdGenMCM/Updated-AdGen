@@ -86,6 +86,7 @@ def meta_ads_status(user=Depends(require_meta_ads_user)):
         "connectedAt": connection.get("connectedAt"),
         "tokenExpiresAt": connection.get("tokenExpiresAt"),
         "lastSyncAt": connection.get("lastSyncAt"),
+        "lastSyncDateRange": connection.get("lastSyncDateRange"),
         "campaignCount": int(connection.get("campaignCount") or 0),
         "summary": connection.get("summary") or {},
         "campaigns": connection.get("campaigns") or [],

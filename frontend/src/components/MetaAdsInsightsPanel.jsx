@@ -9,6 +9,7 @@ import {
   syncMetaAdsCreatives,
   getMetaAdsCreatives,
 } from "../services/metaAdsService";
+import { isAdDataStale } from "../services/adSyncFreshness";
 import "./MetaAdsInsightsPanel.css";
 
 function formatAccountId(value) {
@@ -335,13 +336,9 @@ export default function MetaAdsInsightsPanel({
       return;
     }
 
-    const key = `adgen-meta-auto-refresh:${status.selectedAdAccountId}:${dateRange}`;
-    const last = Number(window.sessionStorage.getItem(key) || 0);
-    const cooldownMs = 60 * 1000;
-    if (Date.now() - last < cooldownMs) return;
+    if (!isAdDataStale(status.lastSyncAt)) return;
 
     autoRefreshInFlightRef.current = true;
-    window.sessionStorage.setItem(key, String(Date.now()));
 
     (async () => {
       try {
@@ -360,7 +357,14 @@ export default function MetaAdsInsightsPanel({
         autoRefreshInFlightRef.current = false;
       }
     })();
-  }, [isActive, status?.connected, status?.selectedAdAccountId, dateRange, syncing]);
+  }, [
+    isActive,
+    status?.connected,
+    status?.selectedAdAccountId,
+    status?.lastSyncAt,
+    dateRange,
+    syncing,
+  ]);
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect Meta Ads from ADGen?")) return;
@@ -525,7 +529,15 @@ export default function MetaAdsInsightsPanel({
               <strong>
                 {accountStatusLabel(status.selectedAccountStatus)}
               </strong>
-              <span>Last synced {timestamp(status.lastSyncAt)}</span>
+              <span>
+                Last synced {timestamp(status.lastSyncAt)} · {
+                  syncing
+                    ? "Updating…"
+                    : isAdDataStale(status.lastSyncAt)
+                    ? "Refresh recommended"
+                    : "Current"
+                }
+              </span>
             </div>
 
             <label>

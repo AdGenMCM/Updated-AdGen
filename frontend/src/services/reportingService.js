@@ -1,3 +1,7 @@
+import { isAdDataStale } from "./adSyncFreshness";
+import { syncGoogleAds } from "./googleAdsService";
+import { syncMetaAds } from "./metaAdsService";
+
 import { auth } from "../firebaseConfig";
 
 const API_BASE = (
@@ -101,4 +105,60 @@ export async function downloadReport({
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+
+function reportingPresetToProviderRange(datePreset) {
+  const map = {
+    today: "TODAY",
+    yesterday: "YESTERDAY",
+    last_7_days: "LAST_7_DAYS",
+    last_30_days: "LAST_30_DAYS",
+    last_90_days: "LAST_90_DAYS",
+    this_month: "THIS_MONTH",
+    last_month: "LAST_MONTH",
+    maximum: "MAXIMUM",
+  };
+  return map[datePreset] || "LAST_30_DAYS";
+}
+
+export async function refreshStaleReportingSources(
+  status,
+  { datePreset = "last_30_days", forceRefresh = false } = {}
+) {
+  const providerRange = reportingPresetToProviderRange(datePreset);
+  const refreshed = [];
+  const errors = [];
+
+  if (
+    status?.googleAds?.selected &&
+    (forceRefresh || isAdDataStale(status.googleAds.lastSyncedAt))
+  ) {
+    try {
+      await syncGoogleAds(providerRange);
+      refreshed.push("googleAds");
+    } catch (error) {
+      errors.push({
+        provider: "googleAds",
+        message: error?.message || "Google Ads could not be refreshed.",
+      });
+    }
+  }
+
+  if (
+    status?.metaAds?.selected &&
+    (forceRefresh || isAdDataStale(status.metaAds.lastSyncedAt))
+  ) {
+    try {
+      await syncMetaAds(providerRange);
+      refreshed.push("metaAds");
+    } catch (error) {
+      errors.push({
+        provider: "metaAds",
+        message: error?.message || "Meta Ads could not be refreshed.",
+      });
+    }
+  }
+
+  return { refreshed, errors };
 }
