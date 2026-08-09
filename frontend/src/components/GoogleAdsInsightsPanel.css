@@ -466,3 +466,71 @@
 .gai-dataNote strong {
   color: #bfdbfe;
 }
+
+
+/* Large-account list controls */
+.gai-listTools,
+.gai-assetHeaderTools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gai-listTools input,
+.gai-assetHeaderTools input {
+  min-width: 210px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: .72rem;
+  outline: none;
+}
+
+.gai-listTools input:focus,
+.gai-assetHeaderTools input:focus {
+  border-color: rgba(139,92,246,.55);
+  box-shadow: 0 0 0 3px rgba(124,58,237,.12);
+}
+
+.gai-listTools > span {
+  color: #9ca3af;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.gai-showMore {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,.06);
+  background: rgba(124,58,237,.06);
+  color: #c4b5fd;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.gai-showMore:hover {
+  background: rgba(124,58,237,.12);
+}
+
+@media(max-width:700px) {
+  .gai-listTools,
+  .gai-assetHeaderTools {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .gai-listTools input,
+  .gai-assetHeaderTools input {
+    width: 100%;
+    min-width: 0;
+  }
+}

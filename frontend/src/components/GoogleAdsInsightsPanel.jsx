@@ -82,6 +82,11 @@ export default function GoogleAdsInsightsPanel({
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [showAllCampaigns, setShowAllCampaigns] = useState(false);
+  const [assetCampaignSearch, setAssetCampaignSearch] = useState("");
+  const [showAllAssetCampaigns, setShowAllAssetCampaigns] = useState(false);
+  const [expandedMediaGroups, setExpandedMediaGroups] = useState({});
 
   const loadStatus = async () => {
     setLoading(true);
@@ -246,6 +251,43 @@ export default function GoogleAdsInsightsPanel({
     [assets]
   );
 
+  const campaigns = useMemo(
+    () => status?.campaigns || [],
+    [status]
+  );
+
+  const filteredCampaigns = useMemo(() => {
+    const query = campaignSearch.trim().toLowerCase();
+    if (!query) return campaigns;
+    return campaigns.filter((campaign) =>
+      [campaign?.name, campaign?.id, campaign?.status]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [campaigns, campaignSearch]);
+
+  const visibleCampaigns = useMemo(() => {
+    if (showAllCampaigns || campaignSearch.trim()) return filteredCampaigns;
+    return filteredCampaigns.slice(0, 15);
+  }, [filteredCampaigns, showAllCampaigns, campaignSearch]);
+
+  const filteredCampaignAssetGroups = useMemo(() => {
+    const query = assetCampaignSearch.trim().toLowerCase();
+    if (!query) return campaignAssetGroups;
+    return campaignAssetGroups.filter((group) =>
+      [group?.campaignName, group?.campaignId]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [campaignAssetGroups, assetCampaignSearch]);
+
+  const visibleCampaignAssetGroups = useMemo(() => {
+    if (showAllAssetCampaigns || assetCampaignSearch.trim()) {
+      return filteredCampaignAssetGroups;
+    }
+    return filteredCampaignAssetGroups.slice(0, 10);
+  }, [filteredCampaignAssetGroups, showAllAssetCampaigns, assetCampaignSearch]);
+
   const connect = async () => {
     setError("");
     try {
@@ -401,7 +443,6 @@ export default function GoogleAdsInsightsPanel({
   }
 
   const summary = status?.summary || {};
-  const campaigns = status?.campaigns || [];
 
   return (
     <section className="gai-panel">
@@ -528,7 +569,21 @@ export default function GoogleAdsInsightsPanel({
                 <span className="gai-eyebrow">Campaign performance</span>
                 <h4>{DATE_OPTIONS.find((option) => option.value === dateRange)?.label}</h4>
               </div>
-              <span>{campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}</span>
+              <div className="gai-listTools">
+                <input
+                  type="search"
+                  value={campaignSearch}
+                  onChange={(event) => {
+                    setCampaignSearch(event.target.value);
+                    setShowAllCampaigns(false);
+                  }}
+                  placeholder="Search campaigns"
+                  aria-label="Search Google Ads campaigns"
+                />
+                <span>
+                  {filteredCampaigns.length} of {campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
 
             {campaigns.length ? (
@@ -541,7 +596,7 @@ export default function GoogleAdsInsightsPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((campaign) => {
+                    {visibleCampaigns.map((campaign) => {
                       const open = Boolean(expanded[campaign.id]);
                       return (
                         <React.Fragment key={campaign.id}>
@@ -591,6 +646,22 @@ export default function GoogleAdsInsightsPanel({
             ) : (
               <div className="gai-empty compact">No campaign activity was returned.</div>
             )}
+
+            {!!campaigns.length && !visibleCampaigns.length && (
+              <div className="gai-empty compact">No campaigns match this search.</div>
+            )}
+
+            {!campaignSearch.trim() && filteredCampaigns.length > 15 && (
+              <button
+                type="button"
+                className="gai-showMore"
+                onClick={() => setShowAllCampaigns((value) => !value)}
+              >
+                {showAllCampaigns
+                  ? "Show fewer campaigns"
+                  : `Show all ${filteredCampaigns.length} campaigns`}
+              </button>
+            )}
           </section>
 
           <section className="gai-section">
@@ -604,7 +675,18 @@ export default function GoogleAdsInsightsPanel({
                 </p>
               </div>
 
-              <div className="gai-filters">
+              <div className="gai-assetHeaderTools">
+                <input
+                  type="search"
+                  value={assetCampaignSearch}
+                  onChange={(event) => {
+                    setAssetCampaignSearch(event.target.value);
+                    setShowAllAssetCampaigns(false);
+                  }}
+                  placeholder="Find campaign"
+                  aria-label="Search Google Ads asset campaigns"
+                />
+                <div className="gai-filters">
                 {["ALL", "IMAGE", "VIDEO", "TEXT"].map((type) => (
                   <button
                     key={type}
@@ -615,6 +697,7 @@ export default function GoogleAdsInsightsPanel({
                     {type === "ALL" ? "All" : type.toLowerCase()}
                   </button>
                 ))}
+                </div>
               </div>
             </div>
 
@@ -643,7 +726,7 @@ export default function GoogleAdsInsightsPanel({
 
                 {campaignAssetGroups.length ? (
                   <div className="gai-campaignAssetList">
-                    {campaignAssetGroups.map((group) => {
+                    {visibleCampaignAssetGroups.map((group) => {
                       const isOpen = Boolean(
                         expandedAssetCampaigns[group.campaignId]
                       );
@@ -726,7 +809,10 @@ export default function GoogleAdsInsightsPanel({
                                   </div>
 
                                   <div className="gai-assetGrid">
-                                    {filteredMedia.map((asset, index) => (
+                                    {(expandedMediaGroups[group.campaignId]
+                                      ? filteredMedia
+                                      : filteredMedia.slice(0, 12)
+                                    ).map((asset, index) => (
                                       <article
                                         key={`${asset.assetId}-${asset.source}-${index}`}
                                         className="gai-assetCard"
@@ -837,6 +923,23 @@ export default function GoogleAdsInsightsPanel({
                                       </article>
                                     ))}
                                   </div>
+
+                                  {filteredMedia.length > 12 && (
+                                    <button
+                                      type="button"
+                                      className="gai-viewAll"
+                                      onClick={() =>
+                                        setExpandedMediaGroups((current) => ({
+                                          ...current,
+                                          [group.campaignId]: !current[group.campaignId],
+                                        }))
+                                      }
+                                    >
+                                      {expandedMediaGroups[group.campaignId]
+                                        ? "Show fewer media assets"
+                                        : `View all ${filteredMedia.length} media assets`}
+                                    </button>
+                                  )}
                                 </section>
                               )}
 
@@ -980,6 +1083,24 @@ export default function GoogleAdsInsightsPanel({
                   <div className="gai-empty compact">
                     No matching assets were returned for this date range.
                   </div>
+                )}
+
+                {!!campaignAssetGroups.length && !visibleCampaignAssetGroups.length && (
+                  <div className="gai-empty compact">
+                    No asset campaigns match this search.
+                  </div>
+                )}
+
+                {!assetCampaignSearch.trim() && filteredCampaignAssetGroups.length > 10 && (
+                  <button
+                    type="button"
+                    className="gai-showMore"
+                    onClick={() => setShowAllAssetCampaigns((value) => !value)}
+                  >
+                    {showAllAssetCampaigns
+                      ? "Show fewer asset campaigns"
+                      : `Show all ${filteredCampaignAssetGroups.length} asset campaigns`}
+                  </button>
                 )}
               </div>
             )}

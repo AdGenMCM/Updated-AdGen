@@ -189,6 +189,137 @@ def _finding_actionability(
     )
 
 
+
+def _recommendation_context(
+    *,
+    signal: str,
+    category: str,
+    title: str,
+    summary: str,
+    action_level: str,
+    creative_related: bool,
+    pi_context: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """
+    Return concise 'why this action' and 'what to watch next' guidance.
+
+    This does not change campaign settings or thresholds. It only translates the
+    existing finding into a clearer analyst-style next step.
+    """
+    text = f"{signal} {category} {title} {summary}".lower()
+
+    if "budget" in text or "lost_share" in text:
+        return (
+            "Budget appears to be limiting delivery, but increasing spend is only useful if the campaign is already producing acceptable business outcomes.",
+            "Watch CPA or ROAS together with impression share and spend for 7–14 days after any budget test.",
+        )
+
+    if "rank" in text or "impression share" in text:
+        return (
+            "The campaign is losing visibility because of Ad Rank or relevance rather than budget alone, so raising spend may not address the underlying constraint.",
+            "Watch Search Impression Share, CTR, CPC, and conversion rate after improving relevance or bid competitiveness.",
+        )
+
+    if "frequency" in text or "fatigue" in text:
+        return (
+            "Repeated exposure combined with weaker engagement can indicate creative fatigue, especially when delivery volume is still meaningful.",
+            "Compare CTR, conversion rate, and frequency for the current creative versus one controlled replacement after meaningful delivery.",
+        )
+
+    if "tracking" in text or ("conversion" in text and "rate" not in text):
+        return (
+            "A conversion signal is only actionable when the tracking event matches the business outcome you actually want to optimize.",
+            "Confirm conversion counts in the ad platform and your site or CRM before judging bid or landing-page performance.",
+        )
+
+    if "cpa" in text or "roas" in text or "conversion rate" in text:
+        return (
+            "Efficiency changed enough to deserve review, but the cause may sit in traffic quality, landing-page behavior, tracking, or bidding rather than one isolated setting.",
+            "Watch CPA, ROAS, conversion rate, and conversion volume after one controlled change.",
+        )
+
+    if creative_related or "creative" in text or "ctr" in text or "engagement" in text:
+        traits = []
+        if pi_context and pi_context.get("available"):
+            for trait in (pi_context.get("traits") or [])[:3]:
+                label = str(trait.get("label") or "").strip()
+                value = str(trait.get("value") or "").strip()
+                if label and value:
+                    traits.append(f"{label.lower()}: {value}")
+
+        trait_note = (
+            " Performance Intelligence currently favors " + ", ".join(traits) + "."
+            if traits
+            else ""
+        )
+        return (
+            "Engagement changed while the campaign still has enough delivery to make a controlled creative test useful."
+            + trait_note,
+            "Keep audience, offer, and budget stable where possible, then compare CTR and conversion rate against the current creative after meaningful delivery.",
+        )
+
+    if action_level == "monitor":
+        return (
+            "The available evidence does not justify a material campaign change yet.",
+            "Keep watching impressions, clicks, spend, and conversions until a clearer trend develops.",
+        )
+
+    if action_level == "test":
+        return (
+            "The signal is strong enough to justify a controlled experiment, but not broad enough to support changing several variables at once.",
+            "Measure the affected KPI against the current baseline after the test receives meaningful delivery.",
+        )
+
+    return (
+        "The finding deserves review, but the evidence is better used to guide one measured decision than several simultaneous changes.",
+        "Watch the primary metric behind this finding together with conversions and spend after any change.",
+    )
+
+
+def _top_recommendation(
+    *,
+    top_finding: dict[str, Any] | None,
+    assessments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if top_finding:
+        return {
+            "campaignName": top_finding.get("campaignName"),
+            "platformLabel": top_finding.get("platformLabel"),
+            "actionLevel": top_finding.get("actionLevel") or "review",
+            "title": top_finding.get("title"),
+            "action": top_finding.get("recommendedAction"),
+            "why": top_finding.get("whyThisAction"),
+            "watchNext": top_finding.get("watchNext"),
+            "confidence": top_finding.get("confidence") or "low",
+            "findingId": top_finding.get("id"),
+        }
+
+    first = assessments[0] if assessments else None
+    if first:
+        return {
+            "campaignName": first.get("campaignName"),
+            "platformLabel": first.get("platformLabel"),
+            "actionLevel": first.get("actionLevel") or "monitor",
+            "title": first.get("headline"),
+            "action": first.get("recommendedAction"),
+            "why": first.get("whyThisAction"),
+            "watchNext": first.get("watchNext"),
+            "confidence": first.get("confidence") or "low",
+            "findingId": None,
+        }
+
+    return {
+        "campaignName": None,
+        "platformLabel": None,
+        "actionLevel": "monitor",
+        "title": "No immediate campaign action is required",
+        "action": "Keep collecting campaign history before making a material change.",
+        "why": "ADGen does not yet have enough evidence to recommend a specific campaign action.",
+        "watchNext": "Continue monitoring impressions, clicks, spend, and conversions as more data accumulates.",
+        "confidence": "low",
+        "findingId": None,
+    }
+
 def _base_finding(
     *,
     platform: str,
@@ -217,6 +348,14 @@ def _base_finding(
         review_items=review_items,
         creative_related=creative_related,
     )
+    why_this_action, watch_next = _recommendation_context(
+        signal=signal,
+        category=category,
+        title=title,
+        summary=summary,
+        action_level=action_level,
+        creative_related=creative_related,
+    )
 
     return {
         "id": _finding_id(platform, campaign_id, signal),
@@ -235,6 +374,8 @@ def _base_finding(
         "reviewItems": review_items,
         "actionLevel": action_level,
         "recommendedAction": recommended_action,
+        "whyThisAction": why_this_action,
+        "watchNext": watch_next,
         "evidence": evidence,
         "currentPeriod": current,
         "previousPeriod": previous,
@@ -683,6 +824,69 @@ def _period_bounds(date_range: str) -> tuple[date, date, date, date, str]:
     return current_start, current_end, previous_start, previous_end, label
 
 
+
+def _latest_campaign_delivery_status(
+    platform: str,
+    rows: list[dict[str, Any]],
+) -> tuple[str, str, bool]:
+    """
+    Resolve the latest saved delivery status for a campaign.
+
+    Returns:
+      normalized_status: active | paused | ended | unknown
+      raw_status: provider status as saved by Google/Meta
+      is_active: whether Campaign Intelligence should treat the campaign as
+                 something that needs action now.
+    """
+    if not rows:
+        return "unknown", "UNKNOWN", True
+
+    def _row_date(row: dict[str, Any]) -> str:
+        return str(row.get("date") or row.get("reportDate") or "")
+
+    latest = max(rows, key=_row_date)
+    raw = str(
+        latest.get("effectiveStatus")
+        or latest.get("status")
+        or "UNKNOWN"
+    ).upper()
+
+    if platform == "google_ads":
+        if raw in {"ENABLED", "ACTIVE"}:
+            return "active", raw, True
+        if raw == "PAUSED":
+            return "paused", raw, False
+        if raw in {"REMOVED", "ENDED"}:
+            return "ended", raw, False
+    elif platform == "meta_ads":
+        if raw in {"ACTIVE"}:
+            return "active", raw, True
+        if raw in {"PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"}:
+            return "paused", raw, False
+        if raw in {
+            "ARCHIVED",
+            "DELETED",
+            "ENDED",
+            "IN_PROCESS",
+            "WITH_ISSUES",
+        }:
+            # WITH_ISSUES can still technically deliver in Meta, so preserve it
+            # as active unless the saved campaign itself is explicitly inactive.
+            if raw == "WITH_ISSUES":
+                return "active", raw, True
+            return "ended", raw, False
+
+    return "unknown", raw, True
+
+
+def _campaign_delivery_label(status: str) -> str:
+    return {
+        "active": "Active",
+        "paused": "Paused",
+        "ended": "Ended",
+        "unknown": "Status unknown",
+    }.get(status, "Status unknown")
+
 def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: str = "all") -> tuple[list[dict[str, Any]], list[str], list[str], int, str, list[dict[str, Any]]]:
     all_findings: list[dict[str, Any]] = []
     platforms: list[str] = []
@@ -760,6 +964,10 @@ def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             campaigns_analyzed.add(f"{platform}:{campaign_id}")
             current = _aggregate(current_rows)
             previous = _aggregate(previous_rows)
+            delivery_status, raw_delivery_status, is_active = _latest_campaign_delivery_status(
+                platform,
+                campaign_rows,
+            )
             campaign_snapshots.append({
                 "platform": platform,
                 "platformLabel": label,
@@ -768,6 +976,10 @@ def _platform_data(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
                 "current": current,
                 "previous": previous,
                 "confidence": _confidence(current, previous),
+                "campaignDeliveryStatus": delivery_status,
+                "campaignDeliveryLabel": _campaign_delivery_label(delivery_status),
+                "rawCampaignStatus": raw_delivery_status,
+                "isActive": is_active,
             })
             findings = _campaign_findings(
                 platform=platform,
@@ -894,6 +1106,12 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
     previous = snapshot.get("previous") or {}
     campaign_name = str(snapshot.get("campaignName") or "Campaign")
     confidence = str(snapshot.get("confidence") or "low")
+    delivery_status = str(snapshot.get("campaignDeliveryStatus") or "unknown")
+    delivery_label = str(
+        snapshot.get("campaignDeliveryLabel")
+        or _campaign_delivery_label(delivery_status)
+    )
+    is_active = bool(snapshot.get("isActive", True))
 
     critical = [item for item in findings if item.get("severity") == "critical"]
     warnings = [item for item in findings if item.get("severity") == "warning"]
@@ -925,6 +1143,41 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
         headline = f"{campaign_name} needs more delivery data"
         summary = "The campaign does not yet have enough recent volume for a reliable performance conclusion."
 
+    analysis_status = status
+    analysis_status_label = status_label
+    analysis_headline = headline
+    analysis_summary = summary
+
+    if not is_active:
+        if delivery_status == "paused":
+            status, status_label = "paused", "Paused"
+            headline = f"{campaign_name} is paused"
+            if analysis_status in {"priority", "attention"}:
+                summary = (
+                    f"Before this campaign was paused, ADGen detected: {analysis_summary}"
+                )
+            elif analysis_status == "opportunity":
+                summary = (
+                    f"Before this campaign was paused, ADGen observed: {analysis_summary}"
+                )
+            else:
+                summary = (
+                    "This campaign is paused. Historical performance remains available "
+                    "for reference, but ADGen does not treat it as an action item now."
+                )
+        else:
+            status, status_label = "ended", "Ended"
+            headline = f"{campaign_name} is no longer running"
+            if analysis_status in {"priority", "attention", "opportunity"}:
+                summary = (
+                    f"Historical analysis before the campaign stopped running: {analysis_summary}"
+                )
+            else:
+                summary = (
+                    "This campaign is no longer running. Historical performance remains "
+                    "available for reference."
+                )
+
     strengths: list[str] = []
     concerns = [str(item.get("summary") or item.get("title") or "") for item in [*critical, *warnings] if item.get("summary") or item.get("title")]
 
@@ -954,7 +1207,15 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
         strengths.append(f"ROAS improved {abs(roas_change) * 100:.0f}%.")
 
     opportunities: list[str] = []
-    if status in {"priority", "attention"}:
+    if not is_active:
+        opportunities.append(
+            "Keep this historical analysis for reference; no campaign change is recommended while it is inactive."
+        )
+        if delivery_status == "paused":
+            opportunities.append(
+                "If you reactivate the campaign later, review the historical finding before resuming or increasing spend."
+            )
+    elif status in {"priority", "attention"}:
         opportunities.append("Review the detailed finding before making broad campaign changes.")
         if any(item.get("creativeRelated") for item in findings):
             opportunities.append("Use the Optimizer or generate one controlled creative variation.")
@@ -983,7 +1244,15 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
         evidence.append({"label": "ROAS", "value": f"{_num(current.get('roas')):.2f}x"})
 
     primary_finding = (critical or warnings or opportunities_found or findings or [None])[0]
-    if primary_finding:
+    if not is_active:
+        top_action_level = "monitor"
+        top_action = (
+            "No action is required while this campaign is paused. Keep the historical "
+            "analysis for reference if you reactivate it."
+            if delivery_status == "paused"
+            else "No action is required for this inactive campaign. Keep the historical analysis for reference."
+        )
+    elif primary_finding:
         top_action_level = str(primary_finding.get("actionLevel") or "review")
         top_action = str(
             primary_finding.get("recommendedAction")
@@ -1004,9 +1273,17 @@ def _campaign_assessment(snapshot: dict[str, Any], findings: list[dict[str, Any]
         "campaignName": campaign_name,
         "status": status,
         "statusLabel": status_label,
+        "analysisStatus": analysis_status,
+        "analysisStatusLabel": analysis_status_label,
+        "campaignDeliveryStatus": delivery_status,
+        "campaignDeliveryLabel": delivery_label,
+        "rawCampaignStatus": snapshot.get("rawCampaignStatus"),
+        "isActive": is_active,
         "confidence": confidence,
         "headline": headline,
         "summary": summary,
+        "historicalHeadline": analysis_headline if not is_active else None,
+        "historicalSummary": analysis_summary if not is_active else None,
         "actionLevel": top_action_level,
         "recommendedAction": top_action,
         "strengths": strengths[:4],
@@ -1032,7 +1309,15 @@ def _campaign_assessments(snapshots: list[dict[str, Any]], findings: list[dict[s
         )
         for snapshot in snapshots
     ]
-    status_order = {"priority": 0, "attention": 1, "opportunity": 2, "healthy": 3, "learning": 4}
+    status_order = {
+        "priority": 0,
+        "attention": 1,
+        "opportunity": 2,
+        "healthy": 3,
+        "learning": 4,
+        "paused": 5,
+        "ended": 6,
+    }
     confidence_order = {"high": 0, "medium": 1, "low": 2}
     assessments.sort(
         key=lambda item: (
@@ -1252,8 +1537,16 @@ def _health(
     opportunities = sum(1 for item in assessments if item.get("status") == "opportunity")
     healthy = sum(1 for item in assessments if item.get("status") == "healthy")
     learning = sum(1 for item in assessments if item.get("status") == "learning")
-    priority_campaigns = sum(1 for item in assessments if item.get("status") == "priority")
-    attention_campaigns = sum(1 for item in assessments if item.get("status") == "attention")
+    paused = sum(1 for item in assessments if item.get("status") == "paused")
+    ended = sum(1 for item in assessments if item.get("status") == "ended")
+    priority_campaigns = sum(
+        1 for item in assessments
+        if item.get("status") == "priority" and item.get("isActive", True)
+    )
+    attention_campaigns = sum(
+        1 for item in assessments
+        if item.get("status") == "attention" and item.get("isActive", True)
+    )
 
     if priority_campaigns:
         status, label = "priority", "Priority"
@@ -1272,6 +1565,8 @@ def _health(
         "opportunities": opportunities,
         "healthy": healthy,
         "learning": learning,
+        "paused": paused,
+        "ended": ended,
         "priorityCampaigns": priority_campaigns,
         "attentionCampaigns": attention_campaigns,
         "campaignsAnalyzed": campaign_count,
@@ -1286,11 +1581,26 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
     findings.sort(key=lambda item: (SEVERITY_ORDER.get(item.get("severity"), 99), CONFIDENCE_ORDER.get(item.get("confidence"), 99), item.get("campaignName") or ""))
 
     assessments = _campaign_assessments(snapshots, findings)
-    top = findings[0] if findings else None
+    active_campaign_keys = {
+        (str(item.get("platform") or ""), str(item.get("campaignId") or ""))
+        for item in assessments
+        if item.get("isActive", True)
+    }
+    active_findings = [
+        finding
+        for finding in findings
+        if (
+            str(finding.get("platform") or ""),
+            str(finding.get("campaignId") or ""),
+        ) in active_campaign_keys
+    ]
+    top = active_findings[0] if active_findings else None
     urgent_count = sum(1 for item in assessments if item.get("status") in {"priority", "attention"})
     opportunity_count = sum(1 for item in assessments if item.get("status") == "opportunity")
     healthy_count = sum(1 for item in assessments if item.get("status") == "healthy")
     learning_count = sum(1 for item in assessments if item.get("status") == "learning")
+    paused_count = sum(1 for item in assessments if item.get("status") == "paused")
+    ended_count = sum(1 for item in assessments if item.get("status") == "ended")
     health = _health(findings, campaign_count, assessments)
     healthy_analysis = _healthy_analysis(snapshots, platforms, campaign_count) if platforms and not findings else {}
 
@@ -1304,6 +1614,10 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             status_parts.append(f"{healthy_count} healthy")
         if learning_count:
             status_parts.append(f"{learning_count} still learning")
+        if paused_count:
+            status_parts.append(f"{paused_count} paused")
+        if ended_count:
+            status_parts.append(f"{ended_count} inactive")
         status_text = ", ".join(status_parts) if status_parts else "stable overall"
         summary = (
             f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} across {', '.join(platforms)}. "
@@ -1320,6 +1634,10 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             parts.append(f"{healthy_count} campaign{'s remain' if healthy_count != 1 else ' remains'} healthy")
         if learning_count:
             parts.append(f"{learning_count} campaign{'s need' if learning_count != 1 else ' needs'} more data")
+        if paused_count:
+            parts.append(f"{paused_count} paused campaign{'s' if paused_count != 1 else ''} kept for historical reference")
+        if ended_count:
+            parts.append(f"{ended_count} inactive campaign{'s' if ended_count != 1 else ''} kept for historical reference")
         summary = (
             f"ADGen reviewed {campaign_count} campaign{'s' if campaign_count != 1 else ''} across {', '.join(platforms)}. "
             + (", ".join(parts) if parts else f"{len(findings)} notable changes were found")
@@ -1327,6 +1645,71 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
         )
 
     pi_context = _performance_intelligence_context(uid)
+
+    # Enrich creative-related recommendations with existing Performance
+    # Intelligence traits without changing the underlying finding thresholds.
+    for finding in findings:
+        if not finding.get("creativeRelated"):
+            continue
+        why_this_action, watch_next = _recommendation_context(
+            signal=str(finding.get("signal") or ""),
+            category=str(finding.get("category") or ""),
+            title=str(finding.get("title") or ""),
+            summary=str(finding.get("summary") or ""),
+            action_level=str(finding.get("actionLevel") or "test"),
+            creative_related=True,
+            pi_context=pi_context,
+        )
+        finding["whyThisAction"] = why_this_action
+        finding["watchNext"] = watch_next
+
+        if pi_context.get("available"):
+            traits = []
+            for trait in (pi_context.get("traits") or [])[:3]:
+                value = str(trait.get("value") or "").strip()
+                if value:
+                    traits.append(value)
+            if traits:
+                finding["recommendedAction"] = (
+                    "Test one new creative while keeping the audience, offer, and budget stable. "
+                    "Use the strongest learned traits as inputs: "
+                    + ", ".join(traits)
+                    + "."
+                )
+
+    # Rebuild campaign assessments after finding enrichment so campaign-level
+    # recommendations use the same clearer action/rationale/watch language.
+    assessments = _campaign_assessments(snapshots, findings)
+    for assessment in assessments:
+        primary_id = (assessment.get("findingIds") or [None])[0]
+        primary = next(
+            (finding for finding in findings if finding.get("id") == primary_id),
+            None,
+        )
+        if primary and assessment.get("isActive", True):
+            assessment["recommendedAction"] = primary.get("recommendedAction")
+            assessment["whyThisAction"] = primary.get("whyThisAction")
+            assessment["watchNext"] = primary.get("watchNext")
+        elif not assessment.get("isActive", True):
+            assessment["whyThisAction"] = (
+                "This campaign is not currently delivering, so its findings are historical "
+                "context rather than an immediate optimization task."
+            )
+            assessment["watchNext"] = (
+                "If the campaign is reactivated, compare new delivery against this historical baseline."
+            )
+        else:
+            why_this_action, watch_next = _recommendation_context(
+                signal="campaign_assessment",
+                category=str(assessment.get("status") or ""),
+                title=str(assessment.get("headline") or ""),
+                summary=str(assessment.get("summary") or ""),
+                action_level=str(assessment.get("actionLevel") or "monitor"),
+                creative_related=False,
+            )
+            assessment["whyThisAction"] = why_this_action
+            assessment["watchNext"] = watch_next
+
     cross_platform = _cross_platform_insights(snapshots)
     memory = _campaign_memory(uid, assessments)
     sections = _briefing_sections(assessments, findings)
@@ -1357,7 +1740,7 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
             "impressionsReviewed": sum(int((item.get("currentPeriod") or {}).get("impressions") or 0) for item in assessments),
             "clicksReviewed": sum(int((item.get("currentPeriod") or {}).get("clicks") or 0) for item in assessments),
             "conversionsReviewed": round(sum(float((item.get("currentPeriod") or {}).get("conversions") or 0) for item in assessments), 2),
-            "engineVersion": "Campaign Intelligence 2B.3",
+            "engineVersion": "Campaign Intelligence 2B.5",
         },
         "comparisonLabel": comparison_label,
         "headline": headline,
@@ -1365,6 +1748,10 @@ def build_briefing(uid: str, date_range: str = "LAST_30_DAYS", platform_filter: 
         "health": health,
         "topPriorityId": top.get("id") if top else None,
         "topPriorityText": f"Review {top.get('campaignName')}: {top.get('title')}." if top else "No single campaign requires immediate attention based on the available evidence.",
+        "topRecommendation": _top_recommendation(
+            top_finding=top,
+            assessments=assessments,
+        ),
         "campaignsAnalyzed": campaign_count,
         "platformsAnalyzed": platforms,
         "campaignAssessments": assessments,

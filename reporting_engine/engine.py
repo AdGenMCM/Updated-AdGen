@@ -23,6 +23,7 @@ NON_TIME_SPLITS = {
     "placement",
 }
 SUPPORTED_SPLITS = TIME_SPLITS | NON_TIME_SPLITS
+PROVIDER_DIMENSION_SPLITS = {"ad_group", "creative", "device", "country", "placement"}
 
 
 def _period(d: date, split: str) -> str:
@@ -97,10 +98,15 @@ def _source_rows(
     *,
     needs_daily: bool,
     allow_snapshot_fallback: bool,
+    splits: list[str],
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
     rows: list[dict[str, Any]] = []
     missing_daily: list[str] = []
     fallback_sources: list[str] = []
+
+    requested_provider_dimensions = [
+        split for split in splits if split in PROVIDER_DIMENSION_SPLITS
+    ]
 
     for key in providers:
         payload = snapshot.get(SOURCE_KEYS.get(key, key)) or {}
@@ -108,6 +114,21 @@ def _source_rows(
         if key == "libraryPerformance":
             rows.extend(payload.get("creatives") or [])
             continue
+
+        # A provider-specific dimension report is used only when exactly one
+        # granular provider dimension is requested. The rows still include
+        # campaign/platform/date, so combinations like Ad Group + Day or
+        # Device + Campaign remain valid without double-counting.
+        if len(requested_provider_dimensions) == 1:
+            requested_dimension = requested_provider_dimensions[0]
+            dimension_rows = [
+                row
+                for row in (payload.get("reportingDimensions") or [])
+                if row.get("dimensionType") == requested_dimension
+            ]
+            if dimension_rows:
+                rows.extend(dimension_rows)
+                continue
 
         if needs_daily:
             daily = payload.get("dailyCampaignPerformance") or []
@@ -275,6 +296,7 @@ def build_report(
         providers,
         needs_daily=needs_daily,
         allow_snapshot_fallback=allow_snapshot_fallback,
+        splits=clean_splits,
     )
 
     using_fallback = bool(fallback_sources)
@@ -319,6 +341,17 @@ def build_report(
         notices.append(
             "No date-segmented provider rows are stored for the selected "
             "sources and period."
+        )
+
+    granular_splits = [
+        split for split in clean_splits if split in PROVIDER_DIMENSION_SPLITS
+    ]
+    if len(granular_splits) > 1:
+        notices.append(
+            "The selected providers currently support one granular provider "
+            "dimension at a time. Use the secondary split for Campaign, "
+            "Platform, or a time period when grouping by Ad Group, Creative, "
+            "Device, Country, or Placement."
         )
 
     unavailable_splits = [

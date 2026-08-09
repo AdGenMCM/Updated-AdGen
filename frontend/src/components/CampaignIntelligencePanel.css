@@ -1436,3 +1436,313 @@
   }
 }
 
+
+
+/* =========================================================
+   Campaign Intelligence 2B.4 — recommendation clarity
+========================================================= */
+
+.ci-topRecommendation {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.ci-topRecommendation.do_now {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.ci-topRecommendation.test {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.ci-topRecommendation.monitor {
+  border-color: rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.ci-topRecommendationHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ci-topRecommendationHead span,
+.ci-topRecommendationGrid span,
+.ci-campaignNextActionBody span,
+.ci-findingWhyAction span {
+  display: block;
+  color: #93c5fd;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ci-topRecommendationHead strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 0.96rem;
+  line-height: 1.4;
+}
+
+.ci-topRecommendationHead small {
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.ci-topRecommendationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.ci-topRecommendationGrid > div {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 11px;
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.ci-topRecommendationGrid > div.primary {
+  border-color: rgba(96, 165, 250, 0.18);
+  background: rgba(37, 99, 235, 0.09);
+}
+
+.ci-topRecommendationGrid p,
+.ci-campaignNextActionBody p,
+.ci-findingWhyAction p {
+  margin: 6px 0 0;
+  color: #dbeafe;
+  font-size: 0.77rem;
+  line-height: 1.5;
+}
+
+.ci-topRecommendationEvidence {
+  justify-self: start;
+  padding: 8px 11px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ci-campaignNextAction {
+  grid-template-columns: minmax(180px, 0.28fr) minmax(0, 1fr);
+}
+
+.ci-campaignNextActionBody {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ci-campaignNextActionBody > div {
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.ci-findingQuickSummary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ci-findingWhyAction {
+  margin: -5px 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  border-radius: 11px;
+  background: rgba(37, 99, 235, 0.07);
+}
+
+@media (max-width: 980px) {
+  .ci-topRecommendationGrid,
+  .ci-campaignNextActionBody,
+  .ci-findingQuickSummary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .ci-topRecommendationHead {
+    flex-direction: column;
+  }
+
+  .ci-topRecommendationHead small {
+    white-space: normal;
+  }
+}
+
+
+/* =========================================================
+   Campaign Intelligence — simplified hierarchy + overflow fix
+========================================================= */
+
+/* Long Google/Meta enum values such as MAXIMIZE_CONVERSIONS must stay
+   inside their evidence cards. */
+.ci-evidence,
+.ci-campaignEvidence,
+.ci-evidence > div,
+.ci-campaignEvidence > div {
+  min-width: 0;
+}
+
+.ci-evidence strong,
+.ci-campaignEvidence strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.28;
+}
+
+/* Supporting intelligence is useful, but secondary to the recommendation
+   and campaign review. Keep it collapsed until the user asks for depth. */
+.ci-additionalIntelligence {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.ci-additionalIntelligence > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 17px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.ci-additionalIntelligence > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ci-additionalIntelligence > summary::after {
+  content: "⌄";
+  flex: 0 0 auto;
+  color: #a78bfa;
+  font-size: 1rem;
+  font-weight: 900;
+  transition: transform 160ms ease;
+}
+
+.ci-additionalIntelligence[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.ci-additionalIntelligence > summary > div {
+  min-width: 0;
+}
+
+.ci-additionalIntelligence > summary span {
+  display: block;
+  color: #a78bfa;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ci-additionalIntelligence > summary strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.ci-additionalIntelligence > summary small {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.ci-additionalIntelligenceBody {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ci-additionalIntelligenceBody > section:first-child {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .ci-additionalIntelligence > summary {
+    align-items: flex-start;
+  }
+
+  .ci-additionalIntelligence > summary small {
+    display: none;
+  }
+}
+
+
+/* =========================================================
+   Campaign delivery-state awareness
+========================================================= */
+.ci-campaignAssessment.paused {
+  border-left-color: #64748b;
+  opacity: 0.9;
+}
+
+.ci-campaignAssessment.ended {
+  border-left-color: #475569;
+  opacity: 0.78;
+}
+
+.ci-campaignStatus.paused {
+  background: rgba(100, 116, 139, 0.18);
+  color: #cbd5e1;
+}
+
+.ci-campaignStatus.ended {
+  background: rgba(71, 85, 105, 0.18);
+  color: #94a3b8;
+}
+
+.ci-deliveryInline {
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ci-deliveryInline.active {
+  color: #86efac;
+}
+
+.ci-deliveryInline.paused {
+  color: #cbd5e1;
+}
+
+.ci-deliveryInline.ended {
+  color: #94a3b8;
+}
+
+.ci-campaignAssessment.paused .ci-campaignAssessmentDetails,
+.ci-campaignAssessment.ended .ci-campaignAssessmentDetails {
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.ci-campaignAssessment.paused .ci-campaignNextAction,
+.ci-campaignAssessment.ended .ci-campaignNextAction {
+  border-color: rgba(100, 116, 139, 0.2);
+  background: rgba(100, 116, 139, 0.07);
+}

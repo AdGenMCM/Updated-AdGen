@@ -80,6 +80,11 @@ export default function MetaAdsInsightsPanel({
   const autoRefreshInFlightRef = useRef(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [creativeSearch, setCreativeSearch] = useState("");
+  const [creativeCampaignFilter, setCreativeCampaignFilter] = useState("all");
+  const [showAllCreatives, setShowAllCreatives] = useState(false);
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [showAllCampaigns, setShowAllCampaigns] = useState(false);
 
   const loadStatus = async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
@@ -147,15 +152,86 @@ export default function MetaAdsInsightsPanel({
     }
   }, [selectedDateRange, dateRange]);
 
+  const creativeCampaignOptions = useMemo(() => {
+    const values = new Map();
+    creatives.forEach((item) => {
+      const key = String(item.campaignId || item.campaignName || "").trim();
+      if (!key) return;
+      if (!values.has(key)) {
+        values.set(key, item.campaignName || key);
+      }
+    });
+    return Array.from(values.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [creatives]);
+
   const filteredCreatives = useMemo(() => {
-    if (creativeFilter === "all") return creatives;
-    return creatives.filter((item) => item.mediaType === creativeFilter);
-  }, [creatives, creativeFilter]);
+    const query = creativeSearch.trim().toLowerCase();
+    return creatives.filter((item) => {
+      if (creativeFilter !== "all" && item.mediaType !== creativeFilter) {
+        return false;
+      }
+
+      const campaignKey = String(
+        item.campaignId || item.campaignName || ""
+      ).trim();
+      if (
+        creativeCampaignFilter !== "all" &&
+        campaignKey !== creativeCampaignFilter
+      ) {
+        return false;
+      }
+
+      if (!query) return true;
+      return [
+        item?.campaignName,
+        item?.adSetName,
+        item?.adName,
+        item?.headline,
+        item?.primaryText,
+        item?.mediaType,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [
+    creatives,
+    creativeFilter,
+    creativeCampaignFilter,
+    creativeSearch,
+  ]);
+
+  const visibleCreatives = useMemo(() => {
+    if (showAllCreatives || creativeSearch.trim()) return filteredCreatives;
+    return filteredCreatives.slice(0, 12);
+  }, [filteredCreatives, showAllCreatives, creativeSearch]);
 
   const campaigns = useMemo(
     () => status?.campaigns || [],
     [status]
   );
+
+  const filteredCampaigns = useMemo(() => {
+    const query = campaignSearch.trim().toLowerCase();
+    if (!query) return campaigns;
+    return campaigns.filter((campaign) =>
+      [
+        campaign?.name,
+        campaign?.campaignId,
+        campaign?.objective,
+        campaign?.effectiveStatus,
+        campaign?.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [campaigns, campaignSearch]);
+
+  const visibleCampaigns = useMemo(() => {
+    if (showAllCampaigns || campaignSearch.trim()) return filteredCampaigns;
+    return filteredCampaigns.slice(0, 15);
+  }, [filteredCampaigns, showAllCampaigns, campaignSearch]);
   const summary = status?.summary || {};
   const currency = status?.selectedCurrency || "USD";
 
@@ -535,7 +611,33 @@ export default function MetaAdsInsightsPanel({
                 <h4>Ads and creative assets</h4>
                 <p>Review images, videos, copy, calls to action, and ad-level performance.</p>
               </div>
-              <div className="mai-creativeFilters">
+              <div className="mai-creativeTools">
+                <input
+                  type="search"
+                  value={creativeSearch}
+                  onChange={(event) => {
+                    setCreativeSearch(event.target.value);
+                    setShowAllCreatives(false);
+                  }}
+                  placeholder="Search creatives"
+                  aria-label="Search Meta Ads creatives"
+                />
+                <select
+                  value={creativeCampaignFilter}
+                  onChange={(event) => {
+                    setCreativeCampaignFilter(event.target.value);
+                    setShowAllCreatives(false);
+                  }}
+                  aria-label="Filter Meta Ads creatives by campaign"
+                >
+                  <option value="all">All campaigns</option>
+                  {creativeCampaignOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="mai-creativeFilters">
                 {["all", "image", "video", "text"].map((filter) => (
                   <button
                     key={filter}
@@ -546,6 +648,7 @@ export default function MetaAdsInsightsPanel({
                     {filter}
                   </button>
                 ))}
+                </div>
               </div>
             </div>
 
@@ -555,7 +658,7 @@ export default function MetaAdsInsightsPanel({
               </div>
             ) : (
               <div className="mai-creativeGrid">
-                {filteredCreatives.map((item) => (
+                {visibleCreatives.map((item) => (
                   <article key={item.adId || item.id} className="mai-creativeCard">
                     <div className="mai-creativePreview">
                       {item.thumbnailUrl || item.imageUrl ? (
@@ -586,6 +689,18 @@ export default function MetaAdsInsightsPanel({
                 ))}
               </div>
             )}
+
+            {!creativeSearch.trim() && filteredCreatives.length > 12 && (
+              <button
+                type="button"
+                className="mai-showMore"
+                onClick={() => setShowAllCreatives((value) => !value)}
+              >
+                {showAllCreatives
+                  ? "Show fewer creatives"
+                  : `Show all ${filteredCreatives.length} creatives`}
+              </button>
+            )}
           </div>
 
           <div className="mai-campaignPanel">
@@ -594,9 +709,21 @@ export default function MetaAdsInsightsPanel({
                 <span className="mai-eyebrow">Campaign reporting</span>
                 <h4>Meta campaign performance</h4>
               </div>
-              <span>
-                {campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}
-              </span>
+              <div className="mai-campaignTools">
+                <input
+                  type="search"
+                  value={campaignSearch}
+                  onChange={(event) => {
+                    setCampaignSearch(event.target.value);
+                    setShowAllCampaigns(false);
+                  }}
+                  placeholder="Search campaigns"
+                  aria-label="Search Meta Ads campaigns"
+                />
+                <span>
+                  {filteredCampaigns.length} of {campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
 
             {!campaigns.length ? (
@@ -620,7 +747,7 @@ export default function MetaAdsInsightsPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((campaign) => (
+                    {visibleCampaigns.map((campaign) => (
                       <tr key={campaign.campaignId}>
                         <td>
                           <strong>{campaign.name || "Meta campaign"}</strong>
@@ -655,6 +782,22 @@ export default function MetaAdsInsightsPanel({
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {!!campaigns.length && !visibleCampaigns.length && (
+              <div className="mai-campaignEmpty">No campaigns match this search.</div>
+            )}
+
+            {!campaignSearch.trim() && filteredCampaigns.length > 15 && (
+              <button
+                type="button"
+                className="mai-showMore"
+                onClick={() => setShowAllCampaigns((value) => !value)}
+              >
+                {showAllCampaigns
+                  ? "Show fewer campaigns"
+                  : `Show all ${filteredCampaigns.length} campaigns`}
+              </button>
             )}
           </div>
         </>

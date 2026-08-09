@@ -17,6 +17,7 @@ from .service import (
     list_accessible_ad_accounts,
     validate_accessible_ad_account,
     sync_campaign_performance,
+    fetch_reporting_dimensions,
     sync_creative_performance,
 )
 from .store import (
@@ -32,6 +33,7 @@ from .store import (
     list_creative_sync,
     save_creative_sync_error,
     save_daily_campaign_performance,
+    save_reporting_dimensions,
 )
 
 
@@ -260,7 +262,40 @@ def sync_meta_ads_campaigns(
             account_id=connection.get("selectedAdAccountId") or "",
             rows=result.get("dailyCampaignPerformance") or [],
         )
-        return result
+
+        dimension_row_count = 0
+        dimension_warnings: list[str] = []
+        try:
+            dimension_report = fetch_reporting_dimensions(
+                user["uid"],
+                date_range=date_range,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            dimension_rows = dimension_report.get("rows") or []
+            save_reporting_dimensions(
+                user["uid"],
+                account_id=connection.get("selectedAdAccountId") or "",
+                rows=dimension_rows,
+            )
+            dimension_row_count = len(dimension_rows)
+            dimension_warnings = dimension_report.get("warnings") or []
+        except Exception as dimension_exc:
+            print(
+                "META ADS REPORTING DIMENSION SYNC WARNING:",
+                repr(dimension_exc),
+                flush=True,
+            )
+            dimension_warnings = [
+                "Detailed reporting dimensions could not be refreshed. "
+                "Campaign reporting still completed."
+            ]
+
+        return {
+            **result,
+            "reportingDimensionRowCount": dimension_row_count,
+            "reportingDimensionWarnings": dimension_warnings,
+        }
     except ValueError as exc:
         save_campaign_sync_error(user["uid"], str(exc))
         raise HTTPException(status_code=400, detail=str(exc)) from exc

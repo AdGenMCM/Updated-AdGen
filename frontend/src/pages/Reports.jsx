@@ -839,6 +839,15 @@ export default function Reports() {
                   ))}
                 </SelectField>
               </div>
+
+              <div className="reports-split-note">
+                <Info size={14} />
+                <span>
+                  Split availability depends on campaign type and platform. Some
+                  dimensions, such as Placement, Device, Country, or Creative,
+                  may not return data for every Google or Meta campaign.
+                </span>
+              </div>
             </div>
 
             <div className="reports-config-section reports-metrics-section">

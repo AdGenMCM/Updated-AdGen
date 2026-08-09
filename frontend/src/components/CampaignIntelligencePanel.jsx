@@ -307,40 +307,265 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
           <span>{health.opportunities || 0} opportunities</span>
           <span>{health.healthy || 0} healthy</span>
           {!!health.learning && <span>{health.learning} still learning</span>}
+          {!!health.paused && <span>{health.paused} paused</span>}
+          {!!health.ended && <span>{health.ended} inactive</span>}
         </div>
       </div>
+      {briefing?.topRecommendation && (
+        <section className={`ci-topRecommendation ${briefing.topRecommendation.actionLevel || "review"}`}>
+          <div className="ci-topRecommendationHead">
+            <div>
+              <span>Recommended next step</span>
+              <strong>
+                {briefing.topRecommendation.campaignName
+                  ? `${briefing.topRecommendation.campaignName}: ${briefing.topRecommendation.title || "Review this campaign"}`
+                  : briefing.topRecommendation.title}
+              </strong>
+            </div>
+            <small>
+              {actionLevelLabel(briefing.topRecommendation.actionLevel)} · {titleCase(briefing.topRecommendation.confidence || "low")} confidence
+            </small>
+          </div>
 
-      <div className="ci-priority">
-        <span>If you review one thing</span>
-        <strong>{briefing?.topPriorityText}</strong>
-      </div>
+          <div className="ci-topRecommendationGrid">
+            <div className="primary">
+              <span>What to do</span>
+              <p>{briefing.topRecommendation.action}</p>
+            </div>
+            <div>
+              <span>Why this action</span>
+              <p>{briefing.topRecommendation.why}</p>
+            </div>
+            <div>
+              <span>What to watch next</span>
+              <p>{briefing.topRecommendation.watchNext}</p>
+            </div>
+          </div>
 
-      <section className="ci-reviewGuide" aria-label="How to review this briefing">
-        <div>
-          <span>1</span>
-          <p>
-            <strong>Start with the priority</strong>
-            See the single issue ADGen recommends reviewing first.
-          </p>
-        </div>
+          {briefing.topRecommendation.findingId && (
+            <button
+              type="button"
+              className="ci-topRecommendationEvidence"
+              onClick={() => setExpandedId(briefing.topRecommendation.findingId)}
+            >
+              View Detailed Finding →
+            </button>
+          )}
+        </section>
+      )}
+      {!!campaignAssessments.length && (
+        <section className="ci-campaignBreakdown">
+          <div className="ci-campaignBreakdownHeader">
+            <div>
+              <span>Campaign review</span>
+              <strong>Review the campaigns that need attention</strong>
+              <p>
+                Priority campaigns appear first. Open a campaign to see what is
+                working, what needs attention, and why ADGen reached that conclusion.
+              </p>
+            </div>
+            <span className="ci-campaignCount">{campaignAssessments.length} analyzed</span>
+          </div>
 
-        <div>
-          <span>2</span>
-          <p>
-            <strong>Review the campaign</strong>
-            Open the affected campaign to understand its strengths and concerns.
-          </p>
-        </div>
+          <div className="ci-campaignAssessmentList">
+            {campaignAssessments.map((assessment) => {
+              const assessmentExpanded = expandedAssessmentId === assessment.id;
+              return (
+                <article
+                  key={assessment.id}
+                  className={`ci-campaignAssessment ${assessment.status || "learning"}`}
+                >
+                  <button
+                    type="button"
+                    className="ci-campaignAssessmentTop"
+                    onClick={() =>
+                      setExpandedAssessmentId(assessmentExpanded ? null : assessment.id)
+                    }
+                    aria-expanded={assessmentExpanded}
+                  >
+                    <span className={`ci-campaignStatus ${assessment.status || "learning"}`}>
+                      {assessment.statusLabel || titleCase(assessment.status)}
+                    </span>
+                    <span className="ci-campaignAssessmentCopy">
+                      <small>
+                        {assessment.platformLabel}
+                        {assessment.campaignDeliveryStatus &&
+                          assessment.campaignDeliveryStatus !== "unknown" && (
+                            <>
+                              {" · "}
+                              <span className={`ci-deliveryInline ${assessment.campaignDeliveryStatus}`}>
+                                {assessment.campaignDeliveryLabel || titleCase(assessment.campaignDeliveryStatus)}
+                              </span>
+                            </>
+                          )}
+                      </small>
+                      <strong>{assessment.campaignName}</strong>
+                      <p>{assessment.summary}</p>
+                    </span>
+                    <span className={`ci-confidence ${assessment.confidence || "low"}`}>
+                      {titleCase(assessment.confidence || "low")} confidence
+                    </span>
+                    <span className="ci-expandLabel">
+                      {assessmentExpanded
+                        ? "Close review"
+                        : assessment.isActive === false
+                        ? "Review historical analysis"
+                        : "Review this campaign"}
+                    </span>
+                  </button>
 
-        <div>
-          <span>3</span>
-          <p>
-            <strong>Check the evidence</strong>
-            Open a detailed finding only when you want the metrics and reasoning.
-          </p>
-        </div>
-      </section>
+                  {assessmentExpanded && (
+                    <div className="ci-campaignAssessmentDetails">
+                      <div className="ci-campaignAssessmentHeadline">
+                        <span>
+                          {assessment.isActive === false
+                            ? "Historical campaign analysis"
+                            : "Campaign conclusion"}
+                        </span>
+                        <strong>{assessment.headline}</strong>
+                      </div>
 
+                      <div className={`ci-campaignNextAction ${assessment.actionLevel || "review"}`}>
+                        <div className="ci-campaignNextActionLabel">
+                          <span>
+                            {assessment.isActive === false
+                              ? "Historical reference"
+                              : actionLevelLabel(assessment.actionLevel)}
+                          </span>
+                          <strong>
+                            {assessment.isActive === false
+                              ? "No action required while inactive"
+                              : "If you change one thing, start here"}
+                          </strong>
+                        </div>
+
+                        <div className="ci-campaignNextActionBody">
+                          <div>
+                            <span>What to do</span>
+                            <p>
+                              {assessment.recommendedAction ||
+                                "Review the supporting evidence before making a campaign change."}
+                            </p>
+                          </div>
+                          <div>
+                            <span>Why this action</span>
+                            <p>
+                              {assessment.whyThisAction ||
+                                "ADGen is prioritizing one measured decision based on the available campaign evidence."}
+                            </p>
+                          </div>
+                          <div>
+                            <span>What to watch next</span>
+                            <p>
+                              {assessment.watchNext ||
+                                "Monitor the affected performance metric together with conversions and spend after any change."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {!!assessment.evidence?.length && (
+                        <div className="ci-campaignEvidence">
+                          {assessment.evidence.map((item) => (
+                            <div key={`${assessment.id}-${item.label}`}>
+                              <small>{item.label}</small>
+                              <strong>{item.value}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="ci-campaignAssessmentGrid">
+                        <div className="ci-campaignAssessmentSection positive">
+                          <span>What is working</span>
+                          {assessment.strengths?.length ? (
+                            <ul>
+                              {assessment.strengths.map((item) => (
+                                <li key={`${assessment.id}-strength-${item}`}>{item}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No positive conclusion is strong enough yet.</p>
+                          )}
+                        </div>
+
+                        <div className="ci-campaignAssessmentSection concern">
+                          <span>What needs attention</span>
+                          {assessment.concerns?.length ? (
+                            <ul>
+                              {assessment.concerns.map((item) => (
+                                <li key={`${assessment.id}-concern-${item}`}>{item}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No material campaign issue crossed the current thresholds.</p>
+                          )}
+                        </div>
+
+                        <div className="ci-campaignAssessmentSection test">
+                          <span>What to consider next</span>
+                          <ul>
+                            {(assessment.opportunities || []).map((item) => (
+                              <li key={`${assessment.id}-opportunity-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      {!!assessment.findingIds?.length && (
+                        <div className="ci-relatedFindings">
+                          <div className="ci-relatedFindingsHeader">
+                            <span>Why ADGen flagged this campaign</span>
+                            <strong>
+                              Review {assessment.findingIds.length} reason
+                              {assessment.findingIds.length === 1 ? "" : "s"} behind this conclusion
+                            </strong>
+                          </div>
+
+                          <div className="ci-relatedFindingsList">
+                            {assessment.findingIds.map((findingId) => {
+                              const relatedFinding = findings.find(
+                                (finding) => finding.id === findingId
+                              );
+
+                              if (!relatedFinding) return null;
+
+                              return (
+                                <button
+                                  key={`${assessment.id}-${findingId}`}
+                                  type="button"
+                                  className="ci-relatedFindingButton"
+                                  onClick={() => setExpandedId(findingId)}
+                                >
+                                  <span>{titleCase(relatedFinding.category)}</span>
+                                  <strong>{relatedFinding.title}</strong>
+                                  <small>
+                                    View Detailed Finding →
+                                  </small>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <details className="ci-additionalIntelligence">
+        <summary>
+          <div>
+            <span>Additional Intelligence</span>
+            <strong>Analyst briefing, campaign memory, cross-platform signals, and creative context</strong>
+          </div>
+          <small>Open supporting analysis</small>
+        </summary>
+        <div className="ci-additionalIntelligenceBody">
       {briefing?.executiveBriefing && (
         <section className="ci-analystBriefing">
           <div className="ci-analystBriefingTop">
@@ -439,162 +664,8 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
         </section>
       )}
 
-      {!!campaignAssessments.length && (
-        <section className="ci-campaignBreakdown">
-          <div className="ci-campaignBreakdownHeader">
-            <div>
-              <span>Campaign review</span>
-              <strong>Start with campaigns that need attention</strong>
-              <p>
-                Priority campaigns appear first. Open a campaign to see what is
-                working, what needs attention, and why ADGen reached that conclusion.
-              </p>
-            </div>
-            <span className="ci-campaignCount">{campaignAssessments.length} analyzed</span>
-          </div>
-
-          <div className="ci-campaignAssessmentList">
-            {campaignAssessments.map((assessment) => {
-              const assessmentExpanded = expandedAssessmentId === assessment.id;
-              return (
-                <article
-                  key={assessment.id}
-                  className={`ci-campaignAssessment ${assessment.status || "learning"}`}
-                >
-                  <button
-                    type="button"
-                    className="ci-campaignAssessmentTop"
-                    onClick={() =>
-                      setExpandedAssessmentId(assessmentExpanded ? null : assessment.id)
-                    }
-                    aria-expanded={assessmentExpanded}
-                  >
-                    <span className={`ci-campaignStatus ${assessment.status || "learning"}`}>
-                      {assessment.statusLabel || titleCase(assessment.status)}
-                    </span>
-                    <span className="ci-campaignAssessmentCopy">
-                      <small>{assessment.platformLabel}</small>
-                      <strong>{assessment.campaignName}</strong>
-                      <p>{assessment.summary}</p>
-                    </span>
-                    <span className={`ci-confidence ${assessment.confidence || "low"}`}>
-                      {titleCase(assessment.confidence || "low")} confidence
-                    </span>
-                    <span className="ci-expandLabel">
-                      {assessmentExpanded ? "Close review" : "Review this campaign"}
-                    </span>
-                  </button>
-
-                  {assessmentExpanded && (
-                    <div className="ci-campaignAssessmentDetails">
-                      <div className="ci-campaignAssessmentHeadline">
-                        <span>Campaign conclusion</span>
-                        <strong>{assessment.headline}</strong>
-                      </div>
-
-                      <div className={`ci-campaignNextAction ${assessment.actionLevel || "review"}`}>
-                        <div>
-                          <span>{actionLevelLabel(assessment.actionLevel)}</span>
-                          <strong>If you change one thing, start here</strong>
-                        </div>
-                        <p>
-                          {assessment.recommendedAction ||
-                            "Review the supporting evidence before making a campaign change."}
-                        </p>
-                      </div>
-
-                      {!!assessment.evidence?.length && (
-                        <div className="ci-campaignEvidence">
-                          {assessment.evidence.map((item) => (
-                            <div key={`${assessment.id}-${item.label}`}>
-                              <small>{item.label}</small>
-                              <strong>{item.value}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="ci-campaignAssessmentGrid">
-                        <div className="ci-campaignAssessmentSection positive">
-                          <span>What is working</span>
-                          {assessment.strengths?.length ? (
-                            <ul>
-                              {assessment.strengths.map((item) => (
-                                <li key={`${assessment.id}-strength-${item}`}>{item}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p>No positive conclusion is strong enough yet.</p>
-                          )}
-                        </div>
-
-                        <div className="ci-campaignAssessmentSection concern">
-                          <span>What needs attention</span>
-                          {assessment.concerns?.length ? (
-                            <ul>
-                              {assessment.concerns.map((item) => (
-                                <li key={`${assessment.id}-concern-${item}`}>{item}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p>No material campaign issue crossed the current thresholds.</p>
-                          )}
-                        </div>
-
-                        <div className="ci-campaignAssessmentSection test">
-                          <span>What to consider next</span>
-                          <ul>
-                            {(assessment.opportunities || []).map((item) => (
-                              <li key={`${assessment.id}-opportunity-${item}`}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-
-                      {!!assessment.findingIds?.length && (
-                        <div className="ci-relatedFindings">
-                          <div className="ci-relatedFindingsHeader">
-                            <span>Why ADGen flagged this campaign</span>
-                            <strong>
-                              Review {assessment.findingIds.length} reason
-                              {assessment.findingIds.length === 1 ? "" : "s"} behind this conclusion
-                            </strong>
-                          </div>
-
-                          <div className="ci-relatedFindingsList">
-                            {assessment.findingIds.map((findingId) => {
-                              const relatedFinding = findings.find(
-                                (finding) => finding.id === findingId
-                              );
-
-                              if (!relatedFinding) return null;
-
-                              return (
-                                <button
-                                  key={`${assessment.id}-${findingId}`}
-                                  type="button"
-                                  className="ci-relatedFindingButton"
-                                  onClick={() => setExpandedId(findingId)}
-                                >
-                                  <span>{titleCase(relatedFinding.category)}</span>
-                                  <strong>{relatedFinding.title}</strong>
-                                  <small>
-                                    {actionLevelLabel(relatedFinding.actionLevel)} · View evidence and recommended checks →
-                                  </small>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
+        </div>
+      </details>
 
       {timelineOpen && (
         <div className="ci-timelinePanel">
@@ -796,7 +867,22 @@ export default function CampaignIntelligencePanel({ dateRange: initialDateRange 
                       "Review the campaign context before making a change."}
                   </strong>
                 </div>
+
+                <div>
+                  <small>What to watch next</small>
+                  <strong>
+                    {selectedFinding.watchNext ||
+                      "Monitor the affected KPI together with conversions and spend after any change."}
+                  </strong>
+                </div>
               </div>
+
+              {selectedFinding.whyThisAction && (
+                <div className="ci-findingWhyAction">
+                  <span>Why ADGen recommends this</span>
+                  <p>{selectedFinding.whyThisAction}</p>
+                </div>
+              )}
 
               <div className="ci-findingDrawerMeta">
                 <span className={`ci-confidence ${selectedFinding.confidence}`}>

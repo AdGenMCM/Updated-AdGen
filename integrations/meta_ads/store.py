@@ -13,6 +13,8 @@ OAUTH_STATES = "meta_ads_oauth_states"
 STATE_TTL_SECONDS = 10 * 60
 DAILY_HISTORY = "meta_ads_daily_history"
 DAILY_ITEMS = "items"
+REPORTING_DIMENSIONS = "meta_ads_reporting_dimensions"
+REPORTING_DIMENSION_ITEMS = "items"
 
 
 def connection_ref(uid: str):
@@ -279,4 +281,94 @@ def list_daily_campaign_performance(uid: str, *, account_id: str | None = None, 
         query = query.where("accountId", "==", str(account_id))
     rows = [{"historyId": snap.id, **(snap.to_dict() or {})} for snap in query.limit(max(1, min(limit, 20000))).stream()]
     rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("campaignName") or "")))
+    return rows
+
+
+def _reporting_dimension_parent(uid: str):
+    return get_db().collection(REPORTING_DIMENSIONS).document(uid)
+
+
+def save_reporting_dimensions(
+    uid: str,
+    *,
+    account_id: str,
+    rows: list[dict[str, Any]],
+    synced_at: int | None = None,
+) -> None:
+    import hashlib
+
+    now = int(synced_at or time.time())
+    db = get_db()
+    parent = _reporting_dimension_parent(uid)
+    clean_account = str(account_id or "").strip()
+    writes: list[tuple[Any, dict[str, Any]]] = []
+
+    for row in rows or []:
+        dimension_type = str(row.get("dimensionType") or "").strip()
+        report_date = str(row.get("date") or row.get("reportDate") or "").strip()
+        if not clean_account or not dimension_type or not report_date:
+            continue
+
+        identity = "|".join([
+            clean_account,
+            dimension_type,
+            report_date,
+            str(row.get("campaignId") or ""),
+            str(row.get("adGroupId") or ""),
+            str(row.get("creativeId") or ""),
+            str(row.get("device") or ""),
+            str(row.get("country") or ""),
+            str(row.get("placement") or ""),
+        ])
+        doc_id = hashlib.sha1(identity.encode("utf-8")).hexdigest()
+        payload = {
+            **row,
+            "uid": uid,
+            "accountId": clean_account,
+            "syncedAt": now,
+        }
+        writes.append(
+            (parent.collection(REPORTING_DIMENSION_ITEMS).document(doc_id), payload)
+        )
+
+    for start in range(0, len(writes), 450):
+        chunk = writes[start:start + 450]
+        batch = db.batch()
+        for ref, payload in chunk:
+            batch.set(ref, payload, merge=True)
+        if chunk:
+            batch.commit()
+
+    parent.set(
+        {
+            "uid": uid,
+            "accountId": clean_account,
+            "rowCountLastSync": len(writes),
+            "lastSyncAt": now,
+        },
+        merge=True,
+    )
+
+
+def list_reporting_dimensions(
+    uid: str,
+    *,
+    account_id: str | None = None,
+    limit: int = 30000,
+) -> list[dict[str, Any]]:
+    query = _reporting_dimension_parent(uid).collection(REPORTING_DIMENSION_ITEMS)
+    if account_id:
+        query = query.where("accountId", "==", str(account_id))
+
+    rows = [
+        {"historyId": snap.id, **(snap.to_dict() or {})}
+        for snap in query.limit(max(1, min(limit, 30000))).stream()
+    ]
+    rows.sort(
+        key=lambda row: (
+            str(row.get("date") or ""),
+            str(row.get("dimensionType") or ""),
+            str(row.get("campaignName") or ""),
+        )
+    )
     return rows

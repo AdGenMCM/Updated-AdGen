@@ -765,3 +765,74 @@
   }
 
 }
+
+
+/* Large-account clutter controls */
+.mai-creativeTools,
+.mai-campaignTools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mai-creativeTools input,
+.mai-creativeTools select,
+.mai-campaignTools input {
+  min-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: .72rem;
+  outline: none;
+}
+
+.mai-creativeTools input:focus,
+.mai-creativeTools select:focus,
+.mai-campaignTools input:focus {
+  border-color: rgba(99,102,241,.55);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+
+.mai-campaignTools > span {
+  color: #9ca3af;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.mai-showMore {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,.06);
+  background: rgba(99,102,241,.06);
+  color: #c7d2fe;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.mai-showMore:hover {
+  background: rgba(99,102,241,.12);
+}
+
+@media(max-width:700px) {
+  .mai-creativeTools,
+  .mai-campaignTools {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mai-creativeTools input,
+  .mai-creativeTools select,
+  .mai-campaignTools input {
+    width: 100%;
+    min-width: 0;
+  }
+}

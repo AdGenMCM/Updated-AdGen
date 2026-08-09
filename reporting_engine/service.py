@@ -7,10 +7,12 @@ from firebase_admin import firestore
 from integrations.google_ads.store import (
     get_connection as get_google_connection,
     list_daily_campaign_performance as list_google_daily,
+    list_reporting_dimensions as list_google_reporting_dimensions,
 )
 from integrations.meta_ads.store import (
     get_connection as get_meta_connection,
     list_daily_campaign_performance as list_meta_daily,
+    list_reporting_dimensions as list_meta_reporting_dimensions,
 )
 from performance_intelligence.store import (
     get_summary as get_learning_summary,
@@ -134,6 +136,7 @@ def _campaign(
                 "platformPosition",
                 "platform_position",
             ),
+            "dimensionType": row.get("dimensionType"),
         }
     )
 
@@ -143,6 +146,7 @@ def _provider(
     provider: str,
     label: str,
     daily_rows: list[dict[str, Any]] | None = None,
+    reporting_dimension_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rows = [
         _campaign(row, provider, label)
@@ -152,6 +156,10 @@ def _provider(
     normalized_daily = [
         _campaign(row, provider, label)
         for row in (daily_rows or [])
+    ]
+    normalized_dimensions = [
+        _campaign(row, provider, label)
+        for row in (reporting_dimension_rows or [])
     ]
 
     account_id = (
@@ -184,6 +192,7 @@ def _provider(
         "summary": aggregate(rows),
         "campaigns": rows,
         "dailyCampaignPerformance": normalized_daily,
+        "reportingDimensions": normalized_dimensions,
     }
 
 
@@ -308,6 +317,14 @@ def reporting_snapshot(uid: str) -> dict[str, Any]:
         uid,
         account_id=meta_connection.get("selectedAdAccountId"),
     )
+    google_dimensions = list_google_reporting_dimensions(
+        uid,
+        account_id=google_connection.get("selectedCustomerId"),
+    )
+    meta_dimensions = list_meta_reporting_dimensions(
+        uid,
+        account_id=meta_connection.get("selectedAdAccountId"),
+    )
 
     return {
         "googleAds": _provider(
@@ -315,12 +332,14 @@ def reporting_snapshot(uid: str) -> dict[str, Any]:
             "google_ads",
             "Google Ads",
             google_daily,
+            google_dimensions,
         ),
         "metaAds": _provider(
             meta_connection,
             "meta_ads",
             "Meta Ads",
             meta_daily,
+            meta_dimensions,
         ),
         "libraryPerformance": _library(uid),
         "learning": {

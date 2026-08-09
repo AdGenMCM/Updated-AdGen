@@ -1035,3 +1035,24 @@
     border-radius: 10px;
   }
 }
+
+
+.reports-split-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(59, 130, 246, 0.14);
+  border-radius: 9px;
+  color: #93a4bd;
+  background: rgba(37, 99, 235, 0.05);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.reports-split-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #60a5fa;
+}

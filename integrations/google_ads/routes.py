@@ -13,6 +13,7 @@ from .service import (
     list_accessible_customers,
     fetch_campaign_summary,
     fetch_daily_campaign_history,
+    fetch_reporting_dimensions,
     fetch_creative_assets,
 )
 from .store import (
@@ -24,6 +25,7 @@ from .store import (
     save_selected_customer,
     save_sync_summary,
     save_daily_campaign_performance,
+    save_reporting_dimensions,
 )
 
 
@@ -320,6 +322,39 @@ def sync_google_ads(
             synced_at=synced_at,
         )
 
+        dimension_row_count = 0
+        dimension_warnings: list[str] = []
+        try:
+            dimension_report = fetch_reporting_dimensions(
+                user["uid"],
+                customer_id=customer_id,
+                login_customer_id=connection.get("loginCustomerId"),
+                date_range=normalized_range,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            dimension_rows = dimension_report.get("rows") or []
+            save_reporting_dimensions(
+                user["uid"],
+                account_id=customer_id,
+                rows=dimension_rows,
+                synced_at=synced_at,
+            )
+            dimension_row_count = len(dimension_rows)
+            dimension_warnings = dimension_report.get("warnings") or []
+        except Exception as dimension_exc:
+            # Reports dimensions are additive. Never break the stable Google
+            # campaign sync if one provider dimension is unavailable.
+            print(
+                "GOOGLE ADS REPORTING DIMENSION SYNC WARNING:",
+                repr(dimension_exc),
+                flush=True,
+            )
+            dimension_warnings = [
+                "Detailed reporting dimensions could not be refreshed. "
+                "Campaign reporting still completed."
+            ]
+
         return {
             "ok": True,
             "lastSyncAt": synced_at,
@@ -327,6 +362,8 @@ def sync_google_ads(
             "dailyHistoryRowCount": len(
                 daily_report.get("dailyCampaignPerformance") or []
             ),
+            "reportingDimensionRowCount": dimension_row_count,
+            "reportingDimensionWarnings": dimension_warnings,
             **report,
         }
     except RuntimeError as exc:

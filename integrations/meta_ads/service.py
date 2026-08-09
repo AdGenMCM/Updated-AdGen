@@ -745,6 +745,144 @@ CREATIVE_FIELDS = ",".join(
 )
 
 
+def fetch_reporting_dimensions(
+    uid: str,
+    *,
+    date_range: str = "LAST_30_DAYS",
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """
+    Fetch Reports-only Meta dimension rows.
+
+    Each dimension is requested independently so an unsupported breakdown does
+    not block the normal campaign or creative sync.
+    """
+    access_token = _access_token_for(uid)
+    account_id, _connection = _selected_account_for(uid)
+    insight_date_params, normalized_range = _insight_date_params(
+        date_range,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    def collect(
+        dimension_type: str,
+        *,
+        level: str,
+        fields: str,
+        breakdowns: str | None = None,
+    ) -> None:
+        params: dict[str, Any] = {
+            "level": level,
+            **insight_date_params,
+            "time_increment": 1,
+            "fields": fields,
+            "limit": 100,
+        }
+        if breakdowns:
+            params["breakdowns"] = breakdowns
+
+        try:
+            items = _paged_rows(
+                f"{account_id}/insights",
+                access_token=access_token,
+                params=params,
+                max_rows=20000,
+            )
+        except requests.HTTPError as exc:
+            message = f"{dimension_type.replace('_', ' ').title()} reporting was unavailable."
+            if exc.response is not None:
+                try:
+                    api_message = ((exc.response.json() or {}).get("error") or {}).get("message")
+                    if api_message:
+                        message = f"{message} {api_message}"
+                except Exception:
+                    pass
+            warnings.append(message)
+            return
+
+        for item in items:
+            base = _insight_row(item)
+            base["dimensionType"] = dimension_type
+            base["provider"] = "meta_ads"
+
+            if dimension_type == "ad_group":
+                base["adGroupId"] = str(item.get("adset_id") or "")
+                base["adGroupName"] = (
+                    item.get("adset_name")
+                    or f"Ad Set {base['adGroupId']}"
+                )
+            elif dimension_type == "creative":
+                base["adGroupId"] = str(item.get("adset_id") or "")
+                base["adGroupName"] = item.get("adset_name")
+                base["creativeId"] = str(item.get("ad_id") or "")
+                base["creativeName"] = (
+                    item.get("ad_name")
+                    or f"Ad {base['creativeId']}"
+                )
+            elif dimension_type == "device":
+                base["device"] = (
+                    str(item.get("impression_device") or "Unknown")
+                    .replace("_", " ")
+                    .title()
+                )
+            elif dimension_type == "country":
+                base["country"] = item.get("country") or "Unknown"
+            elif dimension_type == "placement":
+                publisher = str(item.get("publisher_platform") or "").strip()
+                position = str(item.get("platform_position") or "").strip()
+                parts = [
+                    value.replace("_", " ").title()
+                    for value in (publisher, position)
+                    if value
+                ]
+                base["placement"] = " · ".join(parts) or "Unknown placement"
+
+            rows.append(base)
+
+    collect(
+        "ad_group",
+        level="adset",
+        fields=ADSET_INSIGHT_FIELDS,
+    )
+    collect(
+        "creative",
+        level="ad",
+        fields=AD_INSIGHT_FIELDS,
+    )
+    collect(
+        "device",
+        level="campaign",
+        fields=INSIGHT_FIELDS,
+        breakdowns="impression_device",
+    )
+    collect(
+        "country",
+        level="campaign",
+        fields=INSIGHT_FIELDS,
+        breakdowns="country",
+    )
+    collect(
+        "placement",
+        level="campaign",
+        fields=INSIGHT_FIELDS,
+        breakdowns="publisher_platform,platform_position",
+    )
+
+    return {
+        "ok": True,
+        "dateRange": normalized_range,
+        "rows": rows,
+        "rowCount": len(rows),
+        "warnings": warnings,
+    }
+
+
+
 def _first_text(items: Any) -> str | None:
     for item in items or []:
         if isinstance(item, dict):

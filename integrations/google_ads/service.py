@@ -681,6 +681,292 @@ def _asset_row(
     return item
 
 
+
+def _reporting_metric_values(metrics: dict[str, Any]) -> dict[str, Any]:
+    impressions = int(metrics.get("impressions") or 0)
+    clicks = int(metrics.get("clicks") or 0)
+    spend = round(float(metrics.get("costMicros") or 0) / 1_000_000, 2)
+    conversions = round(float(metrics.get("conversions") or 0), 2)
+    conversion_value = round(float(metrics.get("conversionsValue") or 0), 2)
+    return {
+        "impressions": impressions,
+        "clicks": clicks,
+        "spend": spend,
+        "conversions": conversions,
+        "conversionValue": conversion_value,
+    }
+
+
+def _google_country_names(
+    *,
+    customer_id: str,
+    access_token: str,
+    login_customer_id: str | None,
+    country_ids: set[str],
+) -> dict[str, str]:
+    clean_ids = sorted({
+        str(value).strip()
+        for value in country_ids
+        if str(value or "").strip().isdigit()
+    })
+    if not clean_ids:
+        return {}
+
+    names: dict[str, str] = {}
+    for start in range(0, len(clean_ids), 100):
+        chunk = clean_ids[start:start + 100]
+        query = f"""
+            SELECT
+              geo_target_constant.id,
+              geo_target_constant.name,
+              geo_target_constant.country_code
+            FROM geo_target_constant
+            WHERE geo_target_constant.id IN ({",".join(chunk)})
+        """.strip()
+        try:
+            rows = _search(
+                customer_id=customer_id,
+                access_token=access_token,
+                query=query,
+                login_customer_id=login_customer_id,
+            )
+        except requests.HTTPError:
+            continue
+
+        for row in rows:
+            geo = row.get("geoTargetConstant") or {}
+            geo_id = str(geo.get("id") or "")
+            if not geo_id:
+                continue
+            names[geo_id] = (
+                geo.get("name")
+                or geo.get("countryCode")
+                or f"Country {geo_id}"
+            )
+    return names
+
+
+def fetch_reporting_dimensions(
+    uid: str,
+    *,
+    customer_id: str,
+    login_customer_id: str | None = None,
+    date_range: str = "LAST_30_DAYS",
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """
+    Fetch dimension-specific rows used only by the Reports workspace.
+
+    The existing campaign summary and daily campaign-history syncs remain
+    unchanged. These rows are additive and prevent report grouping from
+    falling back to "Not available" for supported provider dimensions.
+    """
+    settings = get_settings()
+    if not settings.developer_token:
+        raise RuntimeError("Google Ads developer token is not configured yet.")
+
+    clean_customer_id = _clean_customer_id(customer_id)
+    if not clean_customer_id:
+        raise RuntimeError("A Google Ads customer account must be selected.")
+
+    credentials = _credentials_for(uid)
+    date_condition, normalized_range = _date_condition(
+        date_range,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    base_metrics = """
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.conversions_value
+    """.strip()
+
+    specs = [
+        (
+            "ad_group",
+            f"""
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  ad_group.id,
+                  ad_group.name,
+                  segments.date,
+                  {base_metrics}
+                FROM ad_group
+                WHERE {date_condition}
+                  AND ad_group.status != 'REMOVED'
+            """.strip(),
+        ),
+        (
+            "creative",
+            f"""
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  ad_group.id,
+                  ad_group.name,
+                  ad_group_ad.ad.id,
+                  ad_group_ad.ad.name,
+                  segments.date,
+                  {base_metrics}
+                FROM ad_group_ad
+                WHERE {date_condition}
+                  AND ad_group_ad.status != 'REMOVED'
+            """.strip(),
+        ),
+        (
+            "device",
+            f"""
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  segments.device,
+                  segments.date,
+                  {base_metrics}
+                FROM campaign
+                WHERE {date_condition}
+            """.strip(),
+        ),
+        (
+            "country",
+            f"""
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  geographic_view.country_criterion_id,
+                  segments.date,
+                  {base_metrics}
+                FROM geographic_view
+                WHERE {date_condition}
+            """.strip(),
+        ),
+        (
+            "placement",
+            f"""
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  ad_group.id,
+                  ad_group.name,
+                  detail_placement_view.target_url,
+                  detail_placement_view.placement_type,
+                  segments.date,
+                  {base_metrics}
+                FROM detail_placement_view
+                WHERE {date_condition}
+            """.strip(),
+        ),
+    ]
+
+    dimension_rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    pending_country_rows: list[dict[str, Any]] = []
+    country_ids: set[str] = set()
+
+    for dimension_type, query in specs:
+        try:
+            rows = _search(
+                customer_id=clean_customer_id,
+                access_token=credentials.token,
+                query=query,
+                login_customer_id=login_customer_id,
+            )
+        except requests.HTTPError as exc:
+            detail = ""
+            if exc.response is not None:
+                detail = (exc.response.text or "")[:300]
+            warnings.append(
+                f"{dimension_type.replace('_', ' ').title()} reporting was unavailable."
+                + (f" {detail}" if detail else "")
+            )
+            continue
+
+        for raw in rows:
+            campaign = raw.get("campaign") or {}
+            ad_group = raw.get("adGroup") or {}
+            ad_group_ad = raw.get("adGroupAd") or {}
+            ad = ad_group_ad.get("ad") or {}
+            segments = raw.get("segments") or {}
+            metrics = raw.get("metrics") or {}
+            geo = raw.get("geographicView") or {}
+            placement = raw.get("detailPlacementView") or {}
+
+            row = {
+                "dimensionType": dimension_type,
+                "provider": "google_ads",
+                "campaignId": str(campaign.get("id") or ""),
+                "campaignName": campaign.get("name") or "Untitled campaign",
+                "date": segments.get("date"),
+                "reportDate": segments.get("date"),
+                **_reporting_metric_values(metrics),
+            }
+
+            if dimension_type == "ad_group":
+                row["adGroupId"] = str(ad_group.get("id") or "")
+                row["adGroupName"] = (
+                    ad_group.get("name")
+                    or f"Ad Group {row['adGroupId']}"
+                )
+            elif dimension_type == "creative":
+                row["adGroupId"] = str(ad_group.get("id") or "")
+                row["adGroupName"] = ad_group.get("name")
+                row["creativeId"] = str(ad.get("id") or "")
+                row["creativeName"] = (
+                    ad.get("name")
+                    or f"Ad {row['creativeId']}"
+                )
+            elif dimension_type == "device":
+                row["device"] = (
+                    str(segments.get("device") or "Unknown")
+                    .replace("_", " ")
+                    .title()
+                )
+            elif dimension_type == "country":
+                country_id = str(geo.get("countryCriterionId") or "")
+                row["countryCriterionId"] = country_id
+                country_ids.add(country_id)
+                pending_country_rows.append(row)
+                continue
+            elif dimension_type == "placement":
+                row["adGroupId"] = str(ad_group.get("id") or "")
+                row["adGroupName"] = ad_group.get("name")
+                row["placement"] = (
+                    placement.get("targetUrl")
+                    or str(placement.get("placementType") or "")
+                    .replace("_", " ")
+                    .title()
+                    or "Unknown placement"
+                )
+
+            dimension_rows.append(row)
+
+    if pending_country_rows:
+        country_names = _google_country_names(
+            customer_id=clean_customer_id,
+            access_token=credentials.token,
+            login_customer_id=login_customer_id,
+            country_ids=country_ids,
+        )
+        for row in pending_country_rows:
+            country_id = str(row.get("countryCriterionId") or "")
+            row["country"] = (
+                country_names.get(country_id)
+                or (f"Country {country_id}" if country_id else "Unknown country")
+            )
+            dimension_rows.append(row)
+
+    return {
+        "ok": True,
+        "dateRange": normalized_range,
+        "rows": dimension_rows,
+        "rowCount": len(dimension_rows),
+        "warnings": warnings,
+    }
+
 def fetch_creative_assets(
     uid: str,
     *,
@@ -690,16 +976,34 @@ def fetch_creative_assets(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> list[dict[str, Any]]:
+    """
+    Fetch linked Google Ads creative assets plus performance when available.
+
+    Important:
+    - Performance views can omit newly linked assets that have not served yet.
+    - ADGen still needs those assets to appear in Campaign/Creative Intelligence.
+    - We therefore run the normal performance queries first, then run lightweight
+      structural linkage queries without a date/metrics requirement and add any
+      missing linked assets with zero performance.
+
+    Performance Intelligence can still qualify assets using its existing
+    delivery thresholds; this only prevents valid image/video assets from
+    disappearing before they accumulate metrics.
+    """
     settings = get_settings()
     if not settings.developer_token:
         raise RuntimeError("Google Ads developer token is not configured yet.")
+
+    clean_customer_id = _clean_customer_id(customer_id)
+    if not clean_customer_id:
+        raise RuntimeError("A Google Ads customer account must be selected.")
 
     credentials = _credentials_for(uid)
     date_condition, _normalized_range = _date_condition(
         date_range, start_date=start_date, end_date=end_date
     )
     metadata = _asset_metadata(
-        customer_id=customer_id,
+        customer_id=clean_customer_id,
         access_token=credentials.token,
         login_customer_id=login_customer_id,
     )
@@ -707,7 +1011,68 @@ def fetch_creative_assets(
     assets: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str, str]] = set()
 
-    queries = [
+    def add_asset_from_row(
+        *,
+        source: str,
+        row: dict[str, Any],
+        metrics: dict[str, Any] | None = None,
+    ) -> None:
+        campaign = row.get("campaign") or {}
+        ad_group = row.get("adGroup") or {}
+        asset_group = row.get("assetGroup") or {}
+        ad_group_ad = row.get("adGroupAd") or {}
+        ad = ad_group_ad.get("ad") or {}
+
+        if source == "ad_group_ad_asset_view":
+            link = row.get("adGroupAdAssetView") or {}
+        elif source == "campaign_asset":
+            link = row.get("campaignAsset") or {}
+        elif source == "ad_group_asset":
+            link = row.get("adGroupAsset") or {}
+        else:
+            link = row.get("assetGroupAsset") or {}
+
+        asset_resource = link.get("asset")
+        if not asset_resource:
+            return
+
+        field_type = link.get("fieldType")
+        performance_label = link.get("performanceLabel")
+        campaign_id = str(campaign.get("id") or "")
+        association_id = str(
+            ad.get("id")
+            or asset_group.get("id")
+            or ad_group.get("id")
+            or ""
+        )
+
+        key = (
+            campaign_id,
+            asset_resource,
+            source,
+            association_id,
+        )
+        if key in seen:
+            return
+        seen.add(key)
+
+        assets.append(
+            _asset_row(
+                asset_resource=asset_resource,
+                metadata=metadata,
+                campaign=campaign,
+                field_type=field_type,
+                performance_label=performance_label,
+                source=source,
+                metrics=metrics or {},
+                ad_id=str(ad.get("id") or "") or None,
+                ad_group_id=str(ad_group.get("id") or "") or None,
+                asset_group_id=str(asset_group.get("id") or "") or None,
+            )
+        )
+
+    # First: performance-bearing queries for the requested date range.
+    performance_queries = [
         (
             "ad_group_ad_asset_view",
             f"""
@@ -784,75 +1149,134 @@ def fetch_creative_assets(
         ),
     ]
 
-    for source, query in queries:
+    for source, query in performance_queries:
         try:
             rows = _search(
-                customer_id=customer_id,
+                customer_id=clean_customer_id,
                 access_token=credentials.token,
                 query=query,
                 login_customer_id=login_customer_id,
             )
         except requests.HTTPError as exc:
             print(
-                f"GOOGLE ADS ASSET QUERY SKIPPED source={source}:",
-                exc.response.text[:500] if exc.response is not None else repr(exc),
+                f"GOOGLE ADS ASSET PERFORMANCE QUERY SKIPPED source={source}:",
+                exc.response.text[:500]
+                if exc.response is not None
+                else repr(exc),
                 flush=True,
             )
             continue
 
         for row in rows:
-            campaign = row.get("campaign") or {}
-            metrics = row.get("metrics") or {}
-            ad_group = row.get("adGroup") or {}
-            asset_group = row.get("assetGroup") or {}
-            ad_group_ad = row.get("adGroupAd") or {}
-            ad = ad_group_ad.get("ad") or {}
-
-            if source == "ad_group_ad_asset_view":
-                link = row.get("adGroupAdAssetView") or {}
-            elif source == "campaign_asset":
-                link = row.get("campaignAsset") or {}
-            elif source == "ad_group_asset":
-                link = row.get("adGroupAsset") or {}
-            else:
-                link = row.get("assetGroupAsset") or {}
-
-            asset_resource = link.get("asset")
-            if not asset_resource:
-                continue
-
-            field_type = link.get("fieldType")
-            performance_label = link.get("performanceLabel")
-            campaign_id = str(campaign.get("id") or "")
-            key = (
-                campaign_id,
-                asset_resource,
-                source,
-                str(ad.get("id") or asset_group.get("id") or ad_group.get("id") or ""),
+            add_asset_from_row(
+                source=source,
+                row=row,
+                metrics=row.get("metrics") or {},
             )
-            if key in seen:
-                continue
-            seen.add(key)
 
-            assets.append(
-                _asset_row(
-                    asset_resource=asset_resource,
-                    metadata=metadata,
-                    campaign=campaign,
-                    field_type=field_type,
-                    performance_label=performance_label,
-                    source=source,
-                    metrics=metrics,
-                    ad_id=str(ad.get("id") or "") or None,
-                    ad_group_id=str(ad_group.get("id") or "") or None,
-                    asset_group_id=str(asset_group.get("id") or "") or None,
-                )
+    # Second: structural linkage fallback.
+    #
+    # A valid asset can be attached to a campaign/ad group but have no delivery
+    # yet. Date-segmented performance queries can therefore return no row for it.
+    # These queries intentionally omit metrics and date filters so ADGen can
+    # still surface the attached creative immediately.
+    structural_queries = [
+        (
+            "ad_group_ad_asset_view",
+            """
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  ad_group.id,
+                  ad_group_ad.ad.id,
+                  ad_group_ad_asset_view.asset,
+                  ad_group_ad_asset_view.field_type,
+                  ad_group_ad_asset_view.performance_label
+                FROM ad_group_ad_asset_view
+            """.strip(),
+        ),
+        (
+            "campaign_asset",
+            """
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  campaign_asset.asset,
+                  campaign_asset.field_type,
+                  campaign_asset.status
+                FROM campaign_asset
+                WHERE campaign_asset.status != 'REMOVED'
+            """.strip(),
+        ),
+        (
+            "ad_group_asset",
+            """
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  ad_group.id,
+                  ad_group_asset.asset,
+                  ad_group_asset.field_type,
+                  ad_group_asset.status
+                FROM ad_group_asset
+                WHERE ad_group_asset.status != 'REMOVED'
+            """.strip(),
+        ),
+        (
+            "asset_group_asset",
+            """
+                SELECT
+                  campaign.id,
+                  campaign.name,
+                  asset_group.id,
+                  asset_group_asset.asset,
+                  asset_group_asset.field_type,
+                  asset_group_asset.status
+                FROM asset_group_asset
+                WHERE asset_group_asset.status != 'REMOVED'
+            """.strip(),
+        ),
+    ]
+
+    for source, query in structural_queries:
+        try:
+            rows = _search(
+                customer_id=clean_customer_id,
+                access_token=credentials.token,
+                query=query,
+                login_customer_id=login_customer_id,
+            )
+        except requests.HTTPError as exc:
+            print(
+                f"GOOGLE ADS ASSET LINK QUERY SKIPPED source={source}:",
+                exc.response.text[:500]
+                if exc.response is not None
+                else repr(exc),
+                flush=True,
+            )
+            continue
+
+        added_before = len(assets)
+        for row in rows:
+            add_asset_from_row(
+                source=source,
+                row=row,
+                metrics={},
+            )
+
+        added_count = len(assets) - added_before
+        if added_count:
+            print(
+                f"GOOGLE ADS ASSET LINK FALLBACK source={source} "
+                f"added={added_count}",
+                flush=True,
             )
 
     assets.sort(
         key=lambda item: (
             float(item.get("spend") or 0),
             int(item.get("impressions") or 0),
+            1 if item.get("assetType") == "IMAGE" else 0,
         ),
         reverse=True,
     )
