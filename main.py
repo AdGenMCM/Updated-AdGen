@@ -1295,13 +1295,84 @@ ACTIVE_IMAGE_GENERATION_STATUSES = {
     "processing",
 }
 
+# Prevent interrupted Render deploys/process restarts from leaving a progress
+# document that blocks the Image Generator or Optimizer image generation forever.
+# This is intentionally conservative: normal image jobs should complete well
+# before this threshold, while genuinely active jobs continue to block duplicates.
+IMAGE_STALE_JOB_SECONDS = max(
+    300,
+    int(os.getenv("IMAGE_STALE_JOB_SECONDS", "900")),
+)
+
+
+def _recover_stale_image_progress_job(
+    snap,
+    *,
+    now: int,
+    stale_after_seconds: int,
+    error_message: str,
+) -> bool:
+    """
+    Mark an abandoned image progress job as failed when it has had no progress
+    activity for the configured stale window.
+
+    Returns True only when the job was recovered and should no longer block
+    a new generation.
+    """
+    data = snap.to_dict() or {}
+    status = str(data.get("status") or "").strip().lower()
+
+    if status not in ACTIVE_IMAGE_GENERATION_STATUSES:
+        return False
+
+    created_at = int(data.get("createdAt") or 0)
+    updated_at = int(data.get("updatedAt") or 0)
+    last_activity_at = max(created_at, updated_at)
+
+    if not last_activity_at:
+        age_seconds = stale_after_seconds + 1
+    else:
+        age_seconds = max(0, now - last_activity_at)
+
+    if age_seconds < stale_after_seconds:
+        return False
+
+    snap.reference.set(
+        {
+            "status": "failed",
+            "error": error_message,
+            "progressStage": "failed",
+            "progressMessage": error_message,
+            "progressPercent": 100,
+            "staleRecovery": True,
+            "staleRecoveredAt": now,
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+
+    print(
+        "IMAGE STALE JOB RECOVERY:",
+        {
+            "jobId": snap.id,
+            "status": status,
+            "ageSeconds": age_seconds,
+            "staleAfterSeconds": stale_after_seconds,
+        },
+        flush=True,
+    )
+    return True
+
 
 def require_no_active_image_generation(db, uid: str) -> None:
     """
     Prevent one user from starting multiple image generations at the same time.
 
     Checks progress-job collections, not the completed Library collection.
+    Stale interrupted progress records are marked failed so they cannot block
+    the Image Generator or Optimizer image generation indefinitely.
     """
+    now = int(time.time())
 
     # Regular Ad Generator image jobs
     for snap in (
@@ -1313,11 +1384,25 @@ def require_no_active_image_generation(db, uid: str) -> None:
         data = snap.to_dict() or {}
         status = str(data.get("status") or "").strip().lower()
 
-        if status in ACTIVE_IMAGE_GENERATION_STATUSES:
-            raise HTTPException(
-                status_code=429,
-                detail="You already have an image generation in progress.",
-            )
+        if status not in ACTIVE_IMAGE_GENERATION_STATUSES:
+            continue
+
+        recovered = _recover_stale_image_progress_job(
+            snap,
+            now=now,
+            stale_after_seconds=IMAGE_STALE_JOB_SECONDS,
+            error_message=(
+                "The previous image generation was interrupted before it "
+                "completed. Please try again."
+            ),
+        )
+        if recovered:
+            continue
+
+        raise HTTPException(
+            status_code=429,
+            detail="You already have an image generation in progress.",
+        )
 
     # Optimizer-generated image jobs
     for snap in (
@@ -1332,13 +1417,27 @@ def require_no_active_image_generation(db, uid: str) -> None:
         status = str(data.get("status") or "").strip().lower()
 
         if (
-            job_type == "optimizer_generation"
-            and status in ACTIVE_IMAGE_GENERATION_STATUSES
+            job_type != "optimizer_generation"
+            or status not in ACTIVE_IMAGE_GENERATION_STATUSES
         ):
-            raise HTTPException(
-                status_code=429,
-                detail="You already have an image generation in progress.",
-            )
+            continue
+
+        recovered = _recover_stale_image_progress_job(
+            snap,
+            now=now,
+            stale_after_seconds=IMAGE_STALE_JOB_SECONDS,
+            error_message=(
+                "The previous optimized image generation was interrupted before "
+                "it completed. Please try again."
+            ),
+        )
+        if recovered:
+            continue
+
+        raise HTTPException(
+            status_code=429,
+            detail="You already have an image generation in progress.",
+        )
 
 
 # ---------------- Helpers ----------------

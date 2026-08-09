@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import time
 import uuid
+import re
 import tempfile
 import subprocess
 from typing import Optional, Literal, Dict, Any, List
@@ -67,6 +68,7 @@ from performance_intelligence.service import (
 VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "10"))
 
 RUNWAY_PROMPT_LIMIT = 1000
+RUNWAY_PROMPT_TARGET = 800
 RUNWAY_IMAGE_MOTION_MAX = 400
 RUNWAY_DESCRIPTION_MAX = 400
 RUNWAY_FULL_DIRECTION_MAX = 300
@@ -170,6 +172,101 @@ def set_video_progress(job_ref, stage: str, **extra) -> None:
     payload.update(extra)
     payload["progressUpdatedAt"] = int(time.time())
     job_ref.update(payload)
+
+
+async def reconcile_active_video_jobs(db, uid: str) -> None:
+    """
+    Best-effort reconciliation before a new submission.
+
+    This closes provider-accepted jobs that have already FAILED/CANCELED and
+    advances SUCCEEDED jobs into finalization even if the original browser
+    stopped polling. Genuinely active provider jobs remain active and will
+    still be blocked by require_no_active_video_job().
+    """
+    for snap in db.collection("video_jobs").where("uid", "==", uid).limit(25).stream():
+        job = snap.to_dict() or {}
+        status = str(job.get("status") or "").lower()
+        if status not in {"queued", "running", "pending", "processing", "throttled"}:
+            continue
+
+        task_id = str(job.get("runwayVideoTaskId") or "").strip()
+        if not task_id:
+            continue
+
+        try:
+            task = await get_task(task_id)
+        except Exception as exc:
+            print(
+                "[Video Active Job Reconcile Poll Error]",
+                f"uid={uid}",
+                f"job_id={snap.id}",
+                repr(exc),
+                flush=True,
+            )
+            # Fail closed: if provider status cannot be confirmed, leave the
+            # job active so a duplicate paid generation cannot be started.
+            continue
+
+        provider_status = str(task.get("status") or "").upper()
+
+        if provider_status in {"FAILED", "CANCELED"}:
+            refund_succeeded = refund_video_usage_once(
+                db,
+                snap.reference,
+                uid,
+                reason="stale_provider_generation_failure",
+            )
+            provider_error = (
+                task.get("failure")
+                or task.get("error")
+                or task.get("failureReason")
+                or "The video task could not be completed."
+            )
+            public_error = public_video_generation_error(
+                RuntimeError(str(provider_error)),
+                credits_refunded=bool(refund_succeeded),
+            )
+            snap.reference.update({
+                "status": "failed",
+                "error": public_error,
+                "providerFailureCode": task.get("failureCode") or task.get("failure_code"),
+                "providerFailureReason": str(provider_error)[:1000],
+                "providerTaskStatus": provider_status,
+                "staleRecovery": True,
+                "staleRecoveredAt": int(time.time()),
+                **progress_payload("failed"),
+                "progressUpdatedAt": int(time.time()),
+            })
+            print(
+                "[Video Active Job Reconciled]",
+                f"uid={uid}",
+                f"job_id={snap.id}",
+                f"provider_status={provider_status}",
+                f"credits_refunded={refund_succeeded}",
+                flush=True,
+            )
+            continue
+
+        if provider_status == "SUCCEEDED":
+            latest = snap.reference.get().to_dict() or job
+            finalization_state = latest.get("finalizationState")
+            if finalization_state not in {"running", "complete"}:
+                set_video_progress(
+                    snap.reference,
+                    "processing_video",
+                    finalizationState="running",
+                    staleRecovery=True,
+                    staleRecoveredAt=int(time.time()),
+                )
+                asyncio.create_task(finalize_video_job(snap.id, uid))
+                print(
+                    "[Video Active Job Reconciled]",
+                    f"uid={uid}",
+                    f"job_id={snap.id}",
+                    "provider_status=SUCCEEDED",
+                    "action=finalization_started",
+                    flush=True,
+                )
 
 # -----------------------------
 # Video plan gating + caps
@@ -518,6 +615,7 @@ class StartPromptVideoRequest(BaseModel):
     lightingStyle: Optional[str] = Field(default=None, max_length=60)
     pace: Optional[str] = Field(default=None, max_length=60)
     callToAction: Optional[str] = Field(default=None, max_length=160)
+    controlOverrides: Optional[List[str]] = None
     fullCreativeDirection: Optional[str] = Field(
         default=None,
         max_length=RUNWAY_FULL_DIRECTION_MAX,
@@ -578,18 +676,35 @@ class TTSPreviewResponse(BaseModel):
 
 
 def trim_video_prompt(text: str, max_length: int = 1000) -> str:
+    """
+    Normalize and trim a video prompt without ending on a partial sentence.
+
+    If trimming is required, prefer the last complete sentence that fits.
+    Fall back to a clean word boundary only when no sentence boundary exists.
+    """
     cleaned = " ".join((text or "").split())
 
     if len(cleaned) <= max_length:
         return cleaned
 
-    shortened = cleaned[: max_length - 1].rsplit(" ", 1)[0]
+    candidate = cleaned[:max_length].rstrip()
+
+    sentence_end = max(
+        candidate.rfind("."),
+        candidate.rfind("!"),
+        candidate.rfind("?"),
+    )
+
+    if sentence_end >= max(80, int(max_length * 0.55)):
+        return candidate[: sentence_end + 1].strip()
+
+    shortened = candidate.rsplit(" ", 1)[0]
     return shortened.rstrip(" ,;:-") + "."
 
 GOAL_PROMPTS = {
     "conversions": (
-        "Prioritize product clarity, offer visibility, purchase intent, "
-        "and a decisive sales-oriented ending."
+        "Prioritize product clarity, purchase intent, and a decisive "
+        "sales-oriented ending."
     ),
     "leads": (
         "Prioritize trust, credibility, clarity, and a strong reason "
@@ -608,7 +723,8 @@ GOAL_PROMPTS = {
 
 HOOK_STYLE_PROMPTS = {
     "bold claim": (
-        "Open with an immediate, visually bold product statement."
+        "Make the opening visually bold without overriding any explicit "
+        "opening shot or camera sequence requested by the user."
     ),
     "question": (
         "Open with a curiosity-driven visual that creates an unanswered question."
@@ -630,25 +746,24 @@ HOOK_STYLE_PROMPTS = {
 
 SCENE_STYLE_PROMPTS = {
     "studio product": (
-        "Use a polished studio-commercial treatment only when compatible with "
-        "the user's requested environment. Never replace an explicitly requested "
-        "location, living subject, or scene with a studio setup."
+        "Use polished commercial cinematography while preserving any explicitly "
+        "requested environment or location."
     ),
     "lifestyle": (
-        "Use an authentic aspirational lifestyle treatment while preserving the "
-        "user's requested subject, environment, and actions."
+        "Use an authentic aspirational lifestyle treatment without changing the "
+        "requested subject, environment, or action."
     ),
     "ugc": (
-        "Use a natural creator-style social-video treatment while preserving the "
-        "user's requested subject, environment, and actions."
+        "Use a natural creator-style treatment without changing the requested "
+        "subject, environment, or action."
     ),
     "cinematic": (
-        "Use a cinematic treatment with rich depth while preserving the user's "
-        "requested subject, environment, and actions."
+        "Use cinematic depth and movement while preserving the user's requested "
+        "subject, environment, and actions."
     ),
     "minimal abstract": (
-        "Use a minimal abstract treatment only when compatible with the user's "
-        "requested environment. Do not replace an explicitly requested scene."
+        "Use a minimal treatment only when compatible with the explicitly "
+        "requested scene and environment."
     ),
 }
 
@@ -676,12 +791,104 @@ def _sentence(value: Optional[str]) -> str:
     cleaned = (value or "").strip().rstrip(" .!?;:")
     return f"{cleaned}." if cleaned else ""
 
+def _hex_to_video_color_name(value: Any) -> str:
+    """
+    Convert an exact Brand Kit hex color into a concise visual color name for
+    video prompting. The stored Brand Kit value is never modified.
+
+    Raw hex strings are intentionally kept out of video prompts because video
+    models may render them as visible lettering on the generated product.
+    """
+    raw = str(value or "").strip()
+    match = re.fullmatch(r"#?([0-9a-fA-F]{6})", raw)
+    if not match:
+        return ""
+
+    hex_value = match.group(1)
+    r = int(hex_value[0:2], 16)
+    g = int(hex_value[2:4], 16)
+    b = int(hex_value[4:6], 16)
+
+    max_c = max(r, g, b)
+    min_c = min(r, g, b)
+    spread = max_c - min_c
+    brightness = (max_c + min_c) / 2
+
+    # Near-neutral colors first.
+    if spread <= 18:
+        if brightness >= 242:
+            return "white"
+        if brightness >= 205:
+            return "light gray"
+        if brightness >= 145:
+            return "medium gray"
+        if brightness >= 80:
+            return "charcoal gray"
+        if brightness >= 28:
+            return "dark charcoal"
+        return "black"
+
+    # Convert RGB to a simple hue family without adding another dependency.
+    r1, g1, b1 = r / 255.0, g / 255.0, b / 255.0
+    mx, mn = max(r1, g1, b1), min(r1, g1, b1)
+    delta = mx - mn
+
+    if delta == 0:
+        hue = 0.0
+    elif mx == r1:
+        hue = (60 * (((g1 - b1) / delta) % 6)) % 360
+    elif mx == g1:
+        hue = 60 * (((b1 - r1) / delta) + 2)
+    else:
+        hue = 60 * (((r1 - g1) / delta) + 4)
+
+    if hue < 15 or hue >= 345:
+        family = "red"
+    elif hue < 40:
+        family = "orange"
+    elif hue < 65:
+        family = "golden yellow"
+    elif hue < 90:
+        family = "yellow green"
+    elif hue < 155:
+        family = "green"
+    elif hue < 190:
+        family = "teal"
+    elif hue < 215:
+        family = "cyan blue"
+    elif hue < 255:
+        family = "blue"
+    elif hue < 285:
+        family = "violet"
+    elif hue < 325:
+        family = "purple"
+    else:
+        family = "magenta"
+
+    saturation = 0.0 if mx == 0 else delta / mx
+
+    if brightness < 72:
+        modifier = "deep "
+    elif brightness > 205 and saturation < 0.55:
+        modifier = "soft "
+    elif saturation > 0.72:
+        modifier = "vivid "
+    else:
+        modifier = ""
+
+    return f"{modifier}{family}".strip()
+
+
 def compile_video_brand_direction(
     brand_kit: Optional[Dict[str, Any]]
 ) -> str:
     """
-    Compiles only the most useful visual Brand Kit details into
-    one short Runway-friendly instruction.
+    Compiles only the most useful visual Brand Kit details into one short
+    video-friendly instruction.
+
+    Exact Brand Kit hex values remain stored unchanged. For video prompting
+    only, they are translated into visual color names so the model is not given
+    literal hex strings that it could render as text.
     """
     if not brand_kit:
         return ""
@@ -704,11 +911,11 @@ def compile_video_brand_direction(
         colors.get("accent"),
     ]
 
-    color_values = [
-        str(value).strip()
-        for value in color_values
-        if value and str(value).strip()
-    ]
+    color_names: List[str] = []
+    for value in color_values:
+        name = _hex_to_video_color_name(value)
+        if name and name not in color_names:
+            color_names.append(name)
 
     parts: List[str] = []
 
@@ -718,10 +925,11 @@ def compile_video_brand_direction(
     if visual_style:
         parts.append(f"{visual_style} visual style")
 
-    if color_values:
+    if color_names:
         parts.append(
-            "naturally use brand colors "
-            + ", ".join(color_values[:3])
+            "use a "
+            + ", ".join(color_names[:3])
+            + " color palette where naturally appropriate"
         )
 
     if not parts:
@@ -732,44 +940,88 @@ def compile_video_brand_direction(
         RUNWAY_BRAND_BUDGET,
     )
 
+
+def _control_override_set(req: StartPromptVideoRequest) -> set[str]:
+    return {
+        str(value).strip()
+        for value in (req.controlOverrides or [])
+        if str(value).strip()
+    }
+
+
+def _prompt_has_any(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in markers)
+
+
+def _prompt_has_explicit_camera(text: str) -> bool:
+    return _prompt_has_any(text, (
+        "camera", "close-up", "close up", "pull back", "push in", "pan ",
+        "tilt ", "orbit", "zoom", "rise", "track ", "tracking shot",
+        "dolly", "overhead", "wide shot", "low-angle", "low angle",
+        "high-angle", "high angle", "hero shot", "handheld",
+    ))
+
+
+def _prompt_has_explicit_lighting(text: str) -> bool:
+    return _prompt_has_any(text, (
+        "lighting", "light ", "lights", "sunlight", "sunrise", "sunset",
+        "golden hour", "moonlight", "neon", "glowing", "backlit",
+        "backlight", "rim light", "bright ", "dark ", "night", "daylight",
+        "shadows", "high contrast", "soft light", "candlelight",
+    ))
+
+
+def _prompt_has_explicit_pace(text: str) -> bool:
+    return _prompt_has_any(text, (
+        "slowly", "slow ", "fast ", "quick ", "quickly", "rapid", "rapidly",
+        "energetic", "gentle", "smoothly", "deliberate", "calm", "elegant",
+        "cinematic pacing", "fast cuts", "quick cuts",
+    ))
+
+
+def _prompt_has_explicit_scene(text: str) -> bool:
+    return _prompt_has_any(text, (
+        "studio", "street", "city", "lake", "mountain", "beach", "forest",
+        "office", "kitchen", "bathroom", "bedroom", "gym", "restaurant",
+        "cafe", "café", "store", "storefront", "warehouse", "garden",
+        "pond", "home", "outdoors", "outdoor", "indoors", "interior",
+        "exterior", "lifestyle", "ugc", "cinematic", "minimal", "abstract",
+    ))
+
+
+def _prompt_has_explicit_opening(text: str) -> bool:
+    return _prompt_has_any(text, (
+        "start ", "start with", "begin ", "begin with", "open ", "open with",
+        "first shot", "opening shot",
+    ))
+
 def build_director_prompt(
     req: StartPromptVideoRequest,
     brand_kit_context: str = "",
 ) -> str:
     """
-    Compiles the user's structured inputs into a concise,
-    cinematography-focused Runway prompt while preserving room
-    for Brand Kit and Performance Intelligence guidance.
+    Build a concise prompt-to-video instruction with explicit user intent first.
 
-    Prompt hierarchy:
-    - The user's requested subject, environment, actions, and story are the
-      source of truth.
-    - Structured controls influence cinematography and advertising treatment
-      only when compatible with that request.
-    - Living subjects must not be reinterpreted as products, sculptures,
-      statues, toys, packaging, or display objects unless explicitly requested.
+    Priority:
+    1. Manually changed workspace controls.
+    2. Explicit written directions in the user's prompt.
+    3. Untouched workspace defaults.
+    4. Generic ADGen commercial guidance.
     """
-
     parts: List[str] = []
-
-    parts.append(
-        "The user's requested subject, environment, actions, and story are the "
-        "source of truth. Preserve them faithfully. Structured creative controls "
-        "below may influence cinematography, lighting, pacing, and commercial "
-        "treatment only when compatible; they must never replace the requested "
-        "subject, environment, or action."
-    )
+    overrides = _control_override_set(req)
 
     product_description = trim_video_prompt(
         req.description,
         RUNWAY_DESCRIPTION_MAX,
     )
+
     parts.append(
-        _sentence(
-            f"Create a premium commercial for {req.productName}. "
-            f"{product_description}"
-        )
+        "The user's requested subject, environment, actions, and explicit camera "
+        "sequence are the source of truth. Preserve them faithfully."
     )
+    parts.append(_sentence(product_description))
 
     goal_direction = GOAL_PROMPTS.get(
         (req.goal or "").strip().lower(),
@@ -782,60 +1034,92 @@ def build_director_prompt(
         (req.hookStyle or "").strip().lower(),
         "",
     )
-    if hook_direction:
+    if hook_direction and (
+        "hookStyle" in overrides
+        or not _prompt_has_explicit_opening(product_description)
+    ):
         parts.append(hook_direction)
 
     scene_direction = SCENE_STYLE_PROMPTS.get(
         (req.sceneStyle or "").strip().lower(),
         "",
     )
-    if scene_direction:
+    if scene_direction and (
+        "sceneStyle" in overrides
+        or not _prompt_has_explicit_scene(product_description)
+    ):
         parts.append(scene_direction)
 
     camera_direction = CAMERA_MOTION_PROMPTS.get(
         (req.cameraMotion or "").strip().lower(),
         "",
     )
-    if camera_direction:
+    if camera_direction and (
+        "cameraMotion" in overrides
+        or not _prompt_has_explicit_camera(product_description)
+    ):
         parts.append(camera_direction)
 
     lighting_direction = LIGHTING_PROMPTS.get(
         (req.lightingStyle or "").strip().lower(),
         "",
     )
-    if lighting_direction:
+    if lighting_direction and (
+        "lightingStyle" in overrides
+        or not _prompt_has_explicit_lighting(product_description)
+    ):
         parts.append(lighting_direction)
 
     pace_direction = PACE_PROMPTS.get(
         (req.pace or "").strip().lower(),
         "",
     )
-    if pace_direction:
+    if pace_direction and (
+        "pace" in overrides
+        or not _prompt_has_explicit_pace(product_description)
+    ):
         parts.append(pace_direction)
 
     if req.tone:
         parts.append(
             _sentence(
-                f"Visual tone: {trim_video_prompt(req.tone, 80)}"
+                f"Visual tone: {trim_video_prompt(req.tone, 60)}"
             )
         )
 
-    parts.append(
-        "Preserve the requested subject and environment faithfully. "
-        "Use photorealistic materials and anatomy where appropriate, stable "
-        "geometry, clean commercial framing, smooth physically believable "
-        "motion, and end on a clean hero view of the primary subject."
-    )
-    parts.append(
-        "Do not reinterpret a living subject as a statue, sculpture, toy, "
-        "package, display object, or product prop unless the user explicitly "
-        "requests that. Do not replace an explicitly requested location or "
-        "environment with a studio backdrop."
-    )
-    parts.append(
-        "Avoid jitter, flicker, warping, morphing, duplicate objects, "
-        "random lettering, captions, subtitles, and floating graphics."
-    )
+    if req.offer:
+        parts.append(
+            "Visually support the promotional offer without inventing or "
+            "rendering new written offer text."
+        )
+
+    if req.callToAction:
+        parts.append(
+            "Finish with a clean visual moment suitable for adding the CTA "
+            "in post-production."
+        )
+
+    if req.fullCreativeDirection:
+        parts.append(
+            _sentence(
+                "Creative direction: "
+                + trim_video_prompt(
+                    req.fullCreativeDirection,
+                    RUNWAY_FULL_DIRECTION_MAX,
+                )
+            )
+        )
+
+    if req.userPrompt:
+        parts.append(
+            _sentence(
+                "Additional direction: "
+                + trim_video_prompt(
+                    req.userPrompt,
+                    RUNWAY_EXTRA_DIRECTION_MAX,
+                )
+            )
+        )
 
     if brand_kit_context:
         parts.append(
@@ -845,43 +1129,26 @@ def build_director_prompt(
             )
         )
 
-    if req.fullCreativeDirection:
-        compact_direction = trim_video_prompt(
-            req.fullCreativeDirection,
-            RUNWAY_FULL_DIRECTION_MAX,
-        )
-        parts.append(
-            _sentence(
-                f"Creative direction: {compact_direction}"
-            )
-        )
-
-    if req.userPrompt:
-        compact_extra = trim_video_prompt(
-            req.userPrompt,
-            RUNWAY_EXTRA_DIRECTION_MAX,
-        )
-        parts.append(
-            _sentence(
-                f"Additional direction: {compact_extra}"
-            )
-        )
-
-    if req.offer:
-        parts.append(
-            "Visually communicate a clear promotional opportunity "
-            "without generating written offer text."
-        )
-
-    if req.callToAction:
-        parts.append(
-            "End with a decisive visual action moment suitable for "
-            "adding a call to action in post-production."
-        )
+    parts.append(
+        "Keep the primary subject visually consistent. Use photorealistic "
+        "commercial cinematography, stable geometry, natural continuity, and "
+        "smooth physically believable motion."
+    )
+    parts.append(
+        "Do not replace the requested location or reinterpret a living subject "
+        "as a statue, toy, mannequin, package, or display object."
+    )
+    parts.append(
+        "Avoid jitter, flicker, warping, morphing, duplicate objects, captions, "
+        "subtitles, random lettering, and floating graphics."
+    )
 
     prompt = " ".join(part for part in parts if part)
 
-    return trim_video_prompt(prompt, RUNWAY_PROMPT_LIMIT)
+    return trim_video_prompt(
+        prompt,
+        min(RUNWAY_PROMPT_TARGET, RUNWAY_PROMPT_LIMIT),
+    )
 
 def build_image_director_prompt(
     req: StartImageVideoRequest,
@@ -1035,8 +1302,10 @@ def compose_runway_prompt(
     guidance_budget: int = RUNWAY_INTELLIGENCE_BUDGET,
 ) -> str:
     """
-    Reserve a fixed budget for learned guidance before combining it with the
-    main prompt. The final string is always at most max_chars characters.
+    Add learned guidance without sacrificing the user's core creative request.
+
+    The base prompt is already kept below the hard provider limit. Guidance is
+    appended only within the remaining room.
     """
     base = " ".join((base_prompt or "").split())
     guidance = trim_video_prompt(
@@ -1047,8 +1316,14 @@ def compose_runway_prompt(
     if not guidance:
         return trim_video_prompt(base, max_chars)
 
-    base_budget = max(1, max_chars - len(guidance) - 1)
-    base = trim_video_prompt(base, base_budget)
+    remaining = max_chars - len(base) - 1
+    if remaining <= 40:
+        return trim_video_prompt(base, max_chars)
+
+    guidance = trim_video_prompt(
+        guidance,
+        min(guidance_budget, remaining),
+    )
     return trim_video_prompt(
         f"{base} {guidance}",
         max_chars,
@@ -1163,6 +1438,7 @@ async def start_image_video(
     )
 
     require_active_account(user_doc)
+    await reconcile_active_video_jobs(db, uid)
     require_no_active_video_job(db, uid)
 
     moderation_result = await moderate_video_request(
@@ -1609,6 +1885,7 @@ async def start_prompt_video(
     )
 
     require_active_account(user_doc)
+    await reconcile_active_video_jobs(db, uid)
     require_no_active_video_job(db, uid)
 
     moderation_result = await moderate_video_request(
@@ -1746,6 +2023,19 @@ async def start_prompt_video(
         guidance_budget=RUNWAY_INTELLIGENCE_BUDGET,
     )
 
+    print(
+        "[Director Control Resolution]",
+        {
+            "overrides": req.controlOverrides or [],
+            "cameraInPrompt": _prompt_has_explicit_camera(req.description),
+            "lightingInPrompt": _prompt_has_explicit_lighting(req.description),
+            "paceInPrompt": _prompt_has_explicit_pace(req.description),
+            "sceneInPrompt": _prompt_has_explicit_scene(req.description),
+            "openingInPrompt": _prompt_has_explicit_opening(req.description),
+        },
+        flush=True,
+    )
+
     if len(director_prompt) > 800:
         print(
             "[Director Prompt Warning] "
@@ -1803,6 +2093,7 @@ async def start_prompt_video(
         "lightingStyle": req.lightingStyle,
         "pace": req.pace,
         "callToAction": req.callToAction,
+        "controlOverrides": req.controlOverrides or [],
         "fullCreativeDirection": (
             req.fullCreativeDirection
             or None

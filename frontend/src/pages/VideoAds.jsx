@@ -271,6 +271,13 @@ export default function VideoAds() {
   const [callToAction, setCallToAction] = useState("");
   const [fullCreativeDirection, setFullCreativeDirection] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
+  const [controlOverrides, setControlOverrides] = useState([]);
+
+  const markControlOverride = (field) => {
+    setControlOverrides((current) =>
+      current.includes(field) ? current : [...current, field]
+    );
+  };
 
   // ========== Voiceover ==========
   const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -456,6 +463,15 @@ export default function VideoAds() {
     setVoiceoverScript(values.voiceoverScript);
     setFullCreativeDirection("");
     setUserPrompt("");
+    setControlOverrides([
+      "goal",
+      "tone",
+      "hookStyle",
+      "sceneStyle",
+      "cameraMotion",
+      "lightingStyle",
+      "pace",
+    ]);
     moveToWorkspaceSection(videoSettingsSectionRef);
   };
 
@@ -480,6 +496,7 @@ export default function VideoAds() {
     setVoiceoverScript("");
     setFullCreativeDirection("");
     setUserPrompt("");
+    setControlOverrides([]);
     moveToWorkspaceSection(firstWorkspaceSectionRef);
   };
 
@@ -892,6 +909,7 @@ export default function VideoAds() {
         lightingStyle,
         pace,
         callToAction,
+        controlOverrides,
         fullCreativeDirection: quickMode
           ? null
           : fullCreativeDirection || null,
@@ -1143,6 +1161,7 @@ return (
                 setDuration(6);
                 setVoiceEnabled(false);
                 setVoiceoverScript("");
+                setControlOverrides([]);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               disabled={isGenerating}
@@ -1248,7 +1267,10 @@ return (
                 <label>Goal</label>
                 <select
                   value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
+                  onChange={(e) => {
+                    setGoal(e.target.value);
+                    markControlOverride("goal");
+                  }}
                   disabled={isGenerating}
                 >
                   <option value="conversions">Sales / Conversions</option>
@@ -1262,7 +1284,10 @@ return (
                 <label>Visual Style</label>
                 <select
                   value={sceneStyle}
-                  onChange={(e) => setSceneStyle(e.target.value)}
+                  onChange={(e) => {
+                    setSceneStyle(e.target.value);
+                    markControlOverride("sceneStyle");
+                  }}
                   disabled={isGenerating}
                 >
                   <option value="studio product">Product Showcase</option>
@@ -2020,7 +2045,7 @@ return (
                     Goal
                     <InfoTip text="Choose whether the video should focus on sales, leads, traffic, or awareness." />
                   </label>
-                  <select value={goal} onChange={(e) => setGoal(e.target.value)} disabled={isGenerating}>
+                  <select value={goal} onChange={(e) => { setGoal(e.target.value); markControlOverride("goal"); }} disabled={isGenerating}>
                     <option value="conversions">Conversions</option>
                     <option value="leads">Leads</option>
                     <option value="traffic">Traffic</option>
@@ -2033,7 +2058,7 @@ return (
                     Tone
                     <InfoTip text="Controls the personality of the commercial." />
                   </label>
-                  <input value={tone} onChange={(e) => setTone(e.target.value)} disabled={isGenerating} />
+                  <input value={tone} onChange={(e) => { setTone(e.target.value); markControlOverride("tone"); }} disabled={isGenerating} />
                 </div>
               </div>
               <div className="grid2">
@@ -2042,7 +2067,7 @@ return (
                     Hook Style
                     <InfoTip text="Determines how the video captures attention during the first few seconds." />
                   </label>
-                  <select value={hookStyle} onChange={(e) => setHookStyle(e.target.value)} disabled={isGenerating}>
+                  <select value={hookStyle} onChange={(e) => { setHookStyle(e.target.value); markControlOverride("hookStyle"); }} disabled={isGenerating}>
                     <option value="bold claim">Bold claim</option>
                     <option value="question">Question</option>
                     <option value="problem solution">Problem → Solution</option>
@@ -2056,7 +2081,7 @@ return (
                     Pace
                     <InfoTip text="Controls the speed and rhythm of the edit." />
                   </label>
-                  <select value={pace} onChange={(e) => setPace(e.target.value)} disabled={isGenerating}>
+                  <select value={pace} onChange={(e) => { setPace(e.target.value); markControlOverride("pace"); }} disabled={isGenerating}>
                     <option value="fast">Fast (scroll-stopping)</option>
                     <option value="medium">Medium</option>
                     <option value="slow cinematic">Slow / cinematic</option>
@@ -2070,7 +2095,7 @@ return (
                     Scene Style
                     <InfoTip text="Defines the overall visual style of the commercial." />
                   </label>
-                  <select value={sceneStyle} onChange={(e) => setSceneStyle(e.target.value)} disabled={isGenerating}>
+                  <select value={sceneStyle} onChange={(e) => { setSceneStyle(e.target.value); markControlOverride("sceneStyle"); }} disabled={isGenerating}>
                     <option value="studio product">Studio product</option>
                     <option value="lifestyle">Lifestyle</option>
                     <option value="ugc">UGC style</option>
@@ -2084,7 +2109,7 @@ return (
                     Camera Motion
                     <InfoTip text="Controls how the virtual camera moves through the scene." />
                   </label>
-                  <select value={cameraMotion} onChange={(e) => setCameraMotion(e.target.value)} disabled={isGenerating}>
+                  <select value={cameraMotion} onChange={(e) => { setCameraMotion(e.target.value); markControlOverride("cameraMotion"); }} disabled={isGenerating}>
                     <option value="none">None</option>
                     <option value="subtle">Subtle</option>
                     <option value="dynamic">Dynamic</option>
@@ -2099,7 +2124,7 @@ return (
                     Lighting
                     <InfoTip text="Sets the lighting mood for the generated video." />
                   </label>
-                  <select value={lightingStyle} onChange={(e) => setLightingStyle(e.target.value)} disabled={isGenerating}>
+                  <select value={lightingStyle} onChange={(e) => { setLightingStyle(e.target.value); markControlOverride("lightingStyle"); }} disabled={isGenerating}>
                     <option value="bright clean">Bright / clean</option>
                     <option value="natural">Natural</option>
                     <option value="dramatic">Dramatic</option>

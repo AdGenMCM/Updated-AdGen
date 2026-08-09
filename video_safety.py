@@ -26,6 +26,10 @@ VIDEO_USER_DAILY_SUBMISSION_LIMIT = max(
     int(os.getenv("VIDEO_USER_DAILY_SUBMISSION_LIMIT", "0")),
 )
 VIDEO_POLICY_VIOLATION_LIMIT = max(1, int(os.getenv("VIDEO_POLICY_VIOLATION_LIMIT", "2")))
+VIDEO_STALE_PRE_PROVIDER_SECONDS = max(
+    60,
+    int(os.getenv("VIDEO_STALE_PRE_PROVIDER_SECONDS", "300")),
+)
 
 RUNWAY_DAILY_SPEND_LIMIT_USD = max(0.0, float(os.getenv("RUNWAY_DAILY_SPEND_LIMIT_USD", "25")))
 RUNWAY_COST_PER_SECOND_USD = max(0.0, float(os.getenv("RUNWAY_COST_PER_SECOND_USD", "0.12")))
@@ -116,17 +120,61 @@ def require_active_account(user_doc: Dict[str, Any]) -> None:
 
 
 def require_no_active_video_job(db, uid: str) -> None:
+    """
+    Block duplicate paid video submissions without allowing an abandoned
+    pre-provider Firestore job to lock the user forever.
+
+    Jobs that already have a provider video task ID remain blocking here.
+    Their provider state is reconciled by video_jobs before this guard runs.
+    """
+    now = int(time.time())
     active = 0
+
     # Filter by UID only to avoid requiring a new composite Firestore index.
     for snap in db.collection("video_jobs").where("uid", "==", uid).limit(25).stream():
         data = snap.to_dict() or {}
-        if str(data.get("status") or "").lower() in ACTIVE_VIDEO_STATUSES:
-            active += 1
-            if active >= VIDEO_MAX_ACTIVE_JOBS_PER_USER:
-                raise HTTPException(
-                    status_code=429,
-                    detail="You already have a video generation in progress.",
-                )
+        status = str(data.get("status") or "").lower()
+        if status not in ACTIVE_VIDEO_STATUSES:
+            continue
+
+        provider_task_id = str(data.get("runwayVideoTaskId") or "").strip()
+        created_at = int(data.get("createdAt") or 0)
+        progress_updated_at = int(data.get("progressUpdatedAt") or 0)
+        last_activity_at = max(created_at, progress_updated_at)
+        age_seconds = (now - last_activity_at) if last_activity_at else VIDEO_STALE_PRE_PROVIDER_SECONDS + 1
+
+        # A job that never reached the paid provider should not permanently
+        # block the account after an interrupted request/deploy/browser session.
+        if not provider_task_id and age_seconds >= VIDEO_STALE_PRE_PROVIDER_SECONDS:
+            snap.reference.update({
+                "status": "failed",
+                "error": (
+                    "The previous video request was interrupted before generation "
+                    "started. Please try again."
+                ),
+                "staleRecovery": True,
+                "staleRecoveredAt": now,
+                "progressStage": "failed",
+                "progressPercent": 100,
+                "progressMessage": "Video generation failed.",
+                "progressUpdatedAt": now,
+            })
+            print(
+                "[Video Stale Job Recovery]",
+                f"uid={uid}",
+                f"job_id={snap.id}",
+                "provider_task_id=missing",
+                f"age_seconds={age_seconds}",
+                flush=True,
+            )
+            continue
+
+        active += 1
+        if active >= VIDEO_MAX_ACTIVE_JOBS_PER_USER:
+            raise HTTPException(
+                status_code=429,
+                detail="You already have a video generation in progress.",
+            )
 
 
 def enforce_user_submission_window(db, uid: str) -> None:
