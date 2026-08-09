@@ -21,7 +21,7 @@ from fastapi import (
     BackgroundTasks,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from openai import OpenAI
 import base64
 
@@ -57,7 +57,7 @@ import traceback
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google.cloud import firestore as gc_firestore
 from usage_caps import peek_usage, get_tier_and_status
 
@@ -394,9 +394,10 @@ class AdRequest(BaseModel):
     offer: Optional[str] = None
 
     # Optional exact creative copy controls
-    headline: Optional[str] = None
-    primary_text: Optional[str] = None
-    cta: Optional[str] = None
+    # Normalized image creative limits: 50 headline / 150 body / 25 CTA.
+    headline: Optional[str] = Field(default=None, max_length=50)
+    primary_text: Optional[str] = Field(default=None, max_length=150)
+    cta: Optional[str] = Field(default=None, max_length=25)
 
     goal: Optional[str] = None
     stylePreset: Optional[str] = None
@@ -429,9 +430,11 @@ class UploadCreativesResponse(BaseModel):
 
 
 class GenerateFromOptimizerRequest(BaseModel):
-    improved_headline: str
-    improved_primary_text: str
-    improved_cta: str
+    # Keep Optimizer-generated image copy on the same normalized limits
+    # as the standard Image Generator.
+    improved_headline: str = Field(max_length=50)
+    improved_primary_text: str = Field(max_length=150)
+    improved_cta: str = Field(max_length=25)
     improved_image_prompt: str
     imageSize: str = "1024x1024"
     useBrandKit: bool = True
@@ -2038,7 +2041,7 @@ def inject_performance_intelligence_image(
     )
     if headline_length is not None:
         try:
-            target = max(1, min(35, round(float(headline_length))))
+            target = max(1, min(50, round(float(headline_length))))
             constraints.append(
                 f"Aim for a headline near {target} characters."
             )
@@ -3480,9 +3483,9 @@ async def generate_ad(
     platform = (payload.platform or "Instagram").strip()[:40]
     offer = (payload.offer or "").strip()[:80]
 
-    requested_headline = (payload.headline or "").strip()[:35]
-    requested_primary_text = (payload.primary_text or "").strip()[:100]
-    requested_cta = (payload.cta or "").strip()[:20]
+    requested_headline = (payload.headline or "").strip()[:50]
+    requested_primary_text = (payload.primary_text or "").strip()[:150]
+    requested_cta = (payload.cta or "").strip()[:25]
 
     goal = (payload.goal or "Sales").strip()[:30]
     style = (payload.stylePreset or "Minimal").strip()[:30]
@@ -3560,9 +3563,9 @@ COPY PRESERVATION RULES:
 - Generate only the copy fields that were left blank.
 
 Return one JSON object with:
-- headline: string (<= 35 chars)
-- primary_text: string (<= 100 chars)
-- cta: string (<= 20 chars)
+- headline: string (<= 50 chars)
+- primary_text: string (<= 150 chars)
+- cta: string (<= 25 chars)
 - hooks: array of 3 short strings (each <= 8 words)
 - variants: array of 3 objects, each with headline, primary_text, cta
 
@@ -3872,8 +3875,8 @@ It should be visually impressive enough to appear in a professional design portf
             obj = _extract_json_object(raw)
             if not obj or "headline" not in obj:
                 return {
-                    "headline": product_name or "Ad Headline",
-                    "primary_text": raw[:250],
+                    "headline": (product_name or "Ad Headline")[:50],
+                    "primary_text": raw[:150],
                     "cta": "Learn More",
                     "hooks": [],
                     "variants": [],
@@ -3890,17 +3893,38 @@ It should be visually impressive enough to appear in a professional design portf
             else:
                 obj["headline"] = str(
                     obj.get("headline") or product_name or "Ad Headline"
-                ).strip()[:35]
+                ).strip()[:50]
 
             if requested_primary_text:
                 obj["primary_text"] = requested_primary_text
             else:
-                obj["primary_text"] = str(obj.get("primary_text") or "").strip()[:100]
+                obj["primary_text"] = str(obj.get("primary_text") or "").strip()[:150]
 
             if requested_cta:
                 obj["cta"] = requested_cta
             else:
-                obj["cta"] = str(obj.get("cta") or "Learn More").strip()[:20]
+                obj["cta"] = str(obj.get("cta") or "Learn More").strip()[:25]
+
+            raw_variants = obj.get("variants")
+            normalized_variants = []
+            if isinstance(raw_variants, list):
+                for variant in raw_variants[:3]:
+                    if not isinstance(variant, dict):
+                        continue
+                    normalized_variants.append(
+                        {
+                            "headline": str(
+                                variant.get("headline") or obj["headline"]
+                            ).strip()[:50],
+                            "primary_text": str(
+                                variant.get("primary_text") or obj["primary_text"]
+                            ).strip()[:150],
+                            "cta": str(
+                                variant.get("cta") or obj["cta"]
+                            ).strip()[:25],
+                        }
+                    )
+            obj["variants"] = normalized_variants
 
             return obj
         except Exception as exc:
@@ -4374,8 +4398,9 @@ ANALYSIS RULES:
 - Never invent historical winner data or expected lift percentages.
 - Do not make unsupported claims or guarantees.
 - If Brand Kit data exists, evaluate consistency against only the supplied fields.
-- improved_headline must be 40 characters or fewer.
+- improved_headline must be 50 characters or fewer.
 - improved_primary_text must be 150 characters or fewer.
+- improved_cta must be 25 characters or fewer.
 - improved_cta must be one of: Shop Now, Learn More, Sign Up, Get Offer,
   Download, Contact Us, Book Now.
 - confidence must be exactly low, medium, or high.
@@ -4548,7 +4573,7 @@ confidence
 
         obj["improved_headline"] = str(
             obj.get("improved_headline") or product_name or "A Stronger Version"
-        ).strip()[:40]
+        ).strip()[:50]
 
         obj["improved_primary_text"] = str(
             obj.get("improved_primary_text")

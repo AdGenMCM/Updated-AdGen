@@ -629,11 +629,27 @@ HOOK_STYLE_PROMPTS = {
 
 
 SCENE_STYLE_PROMPTS = {
-    "studio product": "Premium studio product setting.",
-    "lifestyle": "Authentic aspirational lifestyle setting.",
-    "ugc": "Natural creator-style social video.",
-    "cinematic": "Cinematic environment with rich depth.",
-    "minimal abstract": "Minimal abstract environment with clean negative space.",
+    "studio product": (
+        "Use a polished studio-commercial treatment only when compatible with "
+        "the user's requested environment. Never replace an explicitly requested "
+        "location, living subject, or scene with a studio setup."
+    ),
+    "lifestyle": (
+        "Use an authentic aspirational lifestyle treatment while preserving the "
+        "user's requested subject, environment, and actions."
+    ),
+    "ugc": (
+        "Use a natural creator-style social-video treatment while preserving the "
+        "user's requested subject, environment, and actions."
+    ),
+    "cinematic": (
+        "Use a cinematic treatment with rich depth while preserving the user's "
+        "requested subject, environment, and actions."
+    ),
+    "minimal abstract": (
+        "Use a minimal abstract treatment only when compatible with the user's "
+        "requested environment. Do not replace an explicitly requested scene."
+    ),
 }
 
 CAMERA_MOTION_PROMPTS = {
@@ -724,11 +740,26 @@ def build_director_prompt(
     Compiles the user's structured inputs into a concise,
     cinematography-focused Runway prompt while preserving room
     for Brand Kit and Performance Intelligence guidance.
+
+    Prompt hierarchy:
+    - The user's requested subject, environment, actions, and story are the
+      source of truth.
+    - Structured controls influence cinematography and advertising treatment
+      only when compatible with that request.
+    - Living subjects must not be reinterpreted as products, sculptures,
+      statues, toys, packaging, or display objects unless explicitly requested.
     """
 
     parts: List[str] = []
 
-    # 1. Product and core request.
+    parts.append(
+        "The user's requested subject, environment, actions, and story are the "
+        "source of truth. Preserve them faithfully. Structured creative controls "
+        "below may influence cinematography, lighting, pacing, and commercial "
+        "treatment only when compatible; they must never replace the requested "
+        "subject, environment, or action."
+    )
+
     product_description = trim_video_prompt(
         req.description,
         RUNWAY_DESCRIPTION_MAX,
@@ -740,7 +771,6 @@ def build_director_prompt(
         )
     )
 
-    # 2. Goal and opening hook.
     goal_direction = GOAL_PROMPTS.get(
         (req.goal or "").strip().lower(),
         "",
@@ -755,7 +785,6 @@ def build_director_prompt(
     if hook_direction:
         parts.append(hook_direction)
 
-    # 3. Visible production choices.
     scene_direction = SCENE_STYLE_PROMPTS.get(
         (req.sceneStyle or "").strip().lower(),
         "",
@@ -791,18 +820,23 @@ def build_director_prompt(
             )
         )
 
-    # 4. Preserve critical output-quality safeguards before optional direction.
     parts.append(
-        "Use photorealistic materials, stable product geometry, "
-        "clean commercial framing, smooth physical motion, and end "
-        "on a clean hero view of the product."
+        "Preserve the requested subject and environment faithfully. "
+        "Use photorealistic materials and anatomy where appropriate, stable "
+        "geometry, clean commercial framing, smooth physically believable "
+        "motion, and end on a clean hero view of the primary subject."
+    )
+    parts.append(
+        "Do not reinterpret a living subject as a statue, sculpture, toy, "
+        "package, display object, or product prop unless the user explicitly "
+        "requests that. Do not replace an explicitly requested location or "
+        "environment with a studio backdrop."
     )
     parts.append(
         "Avoid jitter, flicker, warping, morphing, duplicate objects, "
         "random lettering, captions, subtitles, and floating graphics."
     )
 
-    # 5. Compact Brand Kit direction.
     if brand_kit_context:
         parts.append(
             trim_video_prompt(
@@ -811,7 +845,6 @@ def build_director_prompt(
             )
         )
 
-    # 6. Optional user refinements receive explicit budgets.
     if req.fullCreativeDirection:
         compact_direction = trim_video_prompt(
             req.fullCreativeDirection,
@@ -834,8 +867,6 @@ def build_director_prompt(
             )
         )
 
-    # Offer and CTA are translated into visual intent because Runway
-    # should not be asked to render exact promotional lettering.
     if req.offer:
         parts.append(
             "Visually communicate a clear promotional opportunity "
@@ -858,14 +889,24 @@ def build_image_director_prompt(
 ) -> str:
     """
     Compiles a concise image-to-video motion prompt.
-    The uploaded image remains the source of truth.
+
+    Prompt hierarchy:
+    - The supplied image is the visual source of truth.
+    - Preserve its subject, environment, branding, colors, composition,
+      proportions, packaging, labels, and overall visual identity.
+    - The user's promptText controls motion, camera behavior, and action only;
+      it must not replace or redesign the source image unless explicitly requested.
+    - Brand Kit and Performance Intelligence guidance may influence treatment
+      only when compatible with the source image.
     """
 
     parts: List[str] = [
         (
-            "Animate the supplied image as a premium commercial shot. "
-            "Preserve the original subject, product, branding, colors, "
-            "composition, proportions, packaging, labels, and scene."
+            "The supplied image is the visual source of truth. Preserve its "
+            "subject, environment, branding, colors, composition, proportions, "
+            "packaging, labels, and overall visual identity. Do not replace the "
+            "scene, redesign the subject, or introduce a different environment "
+            "unless the user explicitly requests that."
         )
     ]
 
@@ -873,33 +914,50 @@ def build_image_director_prompt(
 
     if user_direction:
         parts.append(
-            _sentence(f"Motion direction: {user_direction}")
+            _sentence(
+                "Motion and action direction only: "
+                f"{user_direction}"
+            )
         )
 
     if brand_kit_context:
-        parts.append(brand_kit_context)
+        parts.append(
+            trim_video_prompt(
+                brand_kit_context,
+                RUNWAY_BRAND_BUDGET,
+            )
+        )
 
     parts.append(
-        "Use smooth restrained camera motion, realistic parallax, "
-        "natural reflections, subtle atmosphere, and physically believable movement."
+        "Animate the existing scene with smooth restrained camera motion, "
+        "realistic parallax, natural reflections, subtle atmosphere, and "
+        "physically believable movement. Preserve the identity and geometry "
+        "of the primary subject throughout the shot."
     )
 
     parts.append(
-        "Preserve all existing text and logos exactly. "
-        "Do not add, rewrite, distort, or invent lettering."
-        "End on a clean hero view of the product. "
+        "If the source contains a living subject, preserve realistic anatomy "
+        "and natural motion. Do not reinterpret a living subject as a statue, "
+        "sculpture, toy, mannequin, product prop, or display object unless the "
+        "source image or user explicitly requests that."
     )
 
     parts.append(
-        "Maintain stable geometry and textures. Avoid jitter, flicker, "
-        "warping, morphing, duplicate objects, abrupt movement, captions, "
+        "Preserve all existing text and logos exactly. Do not add, rewrite, "
+        "distort, or invent lettering. End on a clean hero view of the primary "
+        "subject while keeping the original scene recognizable."
+    )
+
+    parts.append(
+        "Maintain stable geometry, textures, lighting continuity, and scene "
+        "consistency. Avoid jitter, flicker, warping, morphing, duplicate "
+        "objects, abrupt movement, captions, subtitles, random lettering, "
         "and floating graphics."
     )
 
     prompt = " ".join(part for part in parts if part)
 
     return trim_video_prompt(prompt, RUNWAY_PROMPT_LIMIT)
-
 
 def _intelligence_values(
     profile: Optional[Dict[str, Any]],

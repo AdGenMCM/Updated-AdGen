@@ -92,9 +92,10 @@ class OptimizeAdResponse(BaseModel):
     # Existing fields remain for frontend/backward compatibility.
     likely_issues: List[str]
     recommended_changes: List[str]
-    improved_headline: str
-    improved_primary_text: str
-    improved_cta: str
+    # Normalized image creative copy contract.
+    improved_headline: str = Field(max_length=50)
+    improved_primary_text: str = Field(max_length=150)
+    improved_cta: str = Field(max_length=25)
     improved_image_prompt: str
     confidence: Confidence = "medium"
 

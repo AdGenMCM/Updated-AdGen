@@ -1435,10 +1435,10 @@ function AdGenerator() {
                   value={form.headline}
                   onChange={handleChange}
                   disabled={loading}
-                  maxLength={35}
+                  maxLength={50}
                 />
                 <small className="field-helper">
-                  {form.headline.length}/35 characters · Best results are usually under 30 characters.
+                  {form.headline.length}/50 characters · Best results are usually under 35 characters.
                 </small>
               </div>
 
@@ -1453,10 +1453,10 @@ function AdGenerator() {
                   value={form.primaryText}
                   onChange={handleChange}
                   disabled={loading}
-                  maxLength={100}
+                  maxLength={150}
                 />
                 <small className="field-helper">
-                  {form.primaryText.length}/100 characters · Shorter copy creates cleaner, more readable ads.
+                  {form.primaryText.length}/150 characters · Shorter copy creates cleaner, more readable ads.
                 </small>
               </div>
 
@@ -1471,10 +1471,10 @@ function AdGenerator() {
                   value={form.cta}
                   onChange={handleChange}
                   disabled={loading}
-                  maxLength={20}
+                  maxLength={25}
                 />
                 <small className="field-helper">
-                  {form.cta.length}/20 characters · Keep CTAs concise and action-oriented.
+                  {form.cta.length}/25 characters · Keep CTAs concise and action-oriented.
                 </small>
               </div>
             </StepSection>
