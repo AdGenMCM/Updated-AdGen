@@ -210,6 +210,32 @@ async function safeJson(res) {
   }
 }
 
+async function claimFirstGeneration(kind, jobId, token) {
+  if (!jobId || !token) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/analytics/claim-first-generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ kind, jobId }),
+    });
+
+    const data = await safeJson(response);
+    if (!response.ok || !data?.track) return;
+
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", "first_generation", {
+        generation_type: kind,
+      });
+    }
+  } catch (error) {
+    console.warn("[ADGen] First-generation analytics could not be recorded:", error);
+  }
+}
+
 // ✅ simple speech-time estimate for warn/block (rough but effective)
 function estimateSpeechSeconds(text) {
   const t = (text || "").trim();
@@ -1035,6 +1061,7 @@ export default function VideoAds() {
 
         if (data.status === "succeeded" && data.finalVideoUrl) {
           setFinalVideoUrl(data.finalVideoUrl);
+          void claimFirstGeneration("video", jobId, token);
           return;
         }
         if (data.status === "failed") {

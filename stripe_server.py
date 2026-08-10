@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import stripe
 
 from firebase_admin import firestore
+from google.cloud import firestore as gc_firestore
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
 from notification_utils import create_notification
 from customer_intelligence.event_service import track_event
@@ -95,6 +96,10 @@ _load_settings_from_env()
 class CheckoutPayload(BaseModel):
     email: Optional[str] = None
     tier: str
+
+
+class PaidPurchaseClaimPayload(BaseModel):
+    sessionId: str
 
 
 # ---------------- Helpers ----------------
@@ -442,6 +447,174 @@ def create_checkout_session(
         )
 
         return {"url": session.url}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@stripe_router.post("/analytics/claim-first-paid-purchase")
+def claim_first_paid_purchase(
+    body: PaidPurchaseClaimPayload,
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Claim the authenticated user's first successfully paid Stripe Checkout
+    subscription exactly once and return a GA4 purchase payload.
+
+    This endpoint is intentionally tied to a completed Checkout Session rather
+    than recurring invoice events, so renewals and Billing Portal plan changes
+    cannot create additional acquisition conversions.
+    """
+    try:
+        uid, _email, _claims = _require_authenticated_user(authorization)
+        session_id = str(body.sessionId or "").strip()
+
+        if not session_id:
+            raise HTTPException(status_code=400, detail="sessionId is required.")
+
+        session = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=["subscription.items.data.price"],
+        )
+
+        session_uid = (
+            session.get("client_reference_id")
+            or (session.get("metadata") or {}).get("firebase_uid")
+        )
+
+        if session_uid and session_uid != uid:
+            raise HTTPException(
+                status_code=403,
+                detail="Checkout session does not belong to this account.",
+            )
+
+        customer_id = session.get("customer")
+        if customer_id:
+            resolved_uid = _resolve_uid_for_customer(
+                get_db(),
+                customer_id,
+                expected_uid=uid,
+            )
+            if resolved_uid and resolved_uid != uid:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Checkout customer ownership could not be verified.",
+                )
+
+        if session.get("mode") != "subscription":
+            raise HTTPException(
+                status_code=409,
+                detail="Checkout session is not a subscription purchase.",
+            )
+
+        if session.get("status") != "complete" or session.get("payment_status") != "paid":
+            return {
+                "ok": True,
+                "track": False,
+                "reason": "payment_not_confirmed",
+            }
+
+        amount_total = int(session.get("amount_total") or 0)
+        if amount_total <= 0:
+            return {
+                "ok": True,
+                "track": False,
+                "reason": "no_paid_amount",
+            }
+
+        subscription = session.get("subscription") or {}
+        items = (subscription.get("items") or {}).get("data") or []
+        price_id = None
+
+        if items and items[0].get("price"):
+            price_id = items[0]["price"].get("id")
+
+        tier = (
+            price_id_to_tier(price_id)
+            or (session.get("metadata") or {}).get("requested_tier")
+        )
+        tier = str(tier or "").strip()
+
+        if not tier or tier == "free":
+            return {
+                "ok": True,
+                "track": False,
+                "reason": "not_paid_plan",
+            }
+
+        currency = str(session.get("currency") or "usd").upper()
+        value = round(amount_total / 100.0, 2)
+        subscription_id = subscription.get("id") or session.get("subscription")
+        db = get_db()
+        user_ref = db.collection("users").document(uid)
+
+        @gc_firestore.transactional
+        def _claim(transaction):
+            snap = user_ref.get(transaction=transaction)
+            user_data = snap.to_dict() or {}
+            analytics = user_data.get("analytics") or {}
+
+            if analytics.get("firstPaidPurchaseResolved"):
+                return {
+                    "track": False,
+                    "reason": "already_resolved",
+                }
+
+            transaction.set(
+                user_ref,
+                {
+                    "analytics": {
+                        "firstPaidPurchaseResolved": True,
+                        "firstPaidPurchaseTracked": True,
+                        "firstPaidPurchaseResolvedAt": firestore.SERVER_TIMESTAMP,
+                        "firstPaidPurchaseSessionId": session_id,
+                        "firstPaidPurchaseSubscriptionId": subscription_id,
+                        "firstPaidPurchaseTier": tier,
+                        "firstPaidPurchaseValue": value,
+                        "firstPaidPurchaseCurrency": currency,
+                    }
+                },
+                merge=True,
+            )
+
+            return {
+                "track": True,
+                "reason": "first_paid_purchase",
+            }
+
+        result = _claim(db.transaction())
+
+        if result.get("track"):
+            try:
+                track_event(
+                    db,
+                    uid,
+                    "subscription.first_paid",
+                    event_id=f"stripe_purchase:{session_id}",
+                    metadata={
+                        "checkoutSessionId": session_id,
+                        "customerId": customer_id,
+                        "subscriptionId": subscription_id,
+                        "tier": tier,
+                        "priceId": price_id,
+                        "value": value,
+                        "currency": currency,
+                    },
+                )
+            except Exception as exc:
+                print("FIRST PAID PURCHASE EVENT TRACK ERROR:", repr(exc))
+
+        return {
+            "ok": True,
+            **result,
+            "transactionId": session_id,
+            "value": value,
+            "currency": currency,
+            "tier": tier,
+            "planName": _tier_label(tier),
+        }
 
     except HTTPException:
         raise

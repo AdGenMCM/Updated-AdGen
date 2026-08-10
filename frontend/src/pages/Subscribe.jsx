@@ -33,6 +33,83 @@ import { trackEvent } from "../analytics/tracking";
 
 const db = getFirestore();
 
+const API_BASE = (
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:8000"
+).trim();
+
+async function waitForGtag(timeoutMs = 3000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.gtag === "function"
+    ) {
+      return true;
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+  }
+
+  return false;
+}
+
+async function claimFirstPaidPurchase(currentUser, sessionId) {
+  if (!currentUser || !sessionId || !API_BASE) return;
+
+  try {
+    // Do not permanently claim the backend event unless GA4 is actually
+    // available to receive it in this browser session.
+    const hasGtag = await waitForGtag();
+
+    if (!hasGtag) {
+      console.warn(
+        "[ADGen] Google Analytics is not ready; purchase event was not claimed."
+      );
+      return;
+    }
+
+    const token = await currentUser.getIdToken(true);
+
+    const response = await fetch(
+      `${API_BASE}/analytics/claim-first-paid-purchase`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sessionId }),
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data?.track) return;
+
+    window.gtag("event", "purchase", {
+      transaction_id: data.transactionId,
+      value: Number(data.value || 0),
+      currency: data.currency || "USD",
+      items: [
+        {
+          item_id: data.tier || "paid_subscription",
+          item_name: data.planName || "ADGen subscription",
+          price: Number(data.value || 0),
+          quantity: 1,
+        },
+      ],
+    });
+  } catch (purchaseError) {
+    // Analytics must never interrupt checkout completion or subscription access.
+    console.warn(
+      "[ADGen] Paid purchase analytics could not be recorded:",
+      purchaseError
+    );
+  }
+}
+
+
 const PLAN_OPTIONS = [
   {
     id: "free",
@@ -205,6 +282,8 @@ export default function Subscribe() {
           sessionId: sid,
           token,
         });
+
+        await claimFirstPaidPurchase(currentUser, sid);
       } finally {
         localStorage.removeItem("pending_session_id");
       }
@@ -223,6 +302,8 @@ export default function Subscribe() {
           sessionId,
           token,
         });
+
+        await claimFirstPaidPurchase(currentUser, sessionId);
       } catch (syncError) {
         console.error("sync-subscription (initial) failed:", syncError);
       } finally {

@@ -93,11 +93,13 @@ export default function MyAccount() {
   const [storageLoading, setStorageLoading] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [billingSyncing, setBillingSyncing] = useState(false);
+  const [accountAccess, setAccountAccess] = useState(null);
 
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
   const tierLabels = useMemo(
     () => ({
+      free: "Free",
       trial_monthly: "Trial",
       early_access: "Early Access",
       starter_monthly: "Starter",
@@ -154,6 +156,28 @@ export default function MyAccount() {
     if (!user) throw new Error("Not logged in.");
     return user.getIdToken();
   };
+
+  async function fetchAccountAccess() {
+    try {
+      if (!apiBase) return;
+
+      const token = await getToken();
+      const response = await fetch(`${apiBase}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await response.json().catch(() => null);
+      if (response.ok && data) {
+        setAccountAccess({
+          tier: data.tier ?? null,
+          status: data.status ?? null,
+        });
+      }
+    } catch {
+      // Non-fatal: fall back to the existing Firestore/Stripe display data.
+      setAccountAccess(null);
+    }
+  }
 
   async function fetchUsage() {
     setUsageError("");
@@ -300,6 +324,7 @@ export default function MyAccount() {
 
   const refreshUsage = async () => {
     await Promise.all([
+      fetchAccountAccess(),
       fetchUsage(),
       fetchVideoUsage(),
       fetchOptimizerUsage(),
@@ -384,17 +409,30 @@ export default function MyAccount() {
     );
   }
 
-  const status = (stripe?.status ?? "inactive").toLowerCase();
-  const tier = stripe?.tier ?? "—";
+  // Use the backend's canonical workspace tier/status for display. This keeps
+  // Free users correctly shown as Free + Active instead of treating the
+  // absence of a Stripe subscription as an inactive ADGen account.
+  const tier = accountAccess?.tier ?? stripe?.tier ?? "—";
+  const status = String(
+    accountAccess?.status ?? stripe?.status ?? "inactive"
+  ).toLowerCase();
   const requestedTier = (stripe?.requestedTier || "").trim();
   const hasRequestedTier = Boolean(requestedTier);
   const requestedLabel = tierLabels[requestedTier] || requestedTier;
   const currentLabel = tierLabels[tier] || tier;
   const statusLabel = statusLabels[status] || status;
-  const isActiveOrTrial =
+  const hasWorkspaceAccess =
     status === "active" ||
     status === "trialing" ||
     status === "past_due";
+
+  // Billing actions must remain based on Stripe itself. A Free workspace can be
+  // active without having a Stripe subscription.
+  const hasActiveStripeSubscription =
+    Boolean(stripe?.subscriptionId) &&
+    ["active", "trialing", "past_due"].includes(
+      String(stripe?.status || "").toLowerCase()
+    );
 
   const shouldShowRequestBanner =
     hasRequestedTier && requestedTier !== tier;
@@ -444,7 +482,7 @@ export default function MyAccount() {
   }
 
   const confirmRequestedTier = async () => {
-    if (isActiveOrTrial) {
+    if (hasActiveStripeSubscription) {
       await openBillingPortal();
     } else {
       navigate(`/subscribe?tier=${encodeURIComponent(requestedTier)}`);
@@ -679,7 +717,7 @@ export default function MyAccount() {
                         dismissing
                       }
                     >
-                      {isActiveOrTrial
+                      {hasActiveStripeSubscription
                         ? "Confirm in billing"
                         : "Confirm and subscribe"}
                     </button>
@@ -701,8 +739,10 @@ export default function MyAccount() {
                   <span>Current plan</span>
                   <h3>{currentLabel}</h3>
                   <p>
-                    {isActiveOrTrial
-                      ? "Your workspace has active access."
+                    {hasWorkspaceAccess
+                      ? tier === "free"
+                        ? "Your Free workspace is active."
+                        : "Your workspace has active access."
                       : "Choose a plan to activate your workspace."}
                   </p>
                 </div>

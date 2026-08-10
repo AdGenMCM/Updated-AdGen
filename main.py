@@ -425,6 +425,11 @@ class ContactForm(BaseModel):
     message: str
 
 
+class FirstGenerationClaimRequest(BaseModel):
+    kind: str
+    jobId: str
+
+
 class UploadCreativesResponse(BaseModel):
     urls: List[str]
 
@@ -474,6 +479,173 @@ class PerformanceUpdate(BaseModel):
 
     marked_successful: Optional[bool] = None
     notes: Optional[str] = None
+
+
+# ---------------- First-generation analytics ----------------
+def _generation_sort_key(kind: str, job_id: str, data: Dict[str, Any]):
+    try:
+        created_at = int(data.get("createdAt") or 0)
+    except Exception:
+        created_at = 0
+
+    # Stable ordering if two eligible jobs were created within the same second.
+    kind_rank = 0 if kind == "image" else 1
+    return (created_at, kind_rank, str(job_id))
+
+
+def _earliest_successful_generation(db, uid: str):
+    earliest = None
+
+    for kind, collection, output_field in (
+        ("image", "image_jobs", "imageUrl"),
+        ("video", "video_jobs", "finalVideoUrl"),
+    ):
+        for snap in db.collection(collection).where("uid", "==", uid).stream():
+            data = snap.to_dict() or {}
+            if str(data.get("status") or "").lower() != "succeeded":
+                continue
+            if not data.get(output_field):
+                continue
+
+            candidate = {
+                "kind": kind,
+                "jobId": snap.id,
+                "createdAt": data.get("createdAt"),
+                "trackingEligible": bool(data.get("firstGenerationTrackingEligible")),
+                "key": _generation_sort_key(kind, snap.id, data),
+            }
+            if earliest is None or candidate["key"] < earliest["key"]:
+                earliest = candidate
+
+    return earliest
+
+
+@app.post("/analytics/claim-first-generation")
+def claim_first_generation(
+    payload: FirstGenerationClaimRequest,
+    authorization: str | None = Header(default=None),
+):
+    """
+    Resolve a user's lifetime first successful Image/Video generation exactly once.
+
+    Jobs created before this tracking feature do not have
+    `firstGenerationTrackingEligible`, so existing users are safely classified as
+    historical and will never generate a false first-generation conversion later.
+    """
+    uid, _email, _claims = require_user(authorization)
+    db = get_db()
+
+    kind = str(payload.kind or "").strip().lower()
+    job_id = str(payload.jobId or "").strip()
+
+    if kind not in {"image", "video"}:
+        raise HTTPException(status_code=400, detail="kind must be 'image' or 'video'.")
+    if not job_id:
+        raise HTTPException(status_code=400, detail="jobId is required.")
+
+    collection = "image_jobs" if kind == "image" else "video_jobs"
+    output_field = "imageUrl" if kind == "image" else "finalVideoUrl"
+    job_ref = db.collection(collection).document(job_id)
+    job_snap = job_ref.get()
+
+    if not job_snap.exists:
+        raise HTTPException(status_code=404, detail="Generation job not found.")
+
+    job = job_snap.to_dict() or {}
+    if job.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    if str(job.get("status") or "").lower() != "succeeded" or not job.get(output_field):
+        raise HTTPException(status_code=409, detail="Generation is not successfully completed yet.")
+
+    earliest = _earliest_successful_generation(db, uid)
+    if earliest is None:
+        raise HTTPException(status_code=409, detail="No successful generation was found.")
+
+    current_is_earliest = (
+        earliest.get("kind") == kind
+        and earliest.get("jobId") == job_id
+    )
+    earliest_is_eligible = bool(earliest.get("trackingEligible"))
+
+    user_ref = db.collection("users").document(uid)
+
+    @gc_firestore.transactional
+    def _resolve(transaction: gc_firestore.Transaction):
+        user_snap = user_ref.get(transaction=transaction)
+        user_data = user_snap.to_dict() or {}
+        analytics = user_data.get("analytics") or {}
+
+        if analytics.get("firstGenerationResolved"):
+            return {
+                "track": False,
+                "reason": "already_resolved",
+                "firstGenerationKind": analytics.get("firstGenerationKind"),
+                "firstGenerationJobId": analytics.get("firstGenerationJobId"),
+            }
+
+        # Existing users already had a successful generation before this feature
+        # existed. Resolve them as historical so no future generation can fire it.
+        if not earliest_is_eligible:
+            now = int(time.time())
+            transaction.update(user_ref, {
+                "analytics.firstGenerationResolved": True,
+                "analytics.firstGenerationResolvedAt": now,
+                "analytics.firstGenerationKind": earliest.get("kind"),
+                "analytics.firstGenerationJobId": earliest.get("jobId"),
+                "analytics.firstGenerationCreatedAt": earliest.get("createdAt"),
+                "analytics.firstGenerationTracked": False,
+                "analytics.firstGenerationHistorical": True,
+            })
+            return {
+                "track": False,
+                "reason": "historical_generation_exists",
+                "firstGenerationKind": earliest.get("kind"),
+                "firstGenerationJobId": earliest.get("jobId"),
+            }
+
+        # If another new eligible job is actually the earliest, leave the marker
+        # unresolved. That job's success callback can still claim the event.
+        if not current_is_earliest:
+            return {
+                "track": False,
+                "reason": "waiting_for_earliest_generation",
+                "firstGenerationKind": earliest.get("kind"),
+                "firstGenerationJobId": earliest.get("jobId"),
+            }
+
+        now = int(time.time())
+        transaction.update(user_ref, {
+            "analytics.firstGenerationResolved": True,
+            "analytics.firstGenerationResolvedAt": now,
+            "analytics.firstGenerationKind": kind,
+            "analytics.firstGenerationJobId": job_id,
+            "analytics.firstGenerationCreatedAt": earliest.get("createdAt"),
+            "analytics.firstGenerationTracked": True,
+            "analytics.firstGenerationHistorical": False,
+        })
+
+        return {
+            "track": True,
+            "reason": "first_generation",
+            "firstGenerationKind": kind,
+            "firstGenerationJobId": job_id,
+        }
+
+    result = _resolve(db.transaction())
+
+    if result.get("track"):
+        try:
+            track_event(
+                db,
+                uid,
+                "generation.first_completed",
+                event_id=f"first_generation:{kind}:{job_id}",
+                metadata={"generationType": kind, "jobId": job_id},
+            )
+        except Exception as exc:
+            print("FIRST GENERATION EVENT TRACK ERROR:", repr(exc), flush=True)
+
+    return {"ok": True, **result}
 
 
 # ---------------- Generation progress jobs ----------------
@@ -4147,6 +4319,7 @@ It should be visually impressive enough to appear in a professional design portf
                     "createdAt": int(time.time()),
                     "status": "succeeded",
                     "source": "ad_generator",
+                    "firstGenerationTrackingEligible": True,
                     "productName": product_name,
                     "description": description,
                     "audience": audience,

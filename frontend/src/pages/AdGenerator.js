@@ -242,6 +242,33 @@ const IMAGE_TEMPLATES = [
 ];
 
 
+async function claimFirstGeneration(apiBase, kind, jobId, token) {
+  if (!apiBase || !jobId || !token) return;
+
+  try {
+    const response = await fetch(`${apiBase}/analytics/claim-first-generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ kind, jobId }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.track) return;
+
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", "first_generation", {
+        generation_type: kind,
+      });
+    }
+  } catch (error) {
+    console.warn("[ADGen] First-generation analytics could not be recorded:", error);
+  }
+}
+
+
 function AdGenerator() {
   const navigate = useNavigate();
   const referenceInputRef = useRef(null);
@@ -826,6 +853,10 @@ function AdGenerator() {
       }
 
       data = await pollImageJob(data.jobId, token);
+
+      if (data?.imageJobId) {
+        void claimFirstGeneration(apiBase, "image", data.imageJobId, token);
+      }
 
       if (!data?.imageUrl) {
         alert("Ad copy generated, but no image URL was returned.");
