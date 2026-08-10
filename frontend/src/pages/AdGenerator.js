@@ -8,6 +8,7 @@ import PerformanceIntelligencePreview from "../components/PerformanceIntelligenc
 import StepSection from "../components/ui/StepSection";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
+import FeatureTutorial from "../components/FeatureTutorial";
 
 
 const INITIAL_FORM = {
@@ -968,7 +969,16 @@ function AdGenerator() {
           <div className="adgen-hero">
             <div>
               <span className="adgen-kicker">AI Creative Studio</span>
-              <h1 className="app-title">Generate Ad</h1>
+              <div className="adgen-title-row">
+                <h1 className="app-title">Generate Ad</h1>
+                <FeatureTutorial
+                  feature="imageGenerator"
+                  title="Learn Image Generator in 2 minutes"
+                  description="See how to create your first image ad with Quick Create and explore the Full Creative Workspace."
+                  durationLabel="2-minute walkthrough"
+                  videoSrc="/tutorials/image-generator-demo.mp4"
+                />
+              </div>
               <p className="description">
                 Create scroll-stopping ads using your Brand Kit, reference images, and performance insights.
               </p>

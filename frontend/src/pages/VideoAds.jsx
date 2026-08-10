@@ -8,6 +8,7 @@ import InfoTip from "../components/ui/InfoTip";
 import PerformanceIntelligencePreview from "../components/PerformanceIntelligencePreview";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
+import FeatureTutorial from "../components/FeatureTutorial";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -1133,7 +1134,16 @@ return (
     <div className="videoAdsLayout">
       <main className="videoAdsMain">
         <div className="videoAdsHeader videoAdsHero">
-          <h1>Generate Video</h1>
+          <div className="videoTitleRow">
+            <h1>Generate Video</h1>
+            <FeatureTutorial
+              feature="videoGenerator"
+              title="Learn Video Generator"
+              description="See how to create a video with Quick Create, then explore image animation, voiceover, and advanced video controls."
+              durationLabel="Quick walkthrough"
+              videoSrc="/tutorials/video-generator-demo.mp4"
+            />
+          </div>
           <p>
             Create high-performing AI video advertisements from prompts or images using your Brand Kit,
             winning creative insights, and optional AI voiceover.

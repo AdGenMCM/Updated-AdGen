@@ -8,6 +8,7 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import FieldLabel from "../components/ui/FieldLabel";
+import FeatureTutorial from "../components/FeatureTutorial";
 
 const COMMON_CTAS = [
   "Shop Now",
@@ -538,11 +539,20 @@ export default function BrandKit() {
   return (
     <div className="brandkit-page">
       <div className="brandkit-shell">
-        <PageHeader
-          eyebrow="BRAND KIT"
-          title="Build your AI Brand Identity"
-          description="Upload your logo, colors, fonts, messaging, audience, and creative preferences once. AdGen uses your Brand Kit across Image Generation, Video Ads, the Optimizer, and future platform features."
-        />
+        <div className="brandkit-headerRow">
+          <PageHeader
+            eyebrow="BRAND KIT"
+            title="Build your AI Brand Identity"
+            description="Upload your logo, colors, fonts, messaging, audience, and creative preferences once. AdGen uses your Brand Kit across Image Generation, Video Ads, the Optimizer, and future platform features."
+          />
+          <FeatureTutorial
+            feature="brandKit"
+            title="Learn how Brand Kit works in under 3 minutes"
+            description="Set up your brand once and see how ADGen uses it to guide creative across the workspace."
+            durationLabel="Under 3 minutes"
+            videoSrc="/tutorials/brand-kit-demo.mp4"
+          />
+        </div>
 
         <Card className="brandkit-managerCard">
           <div className="brandkit-managerTop">

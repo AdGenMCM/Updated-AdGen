@@ -6360,6 +6360,41 @@ def clear_requested_tier(
     return {"ok": True}
 
 
+# ---------- Feature tutorial onboarding ----------
+
+_TUTORIAL_FEATURE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+@app.get("/users/me/tutorials")
+def get_my_tutorials(authorization: str | None = Header(default=None)):
+    uid, _email, _claims = require_user(authorization)
+    user_doc = get_db().collection("users").document(uid).get().to_dict() or {}
+    tutorials_seen = user_doc.get("tutorialsSeen") or {}
+    if not isinstance(tutorials_seen, dict):
+        tutorials_seen = {}
+    return {"tutorialsSeen": tutorials_seen}
+
+
+@app.post("/users/me/tutorials/{feature}/seen")
+def mark_my_tutorial_seen(
+    feature: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, _claims = require_user(authorization)
+    feature = (feature or "").strip()
+    if not _TUTORIAL_FEATURE_RE.fullmatch(feature):
+        raise HTTPException(status_code=400, detail="Invalid tutorial feature.")
+
+    get_db().collection("users").document(uid).set(
+        {
+            "tutorialsSeen": {feature: True},
+            "tutorialSeenAt": {feature: gc_firestore.SERVER_TIMESTAMP},
+        },
+        merge=True,
+    )
+    return {"ok": True, "feature": feature, "seen": True}
+
+
 # ---------- Subscription sync ----------
 
 

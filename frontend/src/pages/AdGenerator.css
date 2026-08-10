@@ -1347,3 +1347,8 @@
   }
 }
 
+
+
+/* Tutorial entry point */
+.adgen-title-row { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+@media (max-width: 720px) { .adgen-title-row { align-items:flex-start; flex-direction:column; } }

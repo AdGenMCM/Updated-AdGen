@@ -1473,3 +1473,34 @@
   }
 }
 
+
+
+/* =========================================================
+   Tutorial entry point — match Image Generator positioning
+========================================================= */
+
+.videoAds .videoTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+}
+
+/* Let the header row span the full Video Generator main column
+   so "How to use" sits at the same right-side position as Image Generator. */
+.videoAds .videoAdsHeader.videoAdsHero {
+  max-width: none;
+  width: 100%;
+}
+
+.videoAds .videoAdsHeader.videoAdsHero > p {
+  max-width: 820px;
+}
+
+@media (max-width: 720px) {
+  .videoAds .videoTitleRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -894,3 +894,10 @@
     width: 100%;
   }
 }
+
+
+/* Tutorial entry point */
+.brandkit-headerRow { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:34px; }
+.brandkit-headerRow .ui-page-header { margin-bottom:0; flex:1 1 auto; }
+.brandkit-headerRow > .featureTutorialHelpButton { margin-top:6px; flex:0 0 auto; }
+@media (max-width: 720px) { .brandkit-headerRow { flex-direction:column; } .brandkit-headerRow > .featureTutorialHelpButton { margin-top:-12px; } }
