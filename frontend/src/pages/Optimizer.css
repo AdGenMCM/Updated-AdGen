@@ -1283,3 +1283,45 @@
   }
 }
 
+
+
+/* Optimizer feedback is intentionally manual so users can read the full audit first. */
+.opt-feedbackPrompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 28px;
+  padding: 24px;
+}
+
+.opt-feedbackPrompt h3 {
+  margin: 0;
+  color: #fff;
+}
+
+.opt-feedbackPrompt p:not(.opt-miniKicker) {
+  margin: 8px 0 0;
+  color: #a8b3c7;
+  line-height: 1.55;
+}
+
+.opt-feedbackPrompt .opt-secondaryBtn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .opt-feedbackPrompt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .opt-feedbackPrompt .opt-secondaryBtn {
+    width: 100%;
+  }
+}
+
+
+.opt-resultsScrollTarget {
+  scroll-margin-top: 96px;
+}

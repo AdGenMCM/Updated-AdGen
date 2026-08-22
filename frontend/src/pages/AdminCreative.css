@@ -360,3 +360,6 @@
   .admin-creative-grid { grid-template-columns: 1fr; }
   .admin-creative-drawer footer { flex-wrap: wrap; }
 }
+
+/* Feedback + Optimizer additions */
+.admin-creative-card-badges{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}.admin-creative-rating,.admin-creative-feedback-skipped{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border-radius:999px;font-size:.72rem;font-weight:900}.admin-creative-rating{background:rgba(245,158,11,.13);color:#fbbf24}.admin-creative-feedback-skipped{background:rgba(148,163,184,.12);color:#cbd5e1}.admin-creative-optimizer-preview{min-height:220px;display:grid;place-items:center;align-content:center;gap:10px;padding:28px;text-align:center;color:#e5e7eb;background:radial-gradient(circle at top,rgba(124,58,237,.18),transparent 58%),#0b1220}.admin-creative-optimizer-preview strong{font-size:1.1rem}.admin-creative-optimizer-preview p{max-width:520px;margin:0;color:#94a3b8;line-height:1.55}

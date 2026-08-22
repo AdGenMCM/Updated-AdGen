@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css";
+import GenerationFeedback from "../components/GenerationFeedback";
 import { auth } from "../firebaseConfig";
 import InfoTip from "../components/ui/InfoTip";
 import PerformanceIntelligencePreview from "../components/PerformanceIntelligencePreview";
@@ -297,6 +298,7 @@ function AdGenerator() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uiError, setUiError] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [progress, setProgress] = useState({
     stage: "queued",
     message: "Preparing your creative request.",
@@ -863,6 +865,7 @@ function AdGenerator() {
       }
 
       setResult(data);
+      setFeedbackOpen(true);
       setHasGeneratedBefore(true);
       setImageUsageUsed((current) => {
         const next = Number.isFinite(current) ? current + 1 : current;
@@ -1727,11 +1730,32 @@ function AdGenerator() {
                 >
                   Download Image
                 </button>
+
+                <button
+                  type="button"
+                  className="download-button"
+                  onClick={() => setFeedbackOpen(true)}
+                >
+                  View & Rate Result
+                </button>
               </>
             )}
           </div>
         </aside>
       </div>
+
+      <GenerationFeedback
+        open={feedbackOpen && !!result?.imageJobId}
+        onClose={() => setFeedbackOpen(false)}
+        apiBase={apiBase}
+        resourceType="image"
+        resourceId={result?.imageJobId}
+        mediaUrl={result?.imageUrl}
+        mediaType="image"
+        title="Your image is ready"
+        question="How was this result?"
+        onDownload={downloadImage}
+      />
 
       <GenerationProgress
         open={loading}

@@ -10,6 +10,7 @@ import subprocess
 from typing import Optional, Literal, Dict, Any, List
 import httpx
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from storage_utils import upload_bytes_to_firebase_storage, upload_bytes_to_firebase_storage_with_metadata, delete_firebase_storage_object
@@ -267,6 +268,68 @@ async def reconcile_active_video_jobs(db, uid: str) -> None:
                     "action=finalization_started",
                     flush=True,
                 )
+
+
+@router.get("/video/download/{job_id}")
+async def download_completed_video(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    """
+    Stream a completed video through the ADGen backend so the browser receives
+    it as an attachment without depending on Firebase Storage browser CORS.
+    """
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+
+    job_ref = db.collection("video_jobs").document(job_id)
+    snap = job_ref.get()
+
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Video not found.")
+
+    job = snap.to_dict() or {}
+
+    if job.get("uid") != uid and not is_admin(claims):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    if str(job.get("status") or "").lower() != "succeeded":
+        raise HTTPException(status_code=409, detail="Video is not ready to download yet.")
+
+    video_url = str(job.get("finalVideoUrl") or "").strip()
+    if not video_url:
+        raise HTTPException(status_code=404, detail="Completed video file is unavailable.")
+
+    safe_job_id = re.sub(r"[^A-Za-z0-9._-]+", "-", str(job_id))[:120] or "video"
+    filename = f"adgen-{safe_job_id}.mp4"
+
+    async def iter_video():
+        try:
+            async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
+                async with client.stream("GET", video_url) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes(chunk_size=1024 * 1024):
+                        if chunk:
+                            yield chunk
+        except httpx.HTTPError as exc:
+            print(
+                "[Video Download Proxy Error]",
+                f"uid={uid}",
+                f"job_id={job_id}",
+                repr(exc),
+                flush=True,
+            )
+            return
+
+    return StreamingResponse(
+        iter_video(),
+        media_type="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
 
 # -----------------------------
 # Video plan gating + caps

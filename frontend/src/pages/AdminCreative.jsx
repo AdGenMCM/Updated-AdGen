@@ -9,6 +9,8 @@ import {
   FileImage,
   Film,
   Image as ImageIcon,
+  Sparkles,
+  Star,
   RefreshCw,
   Search,
   SlidersHorizontal,
@@ -63,6 +65,7 @@ function tierLabel(value) {
 
 function creativeTitle(item) {
   if (item.productName) return item.productName;
+  if (item.kind === "optimizer") return "Optimizer run";
   return item.kind === "video" ? "Video creative" : "Image creative";
 }
 
@@ -77,6 +80,7 @@ function StatusBadge({ value }) {
 
 function CreativeCard({ item, onSelect }) {
   const isVideo = item.kind === "video";
+  const isOptimizer = item.kind === "optimizer";
   const mediaUrl = item.url || item.thumbnailUrl;
 
   return (
@@ -87,7 +91,12 @@ function CreativeCard({ item, onSelect }) {
         onClick={() => onSelect(item)}
         aria-label={`View ${creativeTitle(item)} details`}
       >
-        {isVideo && item.url ? (
+        {isOptimizer ? (
+          <span className="admin-creative-placeholder">
+            <Sparkles size={34} />
+            <small>Optimization analysis</small>
+          </span>
+        ) : isVideo && item.url ? (
           <video
             src={item.url}
             poster={item.thumbnailUrl || undefined}
@@ -104,7 +113,7 @@ function CreativeCard({ item, onSelect }) {
         )}
 
         <span className={`admin-creative-kind kind-${item.kind}`}>
-          {isVideo ? <Video size={13} /> : <ImageIcon size={13} />}
+          {isOptimizer ? <Sparkles size={13} /> : isVideo ? <Video size={13} /> : <ImageIcon size={13} />}
           {item.kind}
         </span>
 
@@ -117,7 +126,11 @@ function CreativeCard({ item, onSelect }) {
             <h3>{creativeTitle(item)}</h3>
             <p>{formatDate(item.createdAt)}</p>
           </div>
-          <StatusBadge value={item.status} />
+          <div className="admin-creative-card-badges">
+            <StatusBadge value={item.status} />
+            {item.feedback?.rating && <span className="admin-creative-rating"><Star size={13} fill="currentColor" /> {item.feedback.rating}/5</span>}
+            {item.feedback?.skipped && <span className="admin-creative-feedback-skipped">Skipped</span>}
+          </div>
         </div>
 
         <div className="admin-creative-user-row">
@@ -192,7 +205,9 @@ function DetailsDrawer({ item, onClose }) {
 
         <div className="admin-creative-drawer-scroll">
           <div className="admin-creative-drawer-media">
-            {item.kind === "video" && item.url ? (
+            {item.kind === "optimizer" ? (
+              <div className="admin-creative-optimizer-preview"><Sparkles size={30} /><strong>Optimizer analysis</strong><p>{item.prompt || "Optimization completed."}</p></div>
+            ) : item.kind === "video" && item.url ? (
               <video
                 src={item.url}
                 poster={item.thumbnailUrl || undefined}
@@ -228,6 +243,17 @@ function DetailsDrawer({ item, onClose }) {
               <div><dt>Source</dt><dd>{item.source || "—"}</dd></div>
               <div><dt>Job ID</dt><dd className="is-code">{item.id}</dd></div>
             </dl>
+          </section>
+
+          <section className="admin-creative-detail-section">
+            <h3>User feedback</h3>
+            {item.feedback ? (
+              <dl>
+                <div><dt>Rating</dt><dd>{item.feedback.rating ? `${item.feedback.rating}/5` : "—"}</dd></div>
+                <div><dt>Skipped</dt><dd>{item.feedback.skipped ? "Yes" : "No"}</dd></div>
+                <div><dt>Comment</dt><dd>{item.feedback.comment || "—"}</dd></div>
+              </dl>
+            ) : <p className="admin-creative-long-copy">No feedback submitted.</p>}
           </section>
 
           <section className="admin-creative-detail-section">
@@ -334,9 +360,10 @@ export default function AdminCreative() {
   const stats = useMemo(() => {
     const images = items.filter((item) => item.kind === "image").length;
     const videos = items.filter((item) => item.kind === "video").length;
+    const optimizations = items.filter((item) => item.kind === "optimizer").length;
     const succeeded = items.filter((item) => item.status === "succeeded").length;
     const uniqueUsers = new Set(items.map((item) => item.uid).filter(Boolean)).size;
-    return { images, videos, succeeded, uniqueUsers };
+    return { images, videos, optimizations, succeeded, uniqueUsers };
   }, [items]);
 
   const applyFilters = async (event) => {
@@ -437,6 +464,7 @@ export default function AdminCreative() {
         <section className="admin-creative-stats">
           <article><ImageIcon size={19} /><span><small>Images shown</small><strong>{stats.images}</strong></span></article>
           <article><Video size={19} /><span><small>Videos shown</small><strong>{stats.videos}</strong></span></article>
+          <article><Sparkles size={19} /><span><small>Optimizer shown</small><strong>{stats.optimizations}</strong></span></article>
           <article><SlidersHorizontal size={19} /><span><small>Succeeded</small><strong>{stats.succeeded}</strong></span></article>
           <article><UserRound size={19} /><span><small>Users shown</small><strong>{stats.uniqueUsers}</strong></span></article>
         </section>
@@ -456,6 +484,7 @@ export default function AdminCreative() {
             <option value="all">All creative</option>
             <option value="image">Images</option>
             <option value="video">Videos</option>
+            <option value="optimizer">Optimizer</option>
           </select>
 
           <select value={status} onChange={(event) => setStatus(event.target.value)}>

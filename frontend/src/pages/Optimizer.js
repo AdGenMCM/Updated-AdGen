@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Optimizer.css";
+import GenerationFeedback from "../components/GenerationFeedback";
 import { auth } from "../firebaseConfig";
 import PageHeader from "../components/ui/PageHeader";
 import StepSection from "../components/ui/StepSection";
@@ -121,6 +122,9 @@ export default function Optimizer() {
   const [err, setErr] = useState(null);
   const [optimizerLimitReached, setOptimizerLimitReached] = useState(false);
   const [result, setResult] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackJobId, setFeedbackJobId] = useState(null);
+  const resultsRef = useRef(null);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
 
@@ -139,6 +143,19 @@ const [progress, setProgress] = useState({
   failed: false,
 });
 
+
+  useEffect(() => {
+    if (!result) return;
+
+    const timer = window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [result]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -858,6 +875,8 @@ const [progress, setProgress] = useState({
       });
 
       setResult(optimizedResult);
+      setFeedbackJobId(data.jobId);
+      setFeedbackOpen(false);
         } catch (error) {
       const message =
         safeDetailMessage(error?.detail) ||
@@ -1045,6 +1064,16 @@ const [progress, setProgress] = useState({
 
   return (
   <div className="opt-page">
+    <GenerationFeedback
+      open={feedbackOpen && !!feedbackJobId && !!result}
+      onClose={() => setFeedbackOpen(false)}
+      apiBase={apiBase}
+      resourceType="optimizer"
+      resourceId={feedbackJobId}
+      title="Your optimization is ready"
+      question="How useful was this optimization?"
+      summary={result ? [result.summary, Array.isArray(result.recommended_changes) && result.recommended_changes[0]].filter(Boolean).join("\n\n") : ""}
+    />
     <GenerationProgress
       open={loading || regenLoading}
       type={progress.type}
@@ -1475,8 +1504,9 @@ const [progress, setProgress] = useState({
             {err && <p className="opt-error">{err}</p>}
 
             {result && (
-              <Card className="opt-resultsPanel">
-                <div className="section-heading">
+              <div ref={resultsRef} className="opt-resultsScrollTarget">
+                <Card className="opt-resultsPanel">
+                  <div className="section-heading">
                   <span className="step-badge">5</span>
                   <div>
                     <h2>
@@ -1671,7 +1701,25 @@ const [progress, setProgress] = useState({
                     Upload at least one creative above to unlock one-click “Generate New Creative”.
                   </p>
                 )}
-              </Card>
+
+                <Card className="opt-feedbackPrompt">
+                  <div>
+                    <p className="opt-miniKicker">YOUR FEEDBACK</p>
+                    <h3>How useful was this optimization?</h3>
+                    <p>
+                      Review the full audit first, then rate the recommendations when you're ready.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="opt-secondaryBtn"
+                    onClick={() => setFeedbackOpen(true)}
+                  >
+                    Rate This Optimization
+                  </Button>
+                </Card>
+                </Card>
+              </div>
             )}
           </form>
         )}

@@ -4712,32 +4712,78 @@ confidence
             "building_recommendations",
         )
 
-        resp = await asyncio.to_thread(
-            lambda: client.chat.completions.create(
-                model=OPENAI_TEXT_MODEL,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "Return only valid JSON. Diagnose one creative and provide "
-                            "specific, prioritized creative actions."
-                        ),
-                    },
-                    {"role": "user", "content": optimizer_prompt},
-                ],
-                max_completion_tokens=1250,
+        async def _request_optimizer_json(max_tokens: int):
+            return await asyncio.to_thread(
+                lambda: client.chat.completions.create(
+                    model=OPENAI_TEXT_MODEL,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Return only valid JSON. Diagnose one creative and provide "
+                                "specific, prioritized creative actions."
+                            ),
+                        },
+                        {"role": "user", "content": optimizer_prompt},
+                    ],
+                    max_completion_tokens=max_tokens,
+                )
             )
-        )
 
-        raw = (resp.choices[0].message.content or "").strip()
+        # The Optimizer response is substantially larger than standard ad copy
+        # because it includes six audit dimensions, three priority recommendations,
+        # improved copy, and a full image prompt. A response that hits the token
+        # ceiling can be cut off before the closing brace even when JSON mode is on.
+        resp = await _request_optimizer_json(2000)
+
+        choice = resp.choices[0]
+        raw = (choice.message.content or "").strip()
+        finish_reason = getattr(choice, "finish_reason", None)
         obj = _extract_json_object(raw)
 
         if not obj or "improved_headline" not in obj:
-            raise HTTPException(
-                status_code=502,
-                detail="Optimizer returned invalid JSON.",
+            print(
+                "OPTIMIZER JSON PARSE WARNING:",
+                {
+                    "jobId": progress_job_id,
+                    "finishReason": finish_reason,
+                    "responseLength": len(raw),
+                    "hasOpeningBrace": raw.lstrip().startswith("{"),
+                    "hasClosingBrace": raw.rstrip().endswith("}"),
+                },
+                flush=True,
             )
+
+            # One automatic retry uses the exact same Optimizer prompt and model
+            # instructions, with only a larger output allowance. This protects
+            # against occasional truncation without changing analysis behavior.
+            retry_resp = await _request_optimizer_json(3000)
+            retry_choice = retry_resp.choices[0]
+            retry_raw = (retry_choice.message.content or "").strip()
+            retry_finish_reason = getattr(retry_choice, "finish_reason", None)
+            retry_obj = _extract_json_object(retry_raw)
+
+            if retry_obj and "improved_headline" in retry_obj:
+                resp = retry_resp
+                raw = retry_raw
+                obj = retry_obj
+            else:
+                print(
+                    "OPTIMIZER JSON RETRY FAILED:",
+                    {
+                        "jobId": progress_job_id,
+                        "finishReason": retry_finish_reason,
+                        "responseLength": len(retry_raw),
+                        "hasOpeningBrace": retry_raw.lstrip().startswith("{"),
+                        "hasClosingBrace": retry_raw.rstrip().endswith("}"),
+                    },
+                    flush=True,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Optimizer returned invalid JSON.",
+                )
 
         obj.setdefault(
             "summary",
@@ -5680,6 +5726,111 @@ def _reset_resource_usage(
     return _tx(db.transaction())
 
 
+
+# ---------------- Generation Feedback ----------------
+class GenerationFeedbackBody(BaseModel):
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    comment: Optional[str] = Field(default=None, max_length=1000)
+    skipped: bool = False
+
+
+
+@app.get("/feedback/{resource_type}/{resource_id}")
+def get_generation_feedback(
+    resource_type: str,
+    resource_id: str,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+
+    resource = (resource_type or "").strip().lower()
+    collections = {
+        "image": "image_jobs",
+        "video": "video_jobs",
+        "optimizer": "optimizer_jobs",
+    }
+    collection = collections.get(resource)
+
+    if not collection:
+        raise HTTPException(status_code=400, detail="Invalid feedback resource type.")
+    if not resource_id:
+        raise HTTPException(status_code=400, detail="Resource ID is required.")
+
+    ref = db.collection(collection).document(resource_id)
+    snap = ref.get()
+
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Result not found.")
+
+    data = snap.to_dict() or {}
+
+    if resource == "optimizer" and data.get("jobType") != "optimizer":
+        raise HTTPException(
+            status_code=400,
+            detail="Feedback is only available for completed optimizer analyses.",
+        )
+
+    if not is_admin(claims) and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    feedback = data.get("feedback")
+    return {
+        "ok": True,
+        "feedback": feedback if isinstance(feedback, dict) else None,
+    }
+
+
+@app.post("/feedback/{resource_type}/{resource_id}")
+def save_generation_feedback(
+    resource_type: str,
+    resource_id: str,
+    payload: GenerationFeedbackBody,
+    authorization: str | None = Header(default=None),
+):
+    uid, _email, claims = require_user(authorization)
+    db = get_db()
+
+    resource = (resource_type or "").strip().lower()
+    collections = {
+        "image": "image_jobs",
+        "video": "video_jobs",
+        "optimizer": "optimizer_jobs",
+    }
+    collection = collections.get(resource)
+    if not collection:
+        raise HTTPException(status_code=400, detail="Invalid feedback resource type.")
+    if not resource_id:
+        raise HTTPException(status_code=400, detail="Resource ID is required.")
+    if not payload.skipped and payload.rating is None:
+        raise HTTPException(status_code=400, detail="A rating is required unless feedback is skipped.")
+
+    ref = db.collection(collection).document(resource_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Result not found.")
+    data = snap.to_dict() or {}
+    if resource == "optimizer" and data.get("jobType") != "optimizer":
+        raise HTTPException(status_code=400, detail="Feedback is only available for completed optimizer analyses.")
+    if not is_admin(claims) and data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    feedback = {
+        "rating": None if payload.skipped else payload.rating,
+        "comment": None if payload.skipped else ((payload.comment or "").strip() or None),
+        "skipped": bool(payload.skipped),
+        "uid": uid,
+        "updatedAt": int(time.time()),
+    }
+    if not isinstance(data.get("feedback"), dict):
+        feedback["createdAt"] = int(time.time())
+    else:
+        feedback["createdAt"] = data.get("feedback", {}).get("createdAt") or int(time.time())
+
+    ref.set({"feedback": feedback}, merge=True)
+    return {"ok": True, "feedback": feedback}
+
+
 # ---------------- Admin Creative Manager ----------------
 def _admin_creative_user(db, uid: str, cache: dict[str, dict[str, Any]]) -> dict[str, Any]:
     if not uid:
@@ -5746,10 +5897,12 @@ def _admin_creative_user(db, uid: str, cache: dict[str, dict[str, Any]]) -> dict
 
 def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict:
     is_video = kind == "video"
+    is_optimizer = kind == "optimizer"
+    optimizer_result = data.get("result") if isinstance(data.get("result"), dict) else {}
     media_url = (
         _pick(data, ["finalVideoUrl", "videoUrl", "outputUrl"], default=None)
         if is_video
-        else _pick(data, ["imageUrl"], default=None)
+        else (None if is_optimizer else _pick(data, ["imageUrl"], default=None))
     )
     thumbnail_url = (
         _pick(data, ["thumbnailUrl", "posterUrl"], default=None)
@@ -5760,7 +5913,11 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
     prompt = (
         _pick(data, ["directorPrompt", "userPrompt", "promptText", "prompt"], default="")
         if is_video
-        else _pick(data, ["visualPrompt", "prompt"], default="")
+        else (
+            _pick(optimizer_result, ["summary", "diagnosis"], default="")
+            if is_optimizer
+            else _pick(data, ["visualPrompt", "prompt"], default="")
+        )
     )
 
     return {
@@ -5778,6 +5935,8 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         "copy": data.get("copy") if isinstance(data.get("copy"), dict) else None,
         "ratio": _pick(data, ["aspectRatio", "ratio"], default=None),
         "duration": _safe_int(data.get("duration"), 0) if is_video else None,
+        "feedback": data.get("feedback") if isinstance(data.get("feedback"), dict) else None,
+        "optimizerResult": optimizer_result if is_optimizer else None,
         "model": data.get("model") or None,
         "fileSizeBytes": _safe_int(data.get("fileSizeBytes"), 0),
         "error": data.get("error") or None,
@@ -5796,7 +5955,7 @@ def admin_list_creative(
     limit: int = Query(default=48, ge=1, le=100),
     cursor: int | None = Query(default=None),
 ) -> dict[str, Any]:
-    """Return a read-only, admin-only view of generated image and video assets."""
+    """Return a read-only, admin-only view of generated images, videos, and optimizer runs."""
     _require_admin_request(authorization)
     db = get_db()
 
@@ -5804,7 +5963,7 @@ def admin_list_creative(
     status_norm = (status or "all").strip().lower()
     search_norm = (q or "").strip().lower()
 
-    if kind_norm not in {"all", "image", "video"}:
+    if kind_norm not in {"all", "image", "video", "optimizer"}:
         raise HTTPException(status_code=400, detail="Invalid creative type.")
 
     collections = []
@@ -5812,6 +5971,8 @@ def admin_list_creative(
         collections.append(("image", "image_jobs"))
     if kind_norm in {"all", "video"}:
         collections.append(("video", "video_jobs"))
+    if kind_norm in {"all", "optimizer"}:
+        collections.append(("optimizer", "optimizer_jobs"))
 
     start_timestamp = 0
     if days > 0:
@@ -5836,6 +5997,8 @@ def admin_list_creative(
         try:
             for snap in query_ref.stream():
                 data = snap.to_dict() or {}
+                if creative_kind == "optimizer" and data.get("jobType") != "optimizer":
+                    continue
                 item_status = str(data.get("status") or "unknown").lower()
                 if status_norm != "all" and item_status != status_norm:
                     continue
@@ -5882,6 +6045,8 @@ def admin_list_creative(
                     copy_obj.get("headline"),
                     copy_obj.get("primary_text"),
                     copy_obj.get("cta"),
+                    (item.get("feedback") or {}).get("comment"),
+                    (item.get("feedback") or {}).get("rating"),
                 ]
             ).lower()
             if search_norm not in haystack:

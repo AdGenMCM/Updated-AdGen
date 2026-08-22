@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./VideoAds.css";
+import GenerationFeedback from "../components/GenerationFeedback";
 import "./AdGenerator.css"; // ✅ reuse AdGenerator overlay + spinner styles
 import { auth } from "../firebaseConfig";
 import StepSection from "../components/ui/StepSection";
@@ -381,6 +382,7 @@ export default function VideoAds() {
   const [status, setStatus] = useState(null);
   const [finalVideoUrl, setFinalVideoUrl] = useState(null);
   const [error, setError] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const [videoLimitReached, setVideoLimitReached] = useState(false);
   const [videoUsageUsed, setVideoUsageUsed] = useState(null);
@@ -1061,6 +1063,7 @@ export default function VideoAds() {
 
         if (data.status === "succeeded" && data.finalVideoUrl) {
           setFinalVideoUrl(data.finalVideoUrl);
+          setFeedbackOpen(true);
           void claimFirstGeneration("video", jobId, token);
           return;
         }
@@ -1145,8 +1148,65 @@ export default function VideoAds() {
       </div>
     );
   }
+const downloadVideo = async () => {
+  if (!jobId) return;
+
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+    const response = await fetch(
+      `${API_BASE}/video/download/${encodeURIComponent(jobId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const data = await safeJson(response);
+      throw new Error(
+        safeDetailMessage(data?.detail) || "Download request failed."
+      );
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `adgen-${jobId}.mp4`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error("Video download failed:", err);
+    alert("Download failed. Please try again.");
+  }
+};
+
 return (
   <div className="videoAds">
+    <GenerationFeedback
+      open={feedbackOpen && !!jobId && !!finalVideoUrl}
+      onClose={() => setFeedbackOpen(false)}
+      apiBase={API_BASE}
+      resourceType="video"
+      resourceId={jobId}
+      mediaUrl={finalVideoUrl}
+      mediaType="video"
+      title="Your video is ready"
+      question="How was this result?"
+      onDownload={downloadVideo}
+    />
     <GenerationProgress
       open={isGenerating}
       type="video"
@@ -2281,44 +2341,49 @@ return (
         </div>
 
         <div className="side-card" ref={statusRef}>
-          <h3>Latest Generation</h3>
-
-          {jobId && (
-            <div className="statusLine">
-              <strong>Status:</strong> {status || "running"}
-            </div>
-          )}
-
-          {error && <div className="error">{error}</div>}
-
-          {videoLimitReached && (
-            <button
-              type="button"
-              className="primary"
-              onClick={() => navigate("/subscribe?upgrade=1")}
-              style={{ marginTop: 12 }}
-            >
-              Upgrade to Continue
-            </button>
-          )}
+          <h3>Generated Preview</h3>
 
           {!finalVideoUrl && !error && (
-            <div className="videoEmptyState">
-              <p>No video generated yet.</p>
-              <ul>
-                <li>Preview your video</li>
-                <li>Download the finished creative</li>
-                <li>Save it to your Library</li>
-              </ul>
-            </div>
+            <p className="side-muted">
+              Your generated video will appear here after creation.
+            </p>
           )}
+
+          {error && <p>{error}</p>}
 
           {finalVideoUrl && (
             <>
-              <video src={finalVideoUrl} controls className="videoPlayer" />
-              <a className="primary linkBtn" href={finalVideoUrl} target="_blank" rel="noreferrer">
-                Open / Download
-              </a>
+              <video
+                src={finalVideoUrl}
+                controls
+                className="generated-image"
+              />
+
+              <button
+                type="button"
+                className="download-button"
+                onClick={() => {
+                  window.open(finalVideoUrl, "_blank", "noopener,noreferrer");
+                }}
+              >
+                Open Video
+              </button>
+
+              <button
+                type="button"
+                className="download-button"
+                onClick={downloadVideo}
+              >
+                Download Video
+              </button>
+
+              <button
+                type="button"
+                className="download-button"
+                onClick={() => setFeedbackOpen(true)}
+              >
+                View & Rate Result
+              </button>
             </>
           )}
         </div>
