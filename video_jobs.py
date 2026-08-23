@@ -7,6 +7,8 @@ import uuid
 import re
 import tempfile
 import subprocess
+import shutil
+from pathlib import Path
 from typing import Optional, Literal, Dict, Any, List
 import httpx
 from fastapi import APIRouter, Header, HTTPException
@@ -21,6 +23,10 @@ from runway_client import (
     create_image_to_video,
     create_text_to_video,
     create_text_to_speech,
+    create_sound_effect,
+    create_avatar_video,
+    create_text_to_image,
+    create_character_performance,
     get_task,
     extract_first_output_url,
 )
@@ -55,6 +61,7 @@ from video_safety import (
     reserve_platform_cost,
     rollback_platform_cost,
     rollback_user_submission_window,
+    validate_character_dialogue_request,
 )
 
 from performance_intelligence.service import (
@@ -70,6 +77,7 @@ VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "10"))
 
 RUNWAY_PROMPT_LIMIT = 1000
 RUNWAY_PROMPT_TARGET = 800
+RUNWAY_CHARACTER_PROMPT_TARGET = 700
 RUNWAY_IMAGE_MOTION_MAX = 400
 RUNWAY_DESCRIPTION_MAX = 400
 RUNWAY_FULL_DIRECTION_MAX = 300
@@ -96,11 +104,18 @@ VIDEO_PROGRESS = {
     "building_prompt": (22, "Building your creative direction."),
     "submitting_to_runway": (32, "Submitting your video request."),
     "waiting_for_runway": (48, "Generating your video."),
-    "processing_video": (68, "Processing the final video."),
-    "generating_voiceover": (78, "Generating your voiceover."),
-    "mixing_audio": (86, "Adding voiceover to your video."),
-    "uploading_video": (93, "Uploading your finished video."),
-    "saving_library": (98, "Saving your video to the Library."),
+    "processing_video": (68, "Processing the base video."),
+    "generating_voiceover": (76, "Generating your voiceover."),
+    "mixing_voiceover": (82, "Adding the voiceover to your video."),
+    "generating_dialogue": (74, "Preparing synchronized character dialogue."),
+    "generating_speaker_image": (77, "Creating a reliable on-screen speaker."),
+    "applying_dialogue": (81, "Synchronizing the on-screen speaker."),
+    "mixing_dialogue": (84, "Adding synchronized dialogue to your video."),
+    "generating_audio": (88, "Generating music and sound effects."),
+    "mixing_audio": (92, "Mixing music and sound effects."),
+    "normalizing_duration": (95, "Locking the final video duration."),
+    "uploading_video": (97, "Uploading your finished video."),
+    "saving_library": (99, "Saving your video to the Library."),
     "succeeded": (100, "Your video is ready."),
     "failed": (100, "Video generation failed."),
 }
@@ -403,6 +418,385 @@ def mux_voiceover(video_path: str, audio_path: str, out_path: str) -> None:
     if p.returncode != 0:
         raise RuntimeError(f"ffmpeg mux failed: {p.stderr[-800:]}")
 
+
+def has_audio_stream(path: str) -> bool:
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=index",
+        "-of", "csv=p=0",
+        path,
+    ]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return p.returncode == 0 and bool((p.stdout or "").strip())
+
+
+def mix_background_audio(
+    video_path: str,
+    background_path: str,
+    out_path: str,
+    *,
+    duck_for_voice: bool = False,
+) -> None:
+    """
+    Create an audible commercial mix.
+
+    - Dialogue / voiceover is normalized as the foreground track.
+    - Background music/SFX is made clearly audible.
+    - When speech is present, the background automatically ducks under speech.
+    - The finished mix is loudness-normalized so it does not come out unusually quiet.
+    """
+    video_has_audio = has_audio_stream(video_path)
+
+    if video_has_audio and duck_for_voice:
+        filter_complex = (
+            "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice];"
+            "[1:a]loudnorm=I=-29:TP=-4:LRA=11[bg];"
+            "[bg][voice]sidechaincompress="
+            "threshold=0.035:ratio=3:attack=90:release=850[ducked];"
+            "[voice][ducked]amix=inputs=2:duration=longest:"
+            "dropout_transition=0:normalize=0,"
+            "loudnorm=I=-17:TP=-1.5:LRA=11[aout]"
+        )
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-i", background_path,
+            "-filter_complex", filter_complex,
+            "-map", "0:v:0",
+            "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            out_path,
+        ]
+    elif video_has_audio:
+        filter_complex = (
+            "[0:a]loudnorm=I=-20:TP=-1.5:LRA=11[base];"
+            "[1:a]loudnorm=I=-26:TP=-3:LRA=11[bg];"
+            "[base][bg]amix=inputs=2:duration=longest:"
+            "dropout_transition=0:normalize=0,"
+            "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        )
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-i", background_path,
+            "-filter_complex", filter_complex,
+            "-map", "0:v:0",
+            "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            out_path,
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-i", background_path,
+            "-filter_complex",
+            "[1:a]loudnorm=I=-23:TP=-2:LRA=11[aout]",
+            "-map", "0:v:0",
+            "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            out_path,
+        ]
+
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg audio mix failed: {p.stderr[-1200:]}")
+
+
+def enforce_final_duration(
+    in_path: str,
+    out_path: str,
+    target_seconds: int,
+    *,
+    tolerance_seconds: float = 0.08,
+) -> float:
+    """
+    Hard product contract: final delivered videos are 6s or 10s.
+
+    This runs AFTER dialogue, voiceover, music/SFX, and all other edits.
+    Short videos are padded by holding the last frame and extending audio with silence.
+    Long videos are trimmed. The result is probed again and rejected if it is not
+    within a very small delivery tolerance.
+    """
+    before = probe_duration_seconds(in_path)
+    target = float(target_seconds)
+    pad = max(0.0, target - before + 0.10)
+    audio_present = has_audio_stream(in_path)
+
+    vf = f"tpad=stop_mode=clone:stop_duration={pad:.3f},fps=30"
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", in_path,
+        "-vf", vf,
+    ]
+
+    if audio_present:
+        cmd += [
+            "-af", f"apad=pad_dur={pad:.3f}",
+            "-c:a", "aac",
+            "-b:a", "192k",
+        ]
+    else:
+        cmd += ["-an"]
+
+    cmd += [
+        "-t", f"{target:.3f}",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        out_path,
+    ]
+
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg final duration normalization failed: {p.stderr[-1200:]}")
+
+    after = probe_duration_seconds(out_path)
+
+    print(
+        "[VIDEO DURATION]",
+        {
+            "requested": round(target, 3),
+            "before": round(before, 3),
+            "after": round(after, 3),
+        },
+        flush=True,
+    )
+
+    if abs(after - target) > tolerance_seconds:
+        raise RuntimeError(
+            f"Final video duration verification failed: requested={target:.3f}s "
+            f"actual={after:.3f}s."
+        )
+
+    return after
+
+
+def extract_audio(video_path: str, out_path: str) -> None:
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-vn",
+        "-c:a", "aac",
+        out_path,
+    ]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg audio extraction failed: {p.stderr[-800:]}")
+
+
+def file_as_data_uri(path: str, mime: str = "video/mp4") -> str:
+    import base64
+    data = Path(path).read_bytes()
+    if len(data) > 15_500_000:
+        raise RuntimeError("Character dialogue segment is too large for the performance request.")
+    return f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
+
+
+def extract_tail_segment(video_path: str, out_path: str, seconds: float) -> None:
+    total = probe_duration_seconds(video_path)
+    start = max(0.0, total - max(3.0, float(seconds)))
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{start:.3f}",
+        "-i", video_path,
+        "-t", f"{max(3.0, float(seconds)):.3f}",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-an",
+        out_path,
+    ]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg dialogue segment extraction failed: {p.stderr[-800:]}")
+
+
+def replace_tail_segment(
+    base_video: str,
+    replacement_video: str,
+    out_path: str,
+    seconds: float,
+    *,
+    transition_seconds: float = 0.20,
+) -> None:
+    """
+    Replace only the true Character Dialogue window and soften the visual handoff.
+
+    The base commercial is preserved up to the dialogue boundary. A very short
+    crossfade blends the original scene into the synchronized in-scene performance
+    so small pose/frame differences do not appear as a visible glitch.
+    """
+    total = probe_duration_seconds(base_video)
+    tail = max(0.5, float(seconds))
+    fade = max(0.0, min(float(transition_seconds), 0.30, tail * 0.20))
+    boundary = max(0.0, total - tail)
+
+    with tempfile.TemporaryDirectory() as local_td:
+        head = os.path.join(local_td, "head.mp4")
+        repl = os.path.join(local_td, "replacement.mp4")
+
+        # Keep a small overlap from the original commercial so xfade can blend
+        # through the exact dialogue boundary without shortening the final runtime.
+        head_duration = min(total, boundary + fade)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", base_video,
+            "-t", f"{head_duration:.3f}",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-an",
+            head,
+        ]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"ffmpeg dialogue head extraction failed: {p.stderr[-800:]}")
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", replacement_video,
+            "-t", f"{tail:.3f}",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-an",
+            repl,
+        ]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"ffmpeg dialogue normalization failed: {p.stderr[-800:]}")
+
+        if fade <= 0.01:
+            list_file = os.path.join(local_td, "concat.txt")
+            with open(list_file, "w") as f:
+                f.write(f"file '{head}'\nfile '{repl}'\n")
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", list_file,
+                "-c", "copy",
+                out_path,
+            ]
+        else:
+            # xfade offset is the true dialogue boundary. Because head includes
+            # exactly `fade` seconds beyond the boundary, the final duration stays
+            # equal to the original base-video duration.
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", head,
+                "-i", repl,
+                "-filter_complex",
+                f"[0:v][1:v]xfade=transition=fade:duration={fade:.3f}:offset={boundary:.3f}[v]",
+                "-map", "[v]",
+                "-an",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-t", f"{total:.3f}",
+                out_path,
+            ]
+
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"ffmpeg dialogue crossfade failed: {p.stderr[-1200:]}")
+
+
+def extract_dialogue_audio_aligned(
+    character_video: str,
+    out_path: str,
+    dialogue_seconds: float,
+) -> None:
+    """
+    Use the audio from the SAME synchronized Character Performance output that
+    supplies the speaking visuals. This avoids rebuilding voice timing from the
+    separate avatar-reference task and keeps lips and speech on one timeline.
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", character_video,
+        "-t", f"{max(0.5, float(dialogue_seconds)):.3f}",
+        "-vn",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        out_path,
+    ]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg synchronized dialogue audio extraction failed: {p.stderr[-800:]}"
+        )
+
+
+def character_dialogue_seconds(script: str, total_duration: int) -> float:
+    words = len((script or "").split())
+    estimate = (words / 2.8) + 0.35
+
+    if int(total_duration) >= 10:
+        min_window = 2.5
+        max_window = 4.0
+    else:
+        min_window = 2.0
+        max_window = 2.5
+
+    return min(max_window, max(min_window, round(estimate, 1)))
+
+
+def speaker_image_ratio(ratio: str) -> str:
+    mapping = {
+        "720:1280": "720:1280",
+        "1080:1920": "1080:1920",
+        "1280:720": "1280:720",
+        "1920:1080": "1920:1080",
+        "1080:1080": "1080:1080",
+        "1080:1350": "1080:1440",
+    }
+    return mapping.get(ratio, "720:1280")
+
+
+def build_character_speaker_image_prompt(job: Dict[str, Any]) -> str:
+    audio_cfg = job.get("audio") or {}
+    gender = str(audio_cfg.get("characterGender") or "female").lower()
+    speaker = "adult woman" if gender == "female" else "adult man"
+
+    context = " ".join(filter(None, [
+        str(job.get("productName") or ""),
+        str(job.get("description") or ""),
+        str(job.get("sceneStyle") or ""),
+        str(job.get("tone") or ""),
+        str(job.get("brandDirection") or ""),
+    ]))
+    context = trim_video_prompt(context, 360)
+
+    prompt = (
+        f"Photorealistic commercial medium close-up of a {speaker} spokesperson facing camera. "
+        "Full face clearly visible, centered, unobstructed, eyes visible, neutral closed-mouth expression, "
+        "natural posture, shoulders visible, no motion blur, no text, no captions. "
+        "Create a clean believable environment matching this ad context: "
+        + context
+    )
+    return trim_video_prompt(prompt, 900)
+
+
+def act_two_ratio(ratio: str) -> str:
+    mapping = {
+        "720:1280": "720:1280",
+        "1080:1920": "720:1280",
+        "1280:720": "1280:720",
+        "1920:1080": "1280:720",
+        "1080:1080": "960:960",
+        "1080:1350": "832:1104",
+    }
+    return mapping.get(ratio, "720:1280")
+
+
 def normalize_video_with_ffmpeg(in_path: str, out_path: str) -> None:
     cmd = [
         "ffmpeg", "-y",
@@ -641,6 +1035,13 @@ class VoiceoverConfig(BaseModel):
     enabled: bool = False
     presetVoice: str = "Leslie"
 
+
+class AudioConfig(BaseModel):
+    voiceMode: Literal["none", "voiceover", "character_dialogue"] = "none"
+    characterVoice: str = "emma"
+    characterGender: Literal["female", "male"] = "female"
+    musicAndEffects: bool = False
+
 class StartImageVideoRequest(BaseModel):
     promptImageUrl: str
     duration: Literal[6, 10]
@@ -651,6 +1052,7 @@ class StartImageVideoRequest(BaseModel):
     voiceoverScript: Optional[str] = Field(default=None, max_length=1200)
     model: str = VIDEO_DEFAULT_IMAGE_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    audio: AudioConfig = AudioConfig()
     usePerformanceIntelligence: bool = False
 
     # legacy (keep)
@@ -700,6 +1102,7 @@ class StartPromptVideoRequest(BaseModel):
 
     model: str = VIDEO_DEFAULT_TEXT_MODEL
     voiceover: VoiceoverConfig = VoiceoverConfig()
+    audio: AudioConfig = AudioConfig()
     usePerformanceIntelligence: bool = False
 
     # Legacy guidance
@@ -1059,6 +1462,28 @@ def _prompt_has_explicit_opening(text: str) -> bool:
         "first shot", "opening shot",
     ))
 
+def character_dialogue_timeline(req: StartPromptVideoRequest) -> str:
+    """
+    For Character Dialogue, the base video supplies only the opening ad footage.
+    The final speaking shot is built separately from a guaranteed speaker image,
+    so the base generation never has to satisfy conflicting action + lip-sync needs.
+    """
+    if req.audio.voiceMode != "character_dialogue":
+        return ""
+
+    dialogue_seconds = character_dialogue_seconds(
+        req.voiceoverScript or "",
+        int(req.duration),
+    )
+    action_seconds = max(0.5, float(req.duration) - dialogue_seconds)
+
+    return (
+        f"Base-video role: prioritize the ad's action/problem/benefit in the first ~{action_seconds:g}s. "
+        "The final spokesperson dialogue shot will be composited separately. "
+        "Do not make any visible person speak or mouth words in this base footage."
+    )
+
+
 def build_director_prompt(
     req: StartPromptVideoRequest,
     brand_kit_context: str = "",
@@ -1074,6 +1499,7 @@ def build_director_prompt(
     """
     parts: List[str] = []
     overrides = _control_override_set(req)
+    character_dialogue_mode = req.audio.voiceMode == "character_dialogue"
 
     product_description = trim_video_prompt(
         req.description,
@@ -1085,6 +1511,10 @@ def build_director_prompt(
         "sequence are the source of truth. Preserve them faithfully."
     )
     parts.append(_sentence(product_description))
+
+    dialogue_timeline = character_dialogue_timeline(req)
+    if dialogue_timeline:
+        parts.append(dialogue_timeline)
 
     goal_direction = GOAL_PROMPTS.get(
         (req.goal or "").strip().lower(),
@@ -1152,8 +1582,8 @@ def build_director_prompt(
 
     if req.offer:
         parts.append(
-            "Visually support the promotional offer without inventing or "
-            "rendering new written offer text."
+            "Visually support the promotional offer. Render offer text only when "
+            "the user's creative direction explicitly asks for visible text."
         )
 
     if req.callToAction:
@@ -1192,25 +1622,38 @@ def build_director_prompt(
             )
         )
 
-    parts.append(
-        "Keep the primary subject visually consistent. Use photorealistic "
-        "commercial cinematography, stable geometry, natural continuity, and "
-        "smooth physically believable motion."
-    )
+    if character_dialogue_mode:
+        parts.append(
+            "Keep the base footage photorealistic with stable geometry and believable motion."
+        )
+    else:
+        parts.append(
+            "Keep the primary subject visually consistent. Use photorealistic "
+            "commercial cinematography, stable geometry, natural continuity, and "
+            "smooth physically believable motion."
+        )
     parts.append(
         "Do not replace the requested location or reinterpret a living subject "
         "as a statue, toy, mannequin, package, or display object."
     )
     parts.append(
-        "Avoid jitter, flicker, warping, morphing, duplicate objects, captions, "
-        "subtitles, random lettering, and floating graphics."
+        "Render visible text when the user explicitly requests it, preserving the "
+        "requested wording accurately. Otherwise, do not invent captions, subtitles, "
+        "random lettering, or floating graphics. Avoid jitter, flicker, warping, "
+        "morphing, and duplicate objects."
     )
 
     prompt = " ".join(part for part in parts if part)
 
+    prompt_target = (
+        RUNWAY_CHARACTER_PROMPT_TARGET
+        if character_dialogue_mode
+        else RUNWAY_PROMPT_TARGET
+    )
+
     return trim_video_prompt(
         prompt,
-        min(RUNWAY_PROMPT_TARGET, RUNWAY_PROMPT_LIMIT),
+        min(prompt_target, RUNWAY_PROMPT_LIMIT),
     )
 
 def build_image_director_prompt(
@@ -1357,6 +1800,46 @@ def compact_video_intelligence(
     )
 
 
+
+# Voice behavior intentionally remains mode-specific.
+# none: no speaking/lip-sync/mouthing/testimonial delivery.
+# voiceover: narration stays off-camera; visible people stay nonverbal.
+# character_dialogue: only the selected on-screen speaker talks during the dialogue window.
+def audio_behavior_rule(req: Any) -> str:
+    audio = getattr(req, "audio", None)
+    mode = str(getattr(audio, "voiceMode", "none") or "none")
+
+    if mode == "character_dialogue":
+        window = character_dialogue_seconds(
+            getattr(req, "voiceoverScript", "") or "",
+            int(getattr(req, "duration", 6) or 6),
+        )
+        gender = str(getattr(audio, "characterGender", "female") or "female")
+        speaker = "woman" if gender == "female" else "man"
+        return (
+            "Audio behavior for base footage: all visible people stay nonverbal; "
+            "the separate final spokesperson shot contains the dialogue."
+        )
+
+    if mode == "voiceover":
+        return (
+            "Audio: off-screen narration only. Visible people stay nonverbal; "
+            "no lip-syncing or dialogue-like mouth movement."
+        )
+
+    return (
+        "Audio: no visible person speaks, lip-syncs, mouths words, gives testimonial "
+        "delivery, or makes dialogue-like mouth movements."
+    )
+
+
+def apply_audio_behavior_guardrail(prompt: str, req: Any) -> str:
+    rule = audio_behavior_rule(req)
+    base = " ".join((prompt or "").split())
+    room = max(0, RUNWAY_PROMPT_LIMIT - len(rule) - 1)
+    return trim_video_prompt(base, room) + " " + rule
+
+
 def compose_runway_prompt(
     base_prompt: str,
     intelligence_guidance: str = "",
@@ -1492,6 +1975,15 @@ async def start_image_video(
 
     db = get_db()
 
+    await validate_character_dialogue_request(
+        voice_mode=req.audio.voiceMode,
+        script=req.voiceoverScript,
+        speaker_gender=req.audio.characterGender,
+        duration=int(req.duration),
+        text=req.promptText,
+        image_url=req.promptImageUrl,
+    )
+
     user_doc = (
         db.collection("users")
         .document(uid)
@@ -1616,6 +2108,7 @@ async def start_image_video(
         "model": req.model,
 
         "voiceover": req.voiceover.model_dump(),
+        "audio": req.audio.model_dump(),
         "voiceoverScript": (
             (req.voiceoverScript or "").strip()
             or None
@@ -1630,6 +2123,10 @@ async def start_image_video(
         # Runway task fields.
         "runwayVideoTaskId": None,
         "runwayTtsTaskId": None,
+        "runwayAudioTaskId": None,
+        "runwayAvatarTaskId": None,
+        "runwayCharacterImageTaskId": None,
+        "runwayCharacterTaskId": None,
 
         # Final output.
         "finalVideoUrl": None,
@@ -1704,9 +2201,13 @@ async def start_image_video(
     prompt_text = compose_runway_prompt(
         prompt_text,
         intelligence_guidance,
-        max_chars=RUNWAY_PROMPT_LIMIT,
+        max_chars=max(
+            200,
+            RUNWAY_PROMPT_LIMIT - len(audio_behavior_rule(req)) - 1,
+        ),
         guidance_budget=RUNWAY_INTELLIGENCE_BUDGET,
     )
+    prompt_text = apply_audio_behavior_guardrail(prompt_text, req)
 
     if len(prompt_text) > 800:
         print(
@@ -1733,7 +2234,9 @@ async def start_image_video(
         cost_reservation = reserve_platform_cost(
             db,
             duration=int(req.duration),
-            include_tts=bool(req.voiceover.enabled and (req.voiceoverScript or "").strip()),
+            include_tts=bool(req.audio.voiceMode == "voiceover" and (req.voiceoverScript or "").strip()),
+            include_character_dialogue=bool(req.audio.voiceMode == "character_dialogue"),
+            include_audio_enhancement=bool(req.audio.musicAndEffects),
         )
         job_ref.update({
             "estimatedProviderCostUsd": cost_reservation.estimated_cost_usd,
@@ -1832,7 +2335,7 @@ async def start_image_video(
 
     try:
         if (
-            bool(req.voiceover.enabled)
+            req.audio.voiceMode == "voiceover"
             and (req.voiceoverScript or "").strip()
         ):
             runway_tts_id = await create_text_to_speech(
@@ -1939,6 +2442,14 @@ async def start_prompt_video(
     )
 
     db = get_db()
+
+    await validate_character_dialogue_request(
+        voice_mode=req.audio.voiceMode,
+        script=req.voiceoverScript,
+        speaker_gender=req.audio.characterGender,
+        duration=int(req.duration),
+        text=" ".join(filter(None, [req.productName, req.description, req.fullCreativeDirection, req.userPrompt])),
+    )
 
     user_doc = (
         db.collection("users")
@@ -2083,9 +2594,13 @@ async def start_prompt_video(
     director_prompt = compose_runway_prompt(
         director_prompt,
         intelligence_guidance,
-        max_chars=RUNWAY_PROMPT_LIMIT,
+        max_chars=max(
+            200,
+            RUNWAY_PROMPT_LIMIT - len(audio_behavior_rule(req)) - 1,
+        ),
         guidance_budget=RUNWAY_INTELLIGENCE_BUDGET,
     )
+    director_prompt = apply_audio_behavior_guardrail(director_prompt, req)
 
     print(
         "[Director Control Resolution]",
@@ -2137,6 +2652,7 @@ async def start_prompt_video(
         "model": req.model,
 
         "voiceover": req.voiceover.model_dump(),
+        "audio": req.audio.model_dump(),
         "voiceoverScript": (
             (req.voiceoverScript or "").strip()
             or None
@@ -2176,6 +2692,10 @@ async def start_prompt_video(
         # Runway task fields.
         "runwayVideoTaskId": None,
         "runwayTtsTaskId": None,
+        "runwayAudioTaskId": None,
+        "runwayAvatarTaskId": None,
+        "runwayCharacterImageTaskId": None,
+        "runwayCharacterTaskId": None,
 
         # Final output.
         "finalVideoUrl": None,
@@ -2217,7 +2737,9 @@ async def start_prompt_video(
         cost_reservation = reserve_platform_cost(
             db,
             duration=int(req.duration),
-            include_tts=bool(req.voiceover.enabled and (req.voiceoverScript or "").strip()),
+            include_tts=bool(req.audio.voiceMode == "voiceover" and (req.voiceoverScript or "").strip()),
+            include_character_dialogue=bool(req.audio.voiceMode == "character_dialogue"),
+            include_audio_enhancement=bool(req.audio.musicAndEffects),
         )
         job_ref.update({
             "estimatedProviderCostUsd": cost_reservation.estimated_cost_usd,
@@ -2315,7 +2837,7 @@ async def start_prompt_video(
 
     try:
         if (
-            bool(req.voiceover.enabled)
+            req.audio.voiceMode == "voiceover"
             and (req.voiceoverScript or "").strip()
         ):
             runway_tts_id = await create_text_to_speech(
@@ -2406,14 +2928,22 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
     db = get_db()
     job_ref = db.collection("video_jobs").document(job_id)
     job = job_ref.get().to_dict() or {}
+    finalization_stage = "loading_runway_output"
 
     try:
         runway_video_task_id = job.get("runwayVideoTaskId")
+        print(
+            "[VIDEO FINALIZE]",
+            {"jobId": job_id, "stage": finalization_stage, "runwayVideoTaskId": runway_video_task_id},
+            flush=True,
+        )
         task = await get_task(runway_video_task_id)
         runway_video_url = extract_first_output_url(task)
         if not runway_video_url:
             raise RuntimeError("The video service completed the task but no output was available.")
 
+        finalization_stage = "processing_base_video"
+        print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
         set_video_progress(job_ref, "processing_video", finalizationState="running")
 
         with tempfile.TemporaryDirectory() as td:
@@ -2438,7 +2968,12 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             final_path = enforced_video
 
             vo_cfg = job.get("voiceover") or {}
-            if vo_cfg.get("enabled"):
+            audio_cfg = job.get("audio") or {}
+            voice_mode = str(audio_cfg.get("voiceMode") or ("voiceover" if vo_cfg.get("enabled") else "none"))
+
+            if voice_mode == "voiceover":
+                finalization_stage = "generating_voiceover"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
                 set_video_progress(job_ref, "generating_voiceover")
                 script = (job.get("voiceoverScript") or "").strip()
                 if not script:
@@ -2476,7 +3011,9 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 audio_path = os.path.join(td, "voice.mp3")
                 await download_to_file(tts_url, audio_path)
 
-                set_video_progress(job_ref, "mixing_audio")
+                finalization_stage = "mixing_voiceover"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                set_video_progress(job_ref, "mixing_voiceover")
                 muxed = os.path.join(td, "final_muxed.mp4")
                 await asyncio.to_thread(
                     mux_voiceover,
@@ -2486,9 +3023,352 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 )
                 final_path = muxed
 
+            elif voice_mode == "character_dialogue":
+                finalization_stage = "generating_character_dialogue"
+                print(
+                    "[VIDEO FINALIZE]",
+                    {
+                        "jobId": job_id,
+                        "stage": finalization_stage,
+                        "characterVoice": audio_cfg.get("characterVoice"),
+                        "characterGender": audio_cfg.get("characterGender"),
+                    },
+                    flush=True,
+                )
+                set_video_progress(job_ref, "generating_dialogue")
+                script = (job.get("voiceoverScript") or "").strip()
+                if not script:
+                    raise RuntimeError("Character Dialogue is enabled but the dialogue script is empty.")
+
+                dialogue_seconds = character_dialogue_seconds(script, target_seconds)
+                avatar_task_id = job.get("runwayAvatarTaskId")
+                if not avatar_task_id:
+                    finalization_stage = "creating_avatar_performance"
+                    print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                    avatar_task_id = await create_avatar_video(
+                        script=script,
+                        preset_voice=str(audio_cfg.get("characterVoice") or "emma"),
+                        # Act-Two uses this clip as a performance reference only.
+                        # The human-resource preset produces a calmer, more restrained
+                        # delivery than the influencer-style performance.
+                        avatar_preset="human-resource",
+                    )
+                    job_ref.update({"runwayAvatarTaskId": avatar_task_id})
+
+                finalization_stage = "waiting_for_avatar_performance"
+                print(
+                    "[VIDEO FINALIZE]",
+                    {"jobId": job_id, "stage": finalization_stage, "runwayAvatarTaskId": avatar_task_id},
+                    flush=True,
+                )
+                avatar_task = None
+                for _ in range(180):
+                    avatar_task = await get_task(avatar_task_id)
+                    avatar_status = avatar_task.get("status")
+                    if avatar_status == "SUCCEEDED":
+                        break
+                    if avatar_status in ("FAILED", "CANCELED"):
+                        raise RuntimeError("Character dialogue performance generation failed.")
+                    await asyncio.sleep(1)
+                else:
+                    raise RuntimeError("Character dialogue performance generation timed out.")
+
+                avatar_url = extract_first_output_url(avatar_task or {})
+                if not avatar_url:
+                    raise RuntimeError("Character dialogue performance output is missing.")
+
+                finalization_stage = "preparing_dialogue_reference"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                avatar_video = os.path.join(td, "dialogue_reference.mp4")
+                await download_to_file(avatar_url, avatar_video)
+                avatar_reference = os.path.join(td, "dialogue_reference_padded.mp4")
+                avatar_duration = await asyncio.to_thread(probe_duration_seconds, avatar_video)
+                pad_seconds = max(0.0, 3.05 - float(avatar_duration))
+                cmd = [
+                    "ffmpeg", "-y", "-i", avatar_video,
+                    "-vf", f"tpad=stop_mode=clone:stop_duration={pad_seconds:.3f}",
+                    "-af", f"apad=pad_dur={pad_seconds:.3f}",
+                    "-t", f"{max(3.05, float(avatar_duration)):.3f}",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    avatar_reference,
+                ]
+                p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if p.returncode != 0:
+                    raise RuntimeError(f"ffmpeg dialogue reference preparation failed: {p.stderr[-800:]}")
+
+                # Character Dialogue no longer depends on the generated video's tail
+                # containing a detectable face. Image-to-video uses the validated source
+                # image. Prompt-to-video creates one dedicated front-facing speaker image.
+                character_image_uri = None
+
+                if str(job.get("mode") or "") == "image" and job.get("promptImageUrl"):
+                    character_image_uri = str(job.get("promptImageUrl"))
+                    print(
+                        "[VIDEO CHARACTER SPEAKER]",
+                        {"jobId": job_id, "source": "validated_input_image"},
+                        flush=True,
+                    )
+                else:
+                    finalization_stage = "generating_speaker_image"
+                    print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                    set_video_progress(job_ref, "generating_speaker_image")
+
+                    speaker_image_task_id = job.get("runwayCharacterImageTaskId")
+                    if not speaker_image_task_id:
+                        speaker_prompt = build_character_speaker_image_prompt(job)
+                        speaker_image_task_id = await create_text_to_image(
+                            prompt_text=speaker_prompt,
+                            ratio=speaker_image_ratio(str(job.get("ratio") or "720:1280")),
+                            model="gen4_image",
+                        )
+                        job_ref.update({
+                            "runwayCharacterImageTaskId": speaker_image_task_id,
+                            "characterSpeakerPrompt": speaker_prompt,
+                        })
+
+                    speaker_task = None
+                    for _ in range(180):
+                        speaker_task = await get_task(speaker_image_task_id)
+                        speaker_status = speaker_task.get("status")
+                        if speaker_status == "SUCCEEDED":
+                            break
+                        if speaker_status in ("FAILED", "CANCELED"):
+                            print(
+                                "[RUNWAY SPEAKER IMAGE FAILED]",
+                                {
+                                    "jobId": job_id,
+                                    "taskId": speaker_image_task_id,
+                                    "status": speaker_status,
+                                    "task": speaker_task,
+                                },
+                                flush=True,
+                            )
+                            raise RuntimeError(
+                                f"Character speaker image generation failed. Runway task: {speaker_task}"
+                            )
+                        await asyncio.sleep(1)
+                    else:
+                        raise RuntimeError("Character speaker image generation timed out.")
+
+                    character_image_uri = extract_first_output_url(speaker_task or {})
+                    if not character_image_uri:
+                        raise RuntimeError("Character speaker image output is missing.")
+
+                    print(
+                        "[VIDEO CHARACTER SPEAKER]",
+                        {
+                            "jobId": job_id,
+                            "source": "generated_speaker_image",
+                            "taskId": speaker_image_task_id,
+                        },
+                        flush=True,
+                    )
+
+                finalization_stage = "creating_character_performance"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                set_video_progress(job_ref, "applying_dialogue")
+                character_task_id = job.get("runwayCharacterTaskId")
+                if not character_task_id:
+                    character_task_id = await create_character_performance(
+                        character_image=character_image_uri,
+                        reference_video=file_as_data_uri(avatar_reference),
+                        ratio=act_two_ratio(str(job.get("ratio") or "720:1280")),
+                    )
+                    job_ref.update({"runwayCharacterTaskId": character_task_id})
+
+                finalization_stage = "waiting_for_character_performance"
+                print(
+                    "[VIDEO FINALIZE]",
+                    {"jobId": job_id, "stage": finalization_stage, "runwayCharacterTaskId": character_task_id},
+                    flush=True,
+                )
+                character_task = None
+                for _ in range(240):
+                    character_task = await get_task(character_task_id)
+                    character_status = character_task.get("status")
+                    if character_status == "SUCCEEDED":
+                        break
+                    if character_status in ("FAILED", "CANCELED"):
+                        print(
+                            "[RUNWAY CHARACTER PERFORMANCE FAILED]",
+                            {
+                                "jobId": job_id,
+                                "taskId": character_task_id,
+                                "status": character_status,
+                                "task": character_task,
+                            },
+                            flush=True,
+                        )
+                        raise RuntimeError(
+                            f"Character dialogue synchronization failed. "
+                            f"Runway task: {character_task}"
+                        )
+                    await asyncio.sleep(1)
+                else:
+                    raise RuntimeError("Character dialogue synchronization timed out.")
+
+                character_url = extract_first_output_url(character_task or {})
+                if not character_url:
+                    raise RuntimeError("Character dialogue synchronized output is missing.")
+
+                character_video = os.path.join(td, "dialogue_synced.mp4")
+                await download_to_file(character_url, character_video)
+
+                visual_dialogue = os.path.join(td, "dialogue_visual.mp4")
+                print(
+                    "[VIDEO DIALOGUE COMPOSITE]",
+                    {
+                        "jobId": job_id,
+                        "dialogueSeconds": dialogue_seconds,
+                        "transitionSeconds": 0.20,
+                        "characterSource": (job_ref.get().to_dict() or {}).get("characterDialogueSource"),
+                    },
+                    flush=True,
+                )
+                await asyncio.to_thread(
+                    replace_tail_segment,
+                    enforced_video,
+                    character_video,
+                    visual_dialogue,
+                    dialogue_seconds,
+                    transition_seconds=0.20,
+                )
+
+                finalization_stage = "extracting_dialogue_audio"
+                print(
+                    "[VIDEO FINALIZE]",
+                    {
+                        "jobId": job_id,
+                        "stage": finalization_stage,
+                        "source": "synchronized_character_performance",
+                    },
+                    flush=True,
+                )
+                dialogue_audio = os.path.join(td, "dialogue_audio.m4a")
+                await asyncio.to_thread(
+                    extract_dialogue_audio_aligned,
+                    character_video,
+                    dialogue_audio,
+                    dialogue_seconds,
+                )
+
+                finalization_stage = "mixing_character_dialogue"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                set_video_progress(job_ref, "mixing_dialogue")
+                dialogue_muxed = os.path.join(td, "dialogue_muxed.mp4")
+
+                # Visual and audio are now derived from the same synchronized
+                # Character Performance output. Delay only places that matched
+                # segment into the final speaking window.
+                delay_ms = max(0, int(round((target_seconds - dialogue_seconds) * 1000)))
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", visual_dialogue,
+                    "-i", dialogue_audio,
+                    "-filter_complex",
+                    (
+                        f"[1:a]adelay={delay_ms}|{delay_ms},"
+                        f"apad=whole_dur={float(target_seconds):.3f}[voice]"
+                    ),
+                    "-map", "0:v:0",
+                    "-map", "[voice]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-t", f"{float(target_seconds):.3f}",
+                    dialogue_muxed,
+                ]
+                p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if p.returncode != 0:
+                    raise RuntimeError(f"ffmpeg dialogue mux failed: {p.stderr[-800:]}")
+                final_path = dialogue_muxed
+
+            if audio_cfg.get("musicAndEffects"):
+                finalization_stage = "generating_music_and_effects"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                set_video_progress(job_ref, "generating_audio")
+                audio_task_id = job.get("runwayAudioTaskId")
+                if not audio_task_id:
+                    audio_context = " ".join(filter(None, [
+                        str(job.get("productName") or ""),
+                        str(job.get("description") or ""),
+                        str(job.get("sceneStyle") or ""),
+                        str(job.get("pace") or ""),
+                    ]))
+                    audio_context = trim_video_prompt(audio_context, 220)
+
+                    audio_prompt = trim_video_prompt(
+                        (
+                            f"Create subtle professional ambient sound design for this {target_seconds}s ad. "
+                            "Use realistic scene ambience and a few restrained, relevant sound effects. "
+                            "Keep it cohesive, smooth, understated, and continuous. "
+                            "No music, melody, percussion, speech, vocals, or lyrics. Context: "
+                            + audio_context
+                        ),
+                        440,
+                    )
+                    audio_task_id = await create_sound_effect(
+                        prompt_text=audio_prompt,
+                        duration=target_seconds,
+                    )
+                    job_ref.update({"runwayAudioTaskId": audio_task_id})
+
+                finalization_stage = "waiting_for_music_and_effects"
+                print(
+                    "[VIDEO FINALIZE]",
+                    {"jobId": job_id, "stage": finalization_stage, "runwayAudioTaskId": audio_task_id},
+                    flush=True,
+                )
+                audio_task = None
+                for _ in range(180):
+                    audio_task = await get_task(audio_task_id)
+                    audio_status = audio_task.get("status")
+                    if audio_status == "SUCCEEDED":
+                        break
+                    if audio_status in ("FAILED", "CANCELED"):
+                        raise RuntimeError("Music and sound effects generation failed.")
+                    await asyncio.sleep(1)
+                else:
+                    raise RuntimeError("Music and sound effects generation timed out.")
+
+                audio_url = extract_first_output_url(audio_task or {})
+                if not audio_url:
+                    raise RuntimeError("Music and sound effects output is missing.")
+
+                finalization_stage = "mixing_music_and_effects"
+                print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+                set_video_progress(job_ref, "mixing_audio")
+                background_audio = os.path.join(td, "background_audio.mp3")
+                await download_to_file(audio_url, background_audio)
+                mixed_path = os.path.join(td, "final_audio_mix.mp4")
+                await asyncio.to_thread(
+                    mix_background_audio,
+                    final_path,
+                    background_audio,
+                    mixed_path,
+                    duck_for_voice=voice_mode in {"voiceover", "character_dialogue"},
+                )
+                final_path = mixed_path
+
+            # Hard delivery contract: all final assets are exactly the selected
+            # 6s or 10s duration after every voice/dialogue/audio operation.
+            finalization_stage = "normalizing_final_duration"
+            print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
+            set_video_progress(job_ref, "normalizing_duration")
+            duration_locked_path = os.path.join(td, "final_duration_locked.mp4")
+            final_duration_seconds = await asyncio.to_thread(
+                enforce_final_duration,
+                final_path,
+                duration_locked_path,
+                target_seconds,
+            )
+            final_path = duration_locked_path
+
             with open(final_path, "rb") as f:
                 data = f.read()
 
+            finalization_stage = "uploading_final_video"
+            print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
             set_video_progress(job_ref, "uploading_video")
             latest_job = job_ref.get().to_dict() or job
             tier, _status = get_tier_and_status(
@@ -2505,6 +3385,8 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             )
             final_url = stored["url"]
 
+            finalization_stage = "saving_library"
+            print("[VIDEO FINALIZE]", {"jobId": job_id, "stage": finalization_stage}, flush=True)
             set_video_progress(job_ref, "saving_library")
             register_storage_asset(
                 db,
@@ -2523,7 +3405,20 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
                 "storagePath": stored["storagePath"],
                 "fileSizeBytes": stored["fileSizeBytes"],
                 "contentType": stored.get("contentType") or "video/mp4",
+                "finalDurationSeconds": round(float(final_duration_seconds), 3),
+                "requestedDurationSeconds": target_seconds,
             })
+
+            print(
+                "[VIDEO FINALIZATION SUCCEEDED]",
+                {
+                    "jobId": job_id,
+                    "voiceMode": voice_mode,
+                    "musicAndEffects": bool(audio_cfg.get("musicAndEffects")),
+                    "finalVideoUrl": bool(final_url),
+                },
+                flush=True,
+            )
 
             track_event(
                 db,
@@ -2564,6 +3459,27 @@ async def finalize_video_job(job_id: str, uid: str) -> None:
             )
 
     except Exception as exc:
+        latest_job = job_ref.get().to_dict() or job
+        print(
+            "[VIDEO FINALIZATION FAILED]",
+            {
+                "jobId": job_id,
+                "uid": uid,
+                "stage": finalization_stage,
+                "errorType": type(exc).__name__,
+                "error": repr(exc),
+                "voiceMode": (latest_job.get("audio") or {}).get("voiceMode"),
+                "musicAndEffects": bool((latest_job.get("audio") or {}).get("musicAndEffects")),
+                "runwayVideoTaskId": latest_job.get("runwayVideoTaskId"),
+                "runwayTtsTaskId": latest_job.get("runwayTtsTaskId"),
+                "runwayAvatarTaskId": latest_job.get("runwayAvatarTaskId"),
+                "runwayCharacterImageTaskId": latest_job.get("runwayCharacterImageTaskId"),
+                "runwayCharacterTaskId": latest_job.get("runwayCharacterTaskId"),
+                "runwayAudioTaskId": latest_job.get("runwayAudioTaskId"),
+            },
+            flush=True,
+        )
+
         refund_succeeded = refund_video_usage_once(
             db,
             job_ref,

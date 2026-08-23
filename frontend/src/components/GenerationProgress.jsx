@@ -7,10 +7,17 @@ const STEP_MAP = {
     { stage: "loading_brand_kit", label: "Active Brand applied" },
     { stage: "building_prompt", label: "Creative direction built" },
     { stage: "submitting_to_runway", label: "Request sent" },
-    { stage: "waiting_for_runway", label: "Video rendering" },
-    { stage: "processing_video", label: "Final video processed" },
-    { stage: "generating_voiceover", label: "Voiceover generated", voiceoverOnly: true },
-    { stage: "mixing_audio", label: "Voiceover added", voiceoverOnly: true },
+    { stage: "waiting_for_runway", label: "Video rendered" },
+    { stage: "processing_video", label: "Base video processed" },
+    { stage: "generating_voiceover", label: "Voiceover generated", voiceModes: ["voiceover"] },
+    { stage: "mixing_voiceover", label: "Voiceover added", voiceModes: ["voiceover"] },
+    { stage: "generating_dialogue", label: "Dialogue prepared", voiceModes: ["character_dialogue"] },
+    { stage: "preparing_speaking_scene", label: "Speaking scene prepared", voiceModes: ["character_dialogue"] },
+    { stage: "applying_dialogue", label: "In-scene dialogue synchronized", voiceModes: ["character_dialogue"] },
+    { stage: "mixing_dialogue", label: "Dialogue added", voiceModes: ["character_dialogue"] },
+    { stage: "generating_audio", label: "Ambient effects generated", musicOnly: true },
+    { stage: "mixing_audio", label: "Ambient effects mixed", musicOnly: true },
+    { stage: "normalizing_duration", label: "Duration verified" },
     { stage: "uploading_video", label: "Video uploaded" },
     { stage: "saving_library", label: "Saved to Library" },
     { stage: "succeeded", label: "Video complete" },
@@ -81,9 +88,16 @@ const TITLE_MAP = {
     building_prompt: "Building your commercial",
     submitting_to_runway: "Sending your request",
     waiting_for_runway: "Rendering your video",
-    processing_video: "Finalizing your video",
+    processing_video: "Processing your base video",
     generating_voiceover: "Generating your voiceover",
-    mixing_audio: "Adding voiceover",
+    mixing_voiceover: "Adding your voiceover",
+    generating_dialogue: "Preparing character dialogue",
+    preparing_speaking_scene: "Preparing the speaking scene",
+    applying_dialogue: "Synchronizing dialogue in the scene",
+    mixing_dialogue: "Adding synchronized dialogue",
+    generating_audio: "Generating ambient sound",
+    mixing_audio: "Mixing ambient sound",
+    normalizing_duration: "Verifying final duration",
     uploading_video: "Uploading your video",
     saving_library: "Saving to your Library",
     succeeded: "Your video is ready",
@@ -161,10 +175,45 @@ const HELPER_MESSAGES = {
       "Matching pacing to the selected duration...",
       "Generating the selected voice...",
     ],
+    mixing_voiceover: [
+      "Adding narration to the rendered video...",
+      "Synchronizing the voiceover track...",
+      "Preparing the narrated video...",
+    ],
+    generating_dialogue: [
+      "Preparing the selected character voice...",
+      "Building the dialogue performance...",
+      "Matching the script to the speaking window...",
+    ],
+    preparing_speaking_scene: [
+      "Keeping the speaker inside the commercial scene...",
+      "Preparing the in-scene speaking moment...",
+      "Preserving the original environment and composition...",
+    ],
+    applying_dialogue: [
+      "Synchronizing the on-screen speaker...",
+      "Matching the in-scene facial movement to the dialogue...",
+      "Keeping the speaking performance aligned...",
+    ],
+    mixing_dialogue: [
+      "Adding the synchronized dialogue track...",
+      "Aligning dialogue with the speaking window...",
+      "Preparing the spoken video...",
+    ],
+    generating_audio: [
+      "Creating subtle scene ambience...",
+      "Generating restrained scene-appropriate effects...",
+      "Building a cohesive ambient track...",
+    ],
     mixing_audio: [
-      "Synchronizing narration and video...",
-      "Balancing the final audio mix...",
-      "Preparing the completed soundtrack...",
+      "Balancing ambience and sound effects...",
+      "Keeping dialogue or narration clear...",
+      "Preparing the final soundtrack...",
+    ],
+    normalizing_duration: [
+      "Locking the finished video to the selected duration...",
+      "Checking final video and audio length...",
+      "Verifying the delivered runtime...",
     ],
     uploading_video: [
       "Uploading the finished video...",
@@ -298,16 +347,61 @@ const HELPER_MESSAGES = {
   },
 };
 
+const CHARACTER_DIALOGUE_VISUAL_CEILINGS = {
+  queued: 5,
+  loading_brand_kit: 8,
+  building_prompt: 12,
+  submitting_to_runway: 15,
+  waiting_for_runway: 45,
+  processing_video: 48,
+  generating_dialogue: 55,
+  preparing_speaking_scene: 65,
+  applying_dialogue: 76,
+  mixing_dialogue: 82,
+  generating_audio: 88,
+  mixing_audio: 92,
+  normalizing_duration: 95,
+  uploading_video: 97,
+  saving_library: 99,
+  succeeded: 100,
+};
+
+const CHARACTER_DIALOGUE_VISUAL_FLOORS = {
+  queued: 1,
+  loading_brand_kit: 5,
+  building_prompt: 8,
+  submitting_to_runway: 12,
+  waiting_for_runway: 15,
+  processing_video: 45,
+  generating_dialogue: 48,
+  preparing_speaking_scene: 55,
+  applying_dialogue: 65,
+  mixing_dialogue: 76,
+  generating_audio: 82,
+  mixing_audio: 88,
+  normalizing_duration: 92,
+  uploading_video: 95,
+  saving_library: 97,
+  succeeded: 99,
+};
+
 const VISUAL_CEILINGS = {
   video: {
     queued: 11,
     loading_brand_kit: 21,
     building_prompt: 31,
     submitting_to_runway: 47,
-    waiting_for_runway: 67,
-    processing_video: 77,
-    generating_voiceover: 85,
-    mixing_audio: 92,
+    waiting_for_runway: 66,
+    processing_video: 70,
+    generating_voiceover: 78,
+    mixing_voiceover: 84,
+    generating_dialogue: 76,
+    preparing_speaking_scene: 79,
+    applying_dialogue: 83,
+    mixing_dialogue: 85,
+    generating_audio: 89,
+    mixing_audio: 93,
+    normalizing_duration: 95,
     uploading_video: 97,
     saving_library: 99,
     succeeded: 100,
@@ -358,6 +452,8 @@ export default function GenerationProgress({
   message,
   percent = 5,
   voiceoverEnabled = false,
+  voiceMode,
+  musicAndEffects = false,
   failed = false,
   expectedMaxSeconds,
 }) {
@@ -370,9 +466,21 @@ export default function GenerationProgress({
 
   const definition = STEP_MAP[type] || STEP_MAP.video;
   const copy = COPY_MAP[type] || COPY_MAP.video;
+  const resolvedVoiceMode =
+    voiceMode || (voiceoverEnabled ? "voiceover" : "none");
+
   const steps = useMemo(
-    () => definition.filter((step) => !step.voiceoverOnly || voiceoverEnabled),
-    [definition, voiceoverEnabled]
+    () =>
+      definition.filter((step) => {
+        if (step.voiceModes && !step.voiceModes.includes(resolvedVoiceMode)) {
+          return false;
+        }
+        if (step.musicOnly && !musicAndEffects) {
+          return false;
+        }
+        return true;
+      }),
+    [definition, resolvedVoiceMode, musicAndEffects]
   );
 
   const backendPercent = Math.max(0, Math.min(100, Number(percent) || 0));
@@ -381,10 +489,34 @@ export default function GenerationProgress({
     HELPER_MESSAGES[type]?.queued ||
     ["Your request is still processing..."];
 
-  const visualCeiling = Math.max(
-    backendPercent,
-    VISUAL_CEILINGS[type]?.[stage] ?? backendPercent
-  );
+  const isCharacterDialogueProgress =
+    type === "video" && resolvedVoiceMode === "character_dialogue";
+
+  const stageVisualCeiling = isCharacterDialogueProgress
+    ? CHARACTER_DIALOGUE_VISUAL_CEILINGS[stage]
+    : VISUAL_CEILINGS[type]?.[stage];
+
+  const stageVisualFloor = isCharacterDialogueProgress
+    ? CHARACTER_DIALOGUE_VISUAL_FLOORS[stage]
+    : undefined;
+
+  const visualCeiling = isCharacterDialogueProgress
+    ? stageVisualCeiling ?? backendPercent
+    : Math.max(
+        backendPercent,
+        stageVisualCeiling ?? backendPercent
+      );
+
+  // For Character Dialogue, backend percentages are treated only as a signal
+  // that the stage changed. The visible percentage is animated within the
+  // current stage's own floor/ceiling range so it never jumps from one backend
+  // percentage to another.
+  const effectiveBackendPercent = isCharacterDialogueProgress
+    ? stageVisualFloor ?? Math.min(
+        backendPercent,
+        stageVisualCeiling ?? backendPercent
+      )
+    : backendPercent;
 
   useEffect(() => {
     if (!open) {
@@ -414,6 +546,18 @@ export default function GenerationProgress({
   }, [stage, type]);
 
   useEffect(() => {
+    if (!open || !isCharacterDialogueProgress) return;
+
+    const floor = CHARACTER_DIALOGUE_VISUAL_FLOORS[stage];
+    if (typeof floor !== "number") return;
+
+    setDisplayPercent((current) => {
+      // Never move backward, but do not jump to the stage ceiling.
+      return Math.max(current, floor);
+    });
+  }, [open, stage, isCharacterDialogueProgress]);
+
+  useEffect(() => {
     if (!open || failed || helperMessages.length <= 1) return undefined;
 
     const timer = window.setInterval(() => {
@@ -426,26 +570,79 @@ export default function GenerationProgress({
   useEffect(() => {
     if (!open) return undefined;
 
-    setDisplayPercent((current) => Math.max(current, backendPercent));
+    setDisplayPercent((current) =>
+      Math.max(current, effectiveBackendPercent)
+    );
 
-    if (failed || stage === "succeeded" || backendPercent >= 100) {
-      setDisplayPercent(backendPercent);
+    if (
+      failed ||
+      stage === "succeeded" ||
+      effectiveBackendPercent >= 100
+    ) {
+      setDisplayPercent(effectiveBackendPercent);
       return undefined;
     }
 
     const animationInterval =
-      type === "video" && stage === "waiting_for_runway" ? 6500 : 2400;
+      isCharacterDialogueProgress
+        ? stage === "waiting_for_runway"
+          ? 4200
+          : stage === "processing_video"
+            ? 1800
+            : ["generating_dialogue", "preparing_speaking_scene"].includes(stage)
+              ? 2200
+              : ["applying_dialogue", "mixing_dialogue"].includes(stage)
+                ? 2600
+                : ["generating_audio", "mixing_audio"].includes(stage)
+                  ? 2200
+                  : ["normalizing_duration", "uploading_video", "saving_library"].includes(stage)
+                    ? 1600
+                    : 2000
+        : type === "video" && stage === "waiting_for_runway"
+          ? 6500
+          : 2400;
 
     const timer = window.setInterval(() => {
       setDisplayPercent((current) => {
-        const baseline = Math.max(current, backendPercent);
+        const baseline = Math.max(current, effectiveBackendPercent);
         if (baseline >= visualCeiling) return baseline;
+
+        if (isCharacterDialogueProgress) {
+          const remaining = visualCeiling - baseline;
+
+          // Smooth every Character Dialogue stage rather than jumping to the
+          // backend-reported percentage. Slow progressively near each ceiling.
+          let increment = 1;
+          if (remaining <= 2) increment = 0.18;
+          else if (remaining <= 4) increment = 0.32;
+          else if (remaining <= 7) increment = 0.55;
+          else if (remaining <= 12) increment = 0.8;
+
+          // Do not visually "complete" an active stage. Leave a small amount
+          // of headroom until the backend actually advances to the next stage.
+          return Math.min(
+            Math.max(stageVisualFloor ?? 0, visualCeiling - 0.1),
+            baseline + increment
+          );
+        }
+
         return Math.min(visualCeiling, baseline + 1);
       });
     }, animationInterval);
 
     return () => window.clearInterval(timer);
-  }, [open, failed, stage, type, backendPercent, visualCeiling]);
+  }, [
+    open,
+    failed,
+    stage,
+    type,
+    backendPercent,
+    effectiveBackendPercent,
+    visualCeiling,
+    stageVisualFloor,
+    resolvedVoiceMode,
+    isCharacterDialogueProgress,
+  ]);
 
   if (!open) return null;
 

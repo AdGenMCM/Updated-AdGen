@@ -1504,3 +1504,356 @@
     flex-direction: column;
   }
 }
+
+
+/* =========================================================
+   FINAL — Video Settings hierarchy
+   Consolidated replacement for prior experimental overrides.
+========================================================= */
+
+.videoAds .videoSettingsCompact {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+/* Voice mode gets its own full-width row. */
+.videoAds .videoVoiceModeField {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.videoAds .videoVoiceModeField > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.videoAds .videoVoiceModes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.videoAds .videoVoiceMode {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--ag-text-soft);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.videoAds .videoVoiceMode:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.videoAds .videoVoiceMode.selected {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.28),
+    rgba(79, 70, 229, 0.14)
+  );
+  color: #fff;
+}
+
+.videoAds .videoVoiceMode input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--ag-primary);
+}
+
+/* Voice / Duration / Format line. */
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) {
+  display: grid;
+  grid-template-rows: auto 48px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) select {
+  height: 48px;
+  min-height: 48px;
+}
+
+/* Enhancements: two normal cards + PI can grow when its preview is present. */
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+  margin: 0 0 24px;
+}
+
+.videoAds .videoEnhancementGrid > .videoEnhancementCard {
+  width: 100%;
+  min-width: 0;
+  min-height: 94px;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.videoAds .videoEnhancementGrid > .videoEnhancementCard:not(.videoIntelligenceCard) {
+  height: 94px;
+}
+
+.videoAds .videoEnhancementCard.enabled {
+  border-color: rgba(139, 92, 246, 0.42);
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.09), rgba(79, 70, 229, 0.035)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.videoAds .videoEnhancementGrid .videoToggle,
+.videoAds .videoEnhancementGrid .videoToggleCopy {
+  width: 100%;
+  min-width: 0;
+}
+
+.videoAds .videoEnhancementGrid .videoToggleTitle {
+  white-space: normal !important;
+  line-height: 1.25;
+}
+
+/* Performance Intelligence is allowed to be taller so its descriptive
+   copy and expandable preview stay inside the card cleanly. */
+.videoAds .videoEnhancementGrid > .videoIntelligenceCard {
+  min-height: 94px;
+  height: auto;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 14px;
+  overflow: visible !important;
+}
+
+.videoAds .videoIntelligenceCard > .pi-preview {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100%;
+  margin-top: 2px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+/* Script lives on its own clear row. */
+.videoAds .voBox {
+  position: relative;
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.videoAds .voiceHeader {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.videoAds .voBox textarea {
+  min-height: 118px;
+  max-height: 220px;
+}
+
+/* Keep the disabled overlay inside the script card. */
+.videoAds .voOverlay {
+  border-radius: 18px;
+}
+
+/* Tablet */
+@media (max-width: 1180px) {
+  .videoAds .videoSettingsCompact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .videoAds .videoSettingsCompact > .field:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .videoAds .videoEnhancementGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoEnhancementGrid > .videoEnhancementCard:not(.videoIntelligenceCard) {
+    height: auto;
+    min-height: 84px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 700px) {
+  .videoAds .videoSettingsCompact {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoVoiceModes {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoVoiceMode {
+    justify-content: flex-start;
+  }
+
+  .videoAds .videoSettingsCompact > .field:last-child {
+    grid-column: auto;
+  }
+
+  .videoAds .voiceHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .videoAds .voiceHeader .secondary {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   Video 400 validation UX
+========================================================= */
+.videoAds .videoValidationCard {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 18px 0 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.08);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
+}
+
+.videoAds .videoValidationIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  font-weight: 950;
+}
+
+.videoAds .videoValidationCopy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ag-text);
+  font-size: 0.9rem;
+}
+
+.videoAds .videoValidationCopy p {
+  margin: 0;
+  color: var(--ag-text-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.videoAds .videoValidationAction {
+  min-height: 38px;
+  padding: 9px 13px;
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  border-radius: 11px;
+  background: rgba(124, 58, 237, 0.14);
+  color: #ddd6fe;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.videoAds .videoValidationAction:hover {
+  background: rgba(124, 58, 237, 0.22);
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoValidationCard {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .videoAds .videoValidationAction {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   Corrective validation actions
+========================================================= */
+.videoAds .videoValidationCopy .videoValidationHelp {
+  margin-top: 7px;
+  color: var(--ag-muted);
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.videoAds .videoValidationActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 180px;
+}
+
+.videoAds .videoValidationAction.secondary {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: var(--ag-border);
+  color: var(--ag-text-soft);
+}
+
+.videoAds .videoValidationAction.secondary:hover {
+  background: rgba(255, 255, 255, 0.065);
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoValidationActions {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .videoAds .videoValidationAction {
+    width: 100%;
+  }
+}
+
+
+.videoCreativeScrollTarget {
+  scroll-margin-top: 108px;
+}
+
+.videoAds .voBox {
+  scroll-margin-top: 108px;
+}

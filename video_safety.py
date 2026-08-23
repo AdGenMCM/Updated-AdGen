@@ -34,6 +34,10 @@ VIDEO_STALE_PRE_PROVIDER_SECONDS = max(
 RUNWAY_DAILY_SPEND_LIMIT_USD = max(0.0, float(os.getenv("RUNWAY_DAILY_SPEND_LIMIT_USD", "25")))
 RUNWAY_COST_PER_SECOND_USD = max(0.0, float(os.getenv("RUNWAY_COST_PER_SECOND_USD", "0.12")))
 RUNWAY_TTS_ESTIMATED_COST_USD = max(0.0, float(os.getenv("RUNWAY_TTS_ESTIMATED_COST_USD", "0.10")))
+RUNWAY_CHARACTER_DIALOGUE_COST_PER_SECOND_USD = max(0.0, float(os.getenv("RUNWAY_CHARACTER_DIALOGUE_COST_PER_SECOND_USD", "0.05")))
+RUNWAY_AVATAR_ESTIMATED_COST_PER_SECOND_USD = max(0.0, float(os.getenv("RUNWAY_AVATAR_ESTIMATED_COST_PER_SECOND_USD", "0.0034")))
+RUNWAY_AUDIO_ENHANCEMENT_MIN_COST_USD = max(0.0, float(os.getenv("RUNWAY_AUDIO_ENHANCEMENT_MIN_COST_USD", "0.05")))
+VIDEO_CHARACTER_VISION_MODEL = (os.getenv("VIDEO_CHARACTER_VISION_MODEL") or "gpt-4.1-mini").strip()
 
 ACTIVE_VIDEO_STATUSES = {"queued", "running", "pending", "processing", "throttled"}
 BLOCKING_CATEGORIES = {
@@ -348,15 +352,178 @@ async def moderate_video_request(
     return {"checked": True, "flagged": False, "categories": []}
 
 
-def estimated_runway_cost(duration: int, *, include_tts: bool = False) -> float:
-    cost = max(0, int(duration)) * RUNWAY_COST_PER_SECOND_USD
+
+PERSON_TERMS = re.compile(
+    r"\b(person|people|woman|women|girl|female|man|men|boy|male|model|athlete|"
+    r"trainer|coach|creator|influencer|spokesperson|speaker|customer|worker|"
+    r"professional|founder|doctor|nurse|chef|barista|agent|consultant|human)\b",
+    re.IGNORECASE,
+)
+
+
+def character_dialogue_max_seconds(duration: int) -> float:
+    return 5.5 if int(duration) >= 10 else 3.5
+
+
+async def validate_character_dialogue_request(
+    *,
+    voice_mode: str,
+    script: Optional[str],
+    speaker_gender: Optional[str],
+    duration: int,
+    text: str = "",
+    image_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Reject invalid Character Dialogue requests before video credits/provider spend."""
+    mode = (voice_mode or "none").strip().lower()
+    if mode != "character_dialogue":
+        return {"validated": False, "required": False}
+
+    clean_script = " ".join((script or "").split())
+    if not clean_script:
+        raise HTTPException(
+            status_code=400,
+            detail="Add a Character Dialogue script before creating the video.",
+        )
+
+    gender = (speaker_gender or "").strip().lower()
+    if gender not in {"female", "male"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a male or female Character Voice before creating the video.",
+        )
+
+    words = len(clean_script.split())
+    estimated_seconds = (words / 2.5) + 0.6
+    max_dialogue_seconds = character_dialogue_max_seconds(int(duration))
+    if estimated_seconds > max_dialogue_seconds:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The Character Dialogue is too long for the planned on-screen speaking window "
+                f"(about {max_dialogue_seconds:g}s in a {int(duration)}s video). "
+                "Shorten the dialogue so the character only speaks while they are on screen."
+            ),
+        )
+
+    normalized = _normalize(text)
+    opposite_terms = (
+        (r"\b(woman|women|girl|female)\b", "male"),
+        (r"\b(man|men|boy|male)\b", "female"),
+    )
+    for pattern, conflicting_gender in opposite_terms:
+        if gender == conflicting_gender and re.search(pattern, normalized, re.IGNORECASE):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The selected Character Voice conflicts with the person described "
+                    "in your prompt. Choose a matching voice or update the prompt."
+                ),
+            )
+
+    if image_url:
+        if not OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Character Dialogue image validation is temporarily unavailable.",
+            )
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = await asyncio.to_thread(
+                lambda: client.responses.create(
+                    model=VIDEO_CHARACTER_VISION_MODEL,
+                    input=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    "Inspect this image for video preflight. Reply with exactly one "
+                                    "token: FEMALE if it contains a clearly visible adult female-presenting "
+                                    "person suitable to speak on camera, MALE if it contains a clearly visible "
+                                    "adult male-presenting person suitable to speak on camera, PERSON if a "
+                                    "clearly visible adult person is present but presentation is unclear, "
+                                    "or NONE if there is no suitable visible adult person."
+                                ),
+                            },
+                            {"type": "input_image", "image_url": image_url},
+                        ],
+                    }],
+                    max_output_tokens=8,
+                )
+            )
+            verdict = (getattr(response, "output_text", "") or "").strip().upper()
+        except Exception as exc:
+            print("[Character Dialogue Vision Check Error]", repr(exc), flush=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Character Dialogue image validation is temporarily unavailable.",
+            )
+
+        if verdict == "NONE" or verdict not in {"FEMALE", "MALE", "PERSON"}:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Character Dialogue requires an on-screen person. Upload an image "
+                    "with a clearly visible person or switch to AI Voiceover."
+                ),
+            )
+        if verdict in {"FEMALE", "MALE"} and verdict.lower() != gender:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The selected Character Voice does not match the visible person "
+                    "in the uploaded image. Choose a matching voice."
+                ),
+            )
+        return {"validated": True, "required": True, "speaker": verdict.lower()}
+
+    if not PERSON_TERMS.search(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Character Dialogue requires an on-screen person. Add a person to "
+                "your video prompt or switch to AI Voiceover."
+            ),
+        )
+
+    return {"validated": True, "required": True, "speaker": gender}
+
+
+
+def estimated_runway_cost(
+    duration: int,
+    *,
+    include_tts: bool = False,
+    include_character_dialogue: bool = False,
+    include_audio_enhancement: bool = False,
+) -> float:
+    seconds = max(0, int(duration))
+    cost = seconds * RUNWAY_COST_PER_SECOND_USD
     if include_tts:
         cost += RUNWAY_TTS_ESTIMATED_COST_USD
+    if include_character_dialogue:
+        cost += seconds * RUNWAY_CHARACTER_DIALOGUE_COST_PER_SECOND_USD
+        cost += seconds * RUNWAY_AVATAR_ESTIMATED_COST_PER_SECOND_USD
+    if include_audio_enhancement:
+        cost += max(RUNWAY_AUDIO_ENHANCEMENT_MIN_COST_USD, seconds * 0.0025)
     return round(cost, 4)
 
 
-def reserve_platform_cost(db, *, duration: int, include_tts: bool = False) -> CostReservation:
-    estimated = estimated_runway_cost(duration, include_tts=include_tts)
+def reserve_platform_cost(
+    db,
+    *,
+    duration: int,
+    include_tts: bool = False,
+    include_character_dialogue: bool = False,
+    include_audio_enhancement: bool = False,
+) -> CostReservation:
+    estimated = estimated_runway_cost(
+        duration,
+        include_tts=include_tts,
+        include_character_dialogue=include_character_dialogue,
+        include_audio_enhancement=include_audio_enhancement,
+    )
     day_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     document_id = f"runway_{day_key}"
     ref = db.collection("platform_cost_guards").document(document_id)

@@ -18,8 +18,7 @@ const QUICK_PRODUCT_MAX = 80;
 const QUICK_AUDIENCE_MAX = 100;
 const QUICK_CTA_MAX = 20;
 const IMAGE_MOTION_PROMPT_MAX = 400;
-const EXTRA_DIRECTION_MAX = 200;
-const FULL_CREATIVE_DIRECTION_MAX = 300;
+const CREATIVE_DIRECTION_MAX = 300;
 const VIDEO_GENERATOR_MODE_KEY = "adgen:video-generator-mode";
 
 const RUNWAY_VOICES = [
@@ -28,6 +27,17 @@ const RUNWAY_VOICES = [
   "Malachi","Marlene","Martin","Miriam","Paula","Pip","Rusty","Ragnar","Xylar","Maggie",
   "Jack","Katie","Noah","James","Rina","Ella","Mariah","Frank","Claudia","Niki","Vincent",
   "Kendrick","Myrna","Tom","Wanda","Benjamin","Kiana","Rachel"
+];
+
+const CHARACTER_VOICES = [
+  { id: "emma", label: "Emma — Female", gender: "female" },
+  { id: "maya", label: "Maya — Female", gender: "female" },
+  { id: "nina", label: "Nina — Female", gender: "female" },
+  { id: "luna", label: "Luna — Female", gender: "female" },
+  { id: "david", label: "David — Male", gender: "male" },
+  { id: "nathan", label: "Nathan — Male", gender: "male" },
+  { id: "adam", label: "Adam — Male", gender: "male" },
+  { id: "roman", label: "Roman — Male", gender: "male" },
 ];
 
 // ✅ One dropdown: Platform + Aspect Ratio
@@ -211,6 +221,133 @@ async function safeJson(res) {
   }
 }
 
+
+function buildVideoValidationError(detail) {
+  const message = customerSafeMessage(
+    detail,
+    "Please review your video inputs and try again."
+  );
+  const lower = String(message || "").toLowerCase();
+
+  if (
+    lower.includes("character dialogue") &&
+    (lower.includes("person") || lower.includes("on-screen"))
+  ) {
+    return {
+      code: "character_person_required",
+      title: "Character Dialogue needs an on-screen person",
+      message,
+      help:
+        "Describe a visible speaker in the Video Prompt. Example: “Create a fitness ad featuring a female athlete training in a gym.” Or switch to AI Voiceover for off-screen narration.",
+      actionLabel: "Use Suggested Prompt",
+      secondaryActionLabel: "Switch to AI Voiceover",
+      target: "creative",
+    };
+  }
+
+  if (
+    lower.includes("dialogue") &&
+    (lower.includes("too long") || lower.includes("speaking window"))
+  ) {
+    return {
+      code: "dialogue_too_long",
+      title: "Shorten the Character Dialogue",
+      message,
+      help:
+        "Character Dialogue only uses part of the video for on-screen speech. Shorten the line so it fits naturally inside the speaking window.",
+      actionLabel: "Trim to Fit",
+      target: "settings",
+    };
+  }
+
+  if (
+    lower.includes("conflict") &&
+    lower.includes("voice")
+  ) {
+    return {
+      code: "voice_character_mismatch",
+      title: "Voice and on-screen character do not match",
+      message,
+      help:
+        "Choose a character voice that matches the person described in your prompt, or update the prompt to match the selected voice.",
+      actionLabel: "Match Voice to Prompt",
+      target: "settings",
+    };
+  }
+
+  if (
+    lower.includes("uploaded image") &&
+    lower.includes("visible person")
+  ) {
+    return {
+      code: "image_person_required",
+      title: "Character Dialogue needs a visible person",
+      message,
+      help:
+        "Upload an image with a clearly visible person, or switch to AI Voiceover if you want narration without an on-screen speaker.",
+      actionLabel: "Switch to AI Voiceover",
+      target: "creative",
+    };
+  }
+
+  if (
+    lower.includes("voiceover") ||
+    lower.includes("audio script") ||
+    lower.includes("script")
+  ) {
+    return {
+      code: "voice_script",
+      title: "Review your voice script",
+      message,
+      help:
+        "Edit the script so it fits the selected duration, then try again.",
+      actionLabel: "Review Voice Settings",
+      target: "settings",
+    };
+  }
+
+  if (
+    lower.includes("duration") ||
+    lower.includes("format") ||
+    lower.includes("ratio")
+  ) {
+    return {
+      code: "video_settings",
+      title: "Review your video settings",
+      message,
+      help:
+        "Check the selected duration and format, then try the generation again.",
+      actionLabel: "Review Video Settings",
+      target: "settings",
+    };
+  }
+
+  if (
+    lower.includes("image") ||
+    lower.includes("upload") ||
+    lower.includes("reference")
+  ) {
+    return {
+      code: "source_creative",
+      title: "Review the source creative",
+      message,
+      help:
+        "Check the uploaded image and prompt, then try again.",
+      actionLabel: "Review Source Creative",
+      target: "creative",
+    };
+  }
+
+  return {
+    code: "generic_input",
+    title: "Update your video before generating",
+    message,
+    help:
+      "Review the highlighted input and adjust the request before trying again.",
+    actionLabel: "Review Video Inputs",
+    target: "creative",
+  };
+}
 async function claimFirstGeneration(kind, jobId, token) {
   if (!jobId || !token) return;
 
@@ -244,6 +381,11 @@ function estimateSpeechSeconds(text) {
   const words = t.split(/\s+/).filter(Boolean).length;
   // ~2.5 words/sec + small buffer
   return Math.round(((words / 2.5) + 0.6) * 10) / 10;
+}
+
+
+function characterDialogueMaxSeconds(duration) {
+  return Number(duration) >= 10 ? 4.0 : 2.5;
 }
 
 
@@ -298,7 +440,6 @@ export default function VideoAds() {
   const [pace, setPace] = useState("fast");
   const [callToAction, setCallToAction] = useState("");
   const [fullCreativeDirection, setFullCreativeDirection] = useState("");
-  const [userPrompt, setUserPrompt] = useState("");
   const [controlOverrides, setControlOverrides] = useState([]);
 
   const markControlOverride = (field) => {
@@ -307,9 +448,11 @@ export default function VideoAds() {
     );
   };
 
-  // ========== Voiceover ==========
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  // ========== Voice & Audio ==========
+  const [voiceMode, setVoiceMode] = useState("voiceover"); // none | voiceover | character_dialogue
   const [presetVoice, setPresetVoice] = useState("Leslie");
+  const [characterVoice, setCharacterVoice] = useState("emma");
+  const [musicAndEffects, setMusicAndEffects] = useState(false);
   const [voiceoverScript, setVoiceoverScript] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -382,14 +525,18 @@ export default function VideoAds() {
   const [status, setStatus] = useState(null);
   const [finalVideoUrl, setFinalVideoUrl] = useState(null);
   const [error, setError] = useState(null);
+  const [validationError, setValidationError] = useState(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const [videoLimitReached, setVideoLimitReached] = useState(false);
   const [videoUsageUsed, setVideoUsageUsed] = useState(null);
   const [videoUsageCap, setVideoUsageCap] = useState(null);
 
-  // scroll target
+  // scroll targets
   const statusRef = useRef(null);
+  const validationRef = useRef(null);
+  const creativeSectionRef = useRef(null);
+  const voiceScriptRef = useRef(null);
 
   const canUseVideoAds = useMemo(() => {
     if (me.isAdmin) return true;
@@ -469,6 +616,126 @@ export default function VideoAds() {
     }, 300);
   };
 
+
+  const clearVideoValidation = () => setValidationError(null);
+
+  const showVideoValidation = (detail) => {
+    const next = buildVideoValidationError(detail);
+    setValidationError(next);
+    setError(null);
+    window.setTimeout(() => {
+      validationRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 80);
+  };
+
+  const scrollToUpdatedArea = (targetRef, block = "start") => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        targetRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block,
+        });
+      }, 180);
+    });
+  };
+
+  const goToValidationTarget = (target) => {
+    if (target === "settings") {
+      scrollToUpdatedArea(videoSettingsSectionRef, "start");
+      return;
+    }
+
+    scrollToUpdatedArea(creativeSectionRef, "start");
+  };
+
+
+  const applyValidationFix = (validation, secondary = false) => {
+    if (!validation) return;
+
+    if (validation.code === "character_person_required") {
+      if (secondary) {
+        setVoiceMode("voiceover");
+        clearVideoValidation();
+        scrollToUpdatedArea(videoSettingsSectionRef, "start");
+        return;
+      }
+
+      const gender =
+        CHARACTER_VOICES.find((voice) => voice.id === characterVoice)?.gender ||
+        "female";
+      const personPhrase =
+        gender === "male" ? "a male athlete" : "a female athlete";
+
+      setDescription((current) => {
+        const existing = String(current || "").trim();
+        if (!existing) {
+          return `Create a video featuring ${personPhrase} clearly on screen and speaking naturally during the Character Dialogue portion.`;
+        }
+
+        if (/\b(person|woman|women|girl|female|man|men|boy|male|model|athlete|trainer|coach|creator|influencer|spokesperson|speaker|human)\b/i.test(existing)) {
+          return existing;
+        }
+
+        const lowered = existing.charAt(0).toLowerCase() + existing.slice(1);
+        return `Create a video featuring ${personPhrase} clearly on screen, ${lowered}`;
+      });
+
+      clearVideoValidation();
+      scrollToUpdatedArea(creativeSectionRef, "start");
+      return;
+    }
+
+    if (validation.code === "dialogue_too_long") {
+      const maxSeconds = characterDialogueMaxSeconds(duration);
+      const maxWords = Math.max(3, Math.floor((maxSeconds - 0.6) * 2.5));
+      setVoiceoverScript((current) => {
+        const words = String(current || "").trim().split(/\s+/).filter(Boolean);
+        if (words.length <= maxWords) return current;
+        return words.slice(0, maxWords).join(" ").replace(/[,:;.!?]*$/, "") + ".";
+      });
+      clearVideoValidation();
+      scrollToUpdatedArea(voiceScriptRef, "center");
+      return;
+    }
+
+    if (validation.code === "voice_character_mismatch") {
+      const text = `${description || ""} ${promptText || ""}`.toLowerCase();
+      const mentionsFemale = /\b(woman|women|girl|female)\b/.test(text);
+      const mentionsMale = /\b(man|men|boy|male)\b/.test(text);
+
+      const desiredGender = mentionsFemale && !mentionsMale
+        ? "female"
+        : mentionsMale && !mentionsFemale
+          ? "male"
+          : null;
+
+      if (desiredGender) {
+        const matchingVoice = CHARACTER_VOICES.find(
+          (voice) => voice.gender === desiredGender
+        );
+        if (matchingVoice) {
+          setCharacterVoice(matchingVoice.id);
+        }
+      }
+
+      clearVideoValidation();
+      scrollToUpdatedArea(videoSettingsSectionRef, "start");
+      return;
+    }
+
+    if (validation.code === "image_person_required") {
+      setVoiceMode("voiceover");
+      clearVideoValidation();
+      scrollToUpdatedArea(videoSettingsSectionRef, "start");
+      return;
+    }
+
+    goToValidationTarget(validation.target);
+  };
+
   const applyVideoTemplate = (template) => {
     const values = template.values;
 
@@ -491,7 +758,6 @@ export default function VideoAds() {
     setPromptText(values.promptText);
     setVoiceoverScript(values.voiceoverScript);
     setFullCreativeDirection("");
-    setUserPrompt("");
     setControlOverrides([
       "goal",
       "tone",
@@ -524,7 +790,6 @@ export default function VideoAds() {
     setPromptText("Subtle cinematic camera movement, product showcase");
     setVoiceoverScript("");
     setFullCreativeDirection("");
-    setUserPrompt("");
     setControlOverrides([]);
     moveToWorkspaceSection(firstWorkspaceSectionRef);
   };
@@ -658,7 +923,7 @@ export default function VideoAds() {
 
     setTab("prompt");
     setDuration(6);
-    setVoiceEnabled(false);
+    setVoiceMode("none");
     setVoiceoverScript("");
   }, [advancedOpen]);
 
@@ -724,7 +989,7 @@ export default function VideoAds() {
     setPreviewUrl(null);
 
     try {
-      if (!voiceEnabled) throw new Error("Enable voiceover to preview a voice.");
+      if (voiceMode === "none") throw new Error("Choose AI Voiceover or Character Dialogue to preview a voice.");
       const text = (voiceoverScript || "").trim();
       if (!text) throw new Error("Add a voiceover script first.");
 
@@ -736,7 +1001,10 @@ export default function VideoAds() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ text, presetVoice }),
+        body: JSON.stringify({
+          text,
+          presetVoice: voiceMode === "character_dialogue" ? "Leslie" : presetVoice,
+        }),
       });
 
       const data = await safeJson(res);
@@ -775,27 +1043,51 @@ export default function VideoAds() {
 
   // ✅ warn/block if script too long
   const scriptEstimateSec = useMemo(() => estimateSpeechSeconds(voiceoverScript), [voiceoverScript]);
+  const scriptMaxSeconds = useMemo(() => {
+    if (voiceMode === "character_dialogue") {
+      return characterDialogueMaxSeconds(duration);
+    }
+    return Number(duration) + 0.2;
+  }, [voiceMode, duration]);
+
   const scriptTooLong = useMemo(() => {
-    if (!voiceEnabled) return false;
+    if (voiceMode === "none") return false;
     const s = (voiceoverScript || "").trim();
     if (!s) return false;
-    return scriptEstimateSec > (Number(duration) + 0.2);
-  }, [voiceEnabled, voiceoverScript, scriptEstimateSec, duration]);
+    return scriptEstimateSec > scriptMaxSeconds;
+  }, [voiceMode, voiceoverScript, scriptEstimateSec, scriptMaxSeconds]);
 
   const scriptHint = useMemo(() => {
-    if (!voiceEnabled) return null;
+    if (voiceMode === "none") return null;
     const s = (voiceoverScript || "").trim();
     if (!s) return null;
-    if (!scriptTooLong) return `Estimated read time: ~${scriptEstimateSec}s (fits ${duration}s)`;
+
+    if (voiceMode === "character_dialogue") {
+      if (!scriptTooLong) {
+        return `Estimated speaking time: ~${scriptEstimateSec}s. Character Dialogue uses up to ~${scriptMaxSeconds}s in this ${duration}s video so the ad still has time to showcase the creative.`;
+      }
+      return `Estimated speaking time: ~${scriptEstimateSec}s — too long for the ~${scriptMaxSeconds}s Character Dialogue window. Shorten the dialogue.`;
+    }
+
+    if (!scriptTooLong) {
+      return `Estimated read time: ~${scriptEstimateSec}s (fits ${duration}s)`;
+    }
     return `Estimated read time: ~${scriptEstimateSec}s — too long for ${duration}s. Shorten your script.`;
-  }, [voiceEnabled, voiceoverScript, scriptEstimateSec, scriptTooLong, duration]);
+  }, [voiceMode, voiceoverScript, scriptEstimateSec, scriptTooLong, scriptMaxSeconds, duration]);
 
   const ensureScriptFitsOrThrow = () => {
-    if (!voiceEnabled) return;
+    if (voiceMode === "none") return;
     const s = (voiceoverScript || "").trim();
     if (!s) return;
     if (scriptTooLong) {
-      throw new Error(`Your voiceover script is too long (~${scriptEstimateSec}s) for a ${duration}s video. Please shorten it.`);
+      if (voiceMode === "character_dialogue") {
+        throw new Error(
+          `Your Character Dialogue is too long (~${scriptEstimateSec}s). Keep it within about ${scriptMaxSeconds}s so the person only speaks during their on-screen dialogue window.`
+        );
+      }
+      throw new Error(
+        `Your voiceover script is too long (~${scriptEstimateSec}s) for a ${duration}s video. Please shorten it.`
+      );
     }
   };
 
@@ -808,6 +1100,7 @@ export default function VideoAds() {
     resetJob();
     setLoading(true);
     setError(null);
+    clearVideoValidation();
 
     try {
       const token = await getIdToken();
@@ -820,10 +1113,17 @@ export default function VideoAds() {
         promptText,
         duration,
         ratio,
-        voiceoverScript: voiceEnabled ? (voiceoverScript || "").trim() : null,
+        voiceoverScript: voiceMode !== "none" ? (voiceoverScript || "").trim() : null,
         voiceover: {
-          enabled: voiceEnabled,
+          enabled: voiceMode === "voiceover",
           presetVoice,
+        },
+        audio: {
+          voiceMode,
+          characterVoice,
+          characterGender:
+            CHARACTER_VOICES.find((voice) => voice.id === characterVoice)?.gender || "female",
+          musicAndEffects,
         },
 
         // The backend securely resolves the current learned profile.
@@ -853,6 +1153,11 @@ export default function VideoAds() {
             detail,
             "We couldn't start your video generation. Please try again."
           );
+
+        if (res.status === 400) {
+          showVideoValidation(detail);
+          return;
+        }
 
         if (res.status === 429) {
           setVideoLimitReached(true);
@@ -909,12 +1214,14 @@ export default function VideoAds() {
     resetJob();
     setLoading(true);
     setError(null);
+    clearVideoValidation();
 
     try {
       const token = await getIdToken();
 
       const effectiveDuration = quickMode ? 6 : duration;
-      const effectiveVoiceEnabled = quickMode ? false : voiceEnabled;
+      const effectiveVoiceMode = quickMode ? "none" : voiceMode;
+      const effectiveVoiceEnabled = effectiveVoiceMode === "voiceover";
       const selectedFormat =
         FORMAT_OPTIONS.find((option) => option.id === formatId) ||
         FORMAT_OPTIONS[0];
@@ -942,17 +1249,24 @@ export default function VideoAds() {
         fullCreativeDirection: quickMode
           ? null
           : fullCreativeDirection || null,
-        userPrompt: quickMode ? null : userPrompt || null,
+        userPrompt: null,
 
         duration: effectiveDuration,
         ratio: effectiveRatio,
 
-        voiceoverScript: effectiveVoiceEnabled
+        voiceoverScript: effectiveVoiceMode !== "none"
           ? (voiceoverScript || "").trim()
           : null,
         voiceover: {
           enabled: effectiveVoiceEnabled,
           presetVoice,
+        },
+        audio: {
+          voiceMode: effectiveVoiceMode,
+          characterVoice,
+          characterGender:
+            CHARACTER_VOICES.find((voice) => voice.id === characterVoice)?.gender || "female",
+          musicAndEffects: quickMode ? false : musicAndEffects,
         },
 
         // The backend securely resolves the current learned profile.
@@ -982,6 +1296,11 @@ export default function VideoAds() {
             detail,
             "We couldn't start your video generation. Please try again."
           );
+
+        if (res.status === 400) {
+          showVideoValidation(detail);
+          return;
+        }
 
         if (res.status === 429) {
           setVideoLimitReached(true);
@@ -1120,7 +1439,7 @@ export default function VideoAds() {
       <div className="videoAds">
         <div className="videoAdsHeader">
           <h1>Video Ads</h1>
-          <p>Create 6s or 10s video ads with optional AI voiceover.</p>
+          <p>Create 6s or 10s video ads with optional voice, dialogue, music, and sound effects.</p>
         </div>
 
         <div className="box">
@@ -1136,7 +1455,7 @@ export default function VideoAds() {
       <div className="videoAds">
         <div className="videoAdsHeader">
           <h1>Video Ads</h1>
-          <p>Create 6s or 10s video ads with optional AI voiceover.</p>
+          <p>Create 6s or 10s video ads with optional voice, dialogue, music, and sound effects.</p>
         </div>
 
         <div className="box">
@@ -1213,7 +1532,9 @@ return (
       stage={progressStage}
       message={progressMessage}
       percent={progressPercent}
-      voiceoverEnabled={voiceEnabled && !!(voiceoverScript || "").trim()}
+      voiceoverEnabled={voiceMode === "voiceover" && !!(voiceoverScript || "").trim()}
+      voiceMode={voiceMode}
+      musicAndEffects={musicAndEffects}
       failed={status === "failed"}
       expectedMaxSeconds={180}
     />
@@ -1233,7 +1554,7 @@ return (
           </div>
           <p>
             Create high-performing AI video advertisements from prompts or images using your Brand Kit,
-            winning creative insights, and optional AI voiceover.
+            winning creative insights, optional voice, synchronized dialogue, music, and sound effects.
           </p>
         </div>
 
@@ -1256,7 +1577,7 @@ return (
                 setTemplatesOpen(false);
                 setTab("prompt");
                 setDuration(6);
-                setVoiceEnabled(false);
+                setVoiceMode("none");
                 setVoiceoverScript("");
                 setControlOverrides([]);
                 window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1341,7 +1662,7 @@ return (
                 </label>
                 <textarea
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => { setDescription(e.target.value); clearVideoValidation(); }}
                   placeholder="Example: A premium coffee bottle pouring over ice in a bright café, close-up condensation, energetic movement, ending with the product centered on screen."
                   maxLength={VIDEO_DESCRIPTION_MAX}
                   disabled={isGenerating}
@@ -1464,7 +1785,7 @@ return (
               onClick={async () => {
                 setTab("prompt");
                 setDuration(6);
-                setVoiceEnabled(false);
+                setVoiceMode("none");
                 setVoiceoverScript("");
 
                 try {
@@ -1513,7 +1834,7 @@ return (
                 <h3>Need complete video control?</h3>
                 <p>
                   Choose image-to-video or prompt-to-video, configure duration,
-                  format, voiceover, Brand Kit, Performance Intelligence, motion,
+                  format, voice, audio, Brand Kit, Performance Intelligence, motion,
                   lighting, pacing, creative direction, and every advanced setting.
                 </p>
               </div>
@@ -1706,34 +2027,67 @@ return (
           description="Configure duration, format, voiceover, Brand Kit, and AI enhancements."
         >
           <div className="row videoSettingsCompact">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={voiceEnabled}
-                onChange={(e) => setVoiceEnabled(e.target.checked)}
-                disabled={isGenerating}
-              />
-              AI Voiceover
-              <InfoTip text="Reads your script using an AI-generated voice. Disable this if you do not want narration." />
-            </label>
-
-            <div className="field">
+            <div className="field videoVoiceModeField">
               <label>
                 Voice
-                <InfoTip text="Choose which AI voice will narrate your script." />
+                <InfoTip text="Choose silent video, off-screen AI narration, or synchronized on-screen Character Dialogue." />
               </label>
-              <select
-                value={presetVoice}
-                onChange={(e) => setPresetVoice(e.target.value)}
-                disabled={!voiceEnabled || isGenerating}
-              >
-                {RUNWAY_VOICES.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
+              <div className="videoVoiceModes" role="radiogroup" aria-label="Voice mode">
+                {[
+                  ["none", "No voice"],
+                  ["voiceover", "AI Voiceover"],
+                  ["character_dialogue", "Character Dialogue"],
+                ].map(([value, label]) => (
+                  <label key={value} className={`videoVoiceMode ${voiceMode === value ? "selected" : ""}`}>
+                    <input
+                      type="radio"
+                      name="videoVoiceMode"
+                      value={value}
+                      checked={voiceMode === value}
+                      onChange={() => setVoiceMode(value)}
+                      disabled={isGenerating}
+                    />
+                    <span>{label}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
+
+            {voiceMode === "voiceover" && (
+              <div className="field">
+                <label>
+                  Narrator Voice
+                  <InfoTip text="Choose the off-screen voice that will narrate your script. Visible people remain nonverbal." />
+                </label>
+                <select
+                  value={presetVoice}
+                  onChange={(e) => setPresetVoice(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  {RUNWAY_VOICES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {voiceMode === "character_dialogue" && (
+              <div className="field">
+                <label>
+                  Character Voice
+                  <InfoTip text="The speaking character must match the selected male or female voice. Character Dialogue requires a visible on-screen person." />
+                </label>
+                <select
+                  value={characterVoice}
+                  onChange={(e) => setCharacterVoice(e.target.value)}
+                  disabled={isGenerating}
+                >
+                  {CHARACTER_VOICES.map((voice) => (
+                    <option key={voice.id} value={voice.id}>{voice.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="field">
               <label>
@@ -1773,6 +2127,24 @@ return (
 
 
           <div className="videoEnhancementGrid">
+           <div className={`videoEnhancementCard ${musicAndEffects ? "enabled" : ""}`}>
+              <label className="videoToggle">
+                <input
+                  type="checkbox"
+                  checked={musicAndEffects}
+                  onChange={(e) => setMusicAndEffects(e.target.checked)}
+                  disabled={isGenerating}
+                />
+                <span className="videoToggleCopy">
+                  <span className="videoToggleTitle">
+                    <span>Music &amp; Sound Effects</span>
+                    <InfoTip text="Generates background music, ambience, and scene-appropriate sound effects. Speech and vocals are excluded." />
+                  </span>
+                  <small>{musicAndEffects ? "Subtle ambience and scene effects" : "Optional"}</small>
+                </span>
+              </label>
+           </div>
+
            <div className="videoEnhancementCard">
             {isFreePlan ? (
               <div className="videoToggleCopy">
@@ -1849,19 +2221,19 @@ return (
           </div>
 
 
-          <div className={`box voBox ${!voiceEnabled ? "voBoxDisabled" : ""}`}>
+          <div ref={voiceScriptRef} className={`box voBox ${voiceMode === "none" ? "voBoxDisabled" : ""}`}>
             <div className="voiceHeader">
               <div>
                 <div className="boxTitle">
-                  Voiceover Script
-                  <InfoTip text="Optional narration spoken by the AI voice. Keep it concise so it fits the selected duration." />
+                  {voiceMode === "character_dialogue" ? "Character Dialogue Script" : "Voiceover Script"}
+                  <InfoTip text="Keep the script concise so it fits the selected duration and the speaker’s planned on-screen time." />
                 </div>
-                <div className="hint">If enabled, the voice will read this script.</div>
+                <div className="hint">{voiceMode === "character_dialogue" ? "The visible on-screen person will speak this dialogue during the planned speaking window." : "The selected narrator will read this script off-screen."}</div>
               </div>
 
               <button
                 className="secondary miniBtn"
-                disabled={isFreePlan || !voiceEnabled || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
+                disabled={isFreePlan || voiceMode === "none" || previewLoading || isGenerating || !(voiceoverScript || "").trim()}
                 onClick={() => previewVoice()}
                 type="button"
               >
@@ -1877,10 +2249,10 @@ return (
 
             <textarea
               value={voiceoverScript}
-              onChange={(e) => setVoiceoverScript(e.target.value)}
+              onChange={(e) => { setVoiceoverScript(e.target.value); clearVideoValidation(); }}
               rows={4}
-              disabled={!voiceEnabled || isGenerating}
-              placeholder="Type your voiceover script here…"
+              disabled={voiceMode === "none" || isGenerating}
+              placeholder={voiceMode === "character_dialogue" ? "Type what the on-screen person should say…" : "Type your voiceover script here…"}
             />
 
             {scriptHint && (
@@ -1889,13 +2261,13 @@ return (
               </div>
             )}
 
-            {!voiceEnabled && (
+            {voiceMode === "none" && (
               <div className="voOverlay" aria-hidden="true">
                 <div className="voOverlayCard">
                   <div className="voLock">🔒</div>
                   <div>
-                    <div className="voOverlayTitle">Voiceover disabled</div>
-                    <div className="voOverlaySub">Turn on “AI voiceover” to edit and preview.</div>
+                    <div className="voOverlayTitle">Voice disabled</div>
+                    <div className="voOverlaySub">Choose AI Voiceover or Character Dialogue to edit a script.</div>
                   </div>
                 </div>
               </div>
@@ -1922,6 +2294,7 @@ return (
           </div>
         </StepSection>
         </div>
+        <div ref={creativeSectionRef} className="videoCreativeScrollTarget">
                 <StepSection
           step="3"
           title={tab === "image" ? "Image to Video" : "Prompt to Video"}
@@ -2031,6 +2404,45 @@ return (
                 </div>
               )}
 
+
+              {validationError && (
+                <div
+                  ref={validationRef}
+                  className="videoValidationCard"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  <div className="videoValidationIcon" aria-hidden="true">!</div>
+                  <div className="videoValidationCopy">
+                    <strong>{validationError.title}</strong>
+                    <p>{validationError.message}</p>
+                    {validationError.help && (
+                      <p className="videoValidationHelp">{validationError.help}</p>
+                    )}
+                  </div>
+
+                  <div className="videoValidationActions">
+                    <button
+                      type="button"
+                      className="videoValidationAction"
+                      onClick={() => applyValidationFix(validationError)}
+                    >
+                      {validationError.actionLabel}
+                    </button>
+
+                    {validationError.secondaryActionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction secondary"
+                        onClick={() => applyValidationFix(validationError, true)}
+                      >
+                        {validationError.secondaryActionLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button
                 className="primary"
                 disabled={isGenerating || videoLimitReached || !canStartImage || scriptTooLong}
@@ -2091,7 +2503,7 @@ return (
                 </label>
                 <textarea
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => { setDescription(e.target.value); clearVideoValidation(); }}
                   rows={3}
                   maxLength={VIDEO_DESCRIPTION_MAX}
                   disabled={isGenerating}
@@ -2238,52 +2650,28 @@ return (
                 </div>
               </div>
 
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Extra Direction
-                    <InfoTip text="Optional short instructions to further refine the generated video." />
-                  </label>
-                  <input
-                    value={userPrompt}
-                    onChange={(e) => setUserPrompt(e.target.value)}
-                    maxLength={EXTRA_DIRECTION_MAX}
-                    placeholder="Optional"
-                    disabled={isGenerating}
-                  />
-                  <div
-                    className={`videoCharacterCount ${
-                      userPrompt.length >= EXTRA_DIRECTION_MAX * 0.9
-                        ? "nearLimit"
-                        : ""
-                    }`}
-                  >
-                    {userPrompt.length}/{EXTRA_DIRECTION_MAX}
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Full Creative Direction
-                    <InfoTip text="Detailed guidance for scene composition, motion, branding, and storytelling." />
-                  </label>
-                  <input
-                    value={fullCreativeDirection}
-                    onChange={(e) => setFullCreativeDirection(e.target.value)}
-                    maxLength={FULL_CREATIVE_DIRECTION_MAX}
-                    placeholder="Optional"
-                    disabled={isGenerating}
-                  />
-                  <div
-                    className={`videoCharacterCount ${
-                      fullCreativeDirection.length >=
-                      FULL_CREATIVE_DIRECTION_MAX * 0.9
-                        ? "nearLimit"
-                        : ""
-                    }`}
-                  >
-                    {fullCreativeDirection.length}/{FULL_CREATIVE_DIRECTION_MAX}
-                  </div>
+              <div className="field">
+                <label>
+                  Creative Direction
+                  <InfoTip text="Optional guidance for composition, storytelling, motion, or other details not covered by the controls above." />
+                </label>
+                <textarea
+                  value={fullCreativeDirection}
+                  onChange={(e) => setFullCreativeDirection(e.target.value)}
+                  maxLength={CREATIVE_DIRECTION_MAX}
+                  placeholder="Optional — add any final creative direction"
+                  disabled={isGenerating}
+                  rows={3}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    fullCreativeDirection.length >=
+                    CREATIVE_DIRECTION_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {fullCreativeDirection.length}/{CREATIVE_DIRECTION_MAX}
                 </div>
               </div>
 
@@ -2301,6 +2689,45 @@ return (
                   >
                     Upgrade to Continue
                   </button>
+                </div>
+              )}
+
+
+              {validationError && (
+                <div
+                  ref={validationRef}
+                  className="videoValidationCard"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  <div className="videoValidationIcon" aria-hidden="true">!</div>
+                  <div className="videoValidationCopy">
+                    <strong>{validationError.title}</strong>
+                    <p>{validationError.message}</p>
+                    {validationError.help && (
+                      <p className="videoValidationHelp">{validationError.help}</p>
+                    )}
+                  </div>
+
+                  <div className="videoValidationActions">
+                    <button
+                      type="button"
+                      className="videoValidationAction"
+                      onClick={() => applyValidationFix(validationError)}
+                    >
+                      {validationError.actionLabel}
+                    </button>
+
+                    {validationError.secondaryActionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction secondary"
+                        onClick={() => applyValidationFix(validationError, true)}
+                      >
+                        {validationError.secondaryActionLabel}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -2323,6 +2750,7 @@ return (
             </>
           )}
         </StepSection>
+        </div>
         </div>
           </div>
         )}
@@ -2443,7 +2871,20 @@ return (
 
               <div className="videoSpecRow">
                 <span>Voice</span>
-                <strong>{voiceEnabled ? presetVoice : "Off"}</strong>
+                <strong>
+                  {voiceMode === "voiceover"
+                    ? `AI Voiceover · ${presetVoice}`
+                    : voiceMode === "character_dialogue"
+                      ? `Character Dialogue · ${CHARACTER_VOICES.find((voice) => voice.id === characterVoice)?.label || characterVoice}`
+                      : "No voice"}
+                </strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Music & effects</span>
+                <strong className={`videoStatusPill ${musicAndEffects ? "on" : "off"}`}>
+                  {musicAndEffects ? "Enabled" : "Disabled"}
+                </strong>
               </div>
 
               <div className="videoSpecRow">

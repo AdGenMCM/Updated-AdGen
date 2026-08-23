@@ -154,6 +154,121 @@ async def create_text_to_speech(*, prompt_text: str, preset_voice: str) -> str:
         raise RunwayError(f"text_to_speech missing task id: {data}")
     return task_id
 
+
+async def create_sound_effect(
+    *,
+    prompt_text: str,
+    duration: int,
+    model: str = "eleven_text_to_sound_v2",
+) -> str:
+    clean_prompt = " ".join((prompt_text or "").split())
+    if len(clean_prompt) > 450:
+        clean_prompt = clean_prompt[:450].rsplit(" ", 1)[0].rstrip(" ,;:-") + "."
+
+    payload = {
+        "model": _strip_wrapping_quotes(model),
+        "promptText": clean_prompt,
+        "duration": max(0.5, min(30.0, float(duration))),
+    }
+    data = await _post("/v1/sound_effect", payload)
+    task_id = data.get("id")
+    if not task_id:
+        raise RunwayError(f"sound_effect missing task id: {data}")
+    return task_id
+
+
+async def create_text_to_image(
+    *,
+    prompt_text: str,
+    ratio: str,
+    model: str = "gen4_image",
+) -> str:
+    clean_prompt = " ".join((prompt_text or "").split()).strip()
+    if not clean_prompt:
+        raise RunwayError("text_to_image prompt is empty.")
+    if len(clean_prompt) > 1000:
+        clean_prompt = clean_prompt[:1000].rsplit(" ", 1)[0].rstrip(" ,;:-") + "."
+
+    payload = {
+        "model": _strip_wrapping_quotes(model),
+        "promptText": clean_prompt,
+        "ratio": ratio,
+    }
+    data = await _post("/v1/text_to_image", payload)
+    task_id = data.get("id")
+    if not task_id:
+        raise RunwayError(f"text_to_image missing task id: {data}")
+    return task_id
+
+
+async def create_avatar_video(
+    *,
+    script: str,
+    preset_voice: str,
+    avatar_preset: str = "influencer",
+) -> str:
+    data = await _post(
+        "/v1/avatar_videos",
+        {
+            "model": "gwm1_avatars",
+            "avatar": {
+                "type": "runway-preset",
+                "presetId": avatar_preset,
+            },
+            "speech": {
+                "type": "text",
+                "text": script,
+                "voice": {
+                    "type": "preset",
+                    "presetId": preset_voice,
+                },
+            },
+        },
+    )
+    task_id = data.get("id")
+    if not task_id:
+        raise RunwayError(f"avatar_videos missing task id: {data}")
+    return task_id
+
+
+async def create_character_performance(
+    *,
+    reference_video: str,
+    ratio: str,
+    character_image: str | None = None,
+    character_video: str | None = None,
+) -> str:
+    if character_image:
+        character = {
+            "type": "image",
+            "uri": character_image,
+        }
+    elif character_video:
+        character = {
+            "type": "video",
+            "uri": character_video,
+        }
+    else:
+        raise RunwayError("character_performance requires a character image or video.")
+
+    data = await _post(
+        "/v1/character_performance",
+        {
+            "model": "act_two",
+            "character": character,
+            "reference": {
+                "type": "video",
+                "uri": reference_video,
+            },
+            "ratio": ratio,
+        },
+    )
+    task_id = data.get("id")
+    if not task_id:
+        raise RunwayError(f"character_performance missing task id: {data}")
+    return task_id
+
+
 async def get_task(task_id: str) -> Dict[str, Any]:
     return await _get(f"/v1/tasks/{task_id}")
 
