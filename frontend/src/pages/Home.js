@@ -3,6 +3,7 @@ import "./Home.css";
 
 import Hero from "../components/marketing/hero/Hero";
 import Workflow from "../components/marketing/workflow/Workflow";
+import CreativeProof from "../components/marketing/creative-proof/CreativeProof";
 import PlatformShowcase from "../components/marketing/platform/PlatformShowcase";
 import ResultsSection from "../components/marketing/results/ResultsSection";
 import TrustFoundation from "../components/marketing/trust/TrustFoundation";
@@ -16,6 +17,10 @@ export default function Home() {
     <main className="home-page home-v2">
       
       <Hero />
+
+      <Reveal delay={100}>
+        <CreativeProof />
+      </Reveal>
 
       <Reveal delay={100}>
         <Workflow />

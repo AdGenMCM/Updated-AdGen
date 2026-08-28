@@ -25,7 +25,7 @@ const connectedBenefits = [
   },
   {
     label: "Campaign Reporting",
-    title: "Pull Reporing on Google, Meta, and Maunal Ads",
+    title: "Pull reporting from Google Ads, Meta Ads, and manual tracking",
   },
   {
     label: "Performance Intelligence",
@@ -103,10 +103,10 @@ export default function PlatformShowcase() {
 
       <div className="adgen-platform-action">
         <MarketingButton
-          href="/platform#generated-examples"
+          href="/examples"
           size="lg"
         >
-          See what ADGen MCM creates
+          Explore real ADGen examples
         </MarketingButton>
 
         <a

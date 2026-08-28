@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Home,
   Layers3,
+  Images,
   CircleDollarSign,
   Building2,
   Mail,
@@ -126,6 +127,7 @@ export default function Navbar() {
   const primaryLinks = [
     { to: "/", label: "Home" },
     { to: "/platform", label: "Platform" },
+    { to: "/examples", label: "Examples" },
     { to: "/pricing", label: "Pricing" },
     { to: "/about", label: "About" },
     { to: "/contact", label: "Contact" },
@@ -139,6 +141,7 @@ export default function Navbar() {
   const mobileLinks = [
     { to: "/", label: "Home", icon: Home },
     { to: "/platform", label: "Platform", icon: Layers3 },
+    { to: "/examples", label: "Examples", icon: Images },
     { to: "/pricing", label: "Pricing", icon: CircleDollarSign },
     { to: "/about", label: "About", icon: Building2 },
     { to: "/contact", label: "Contact", icon: Mail },

@@ -1170,8 +1170,12 @@ function AdGenerator() {
                       value={form.description}
                       onChange={handleChange}
                       disabled={loading}
+                      maxLength={3000}
                       required
                     />
+                    <small className="field-helper">
+                      {form.description.length}/3,000 characters · Detailed creative direction is supported.
+                    </small>
                   </label>
 
                   <label className="field">
@@ -1568,7 +1572,17 @@ function AdGenerator() {
                 <div className="field-label">
                   Product Description <InfoTip text="Describe what the product is, the main benefit, and what you want the ad to communicate." />
                 </div>
-                <textarea name="description" placeholder="Describe the product, offer, and creative direction..." value={form.description} onChange={handleChange} disabled={loading} />
+                <textarea
+                  name="description"
+                  placeholder="Describe the product, offer, and creative direction..."
+                  value={form.description}
+                  onChange={handleChange}
+                  disabled={loading}
+                  maxLength={3000}
+                />
+                <small className="field-helper">
+                  {form.description.length}/3,000 characters · Detailed creative direction is supported.
+                </small>
               </div>
 
               <div className="field-grid">

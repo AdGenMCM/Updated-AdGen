@@ -446,7 +446,7 @@ class GenerateFromOptimizerRequest(BaseModel):
     improved_headline: str = Field(max_length=50)
     improved_primary_text: str = Field(max_length=150)
     improved_cta: str = Field(max_length=25)
-    improved_image_prompt: str
+    improved_image_prompt: str = Field(max_length=3000)
     imageSize: str = "1024x1024"
     useBrandKit: bool = True
     brandKitId: Optional[str] = None
@@ -1691,6 +1691,72 @@ async def analyze_uploaded_creatives(urls: List[str]) -> str:
             "clarify the hook, strengthen the focal point, reduce clutter, align the visual story "
             "to the offer/goal, keep clean hierarchy, avoid text-heavy designs."
         )
+
+
+def extract_locked_scene_text(text: str, limit: int = 12) -> List[str]:
+    """
+    Extract only user text that is explicitly marked as exact scene text.
+
+    Examples matched:
+    - says exactly: "Buy now"
+    - says exactly: “Rough morning?”
+    - reads exactly: "OPEN"
+    - text exactly: “ENERGY RETURN: 94%”
+
+    This intentionally does NOT treat ordinary quoted text as locked content.
+    """
+    source = str(text or "")
+    if not source:
+        return []
+
+    matches = re.findall(
+        r'(?i)\bexactly\s*:\s*[“"]([^”"\r\n]{1,240})[”"]',
+        source,
+    )
+
+    locked: List[str] = []
+    seen = set()
+
+    for match in matches:
+        value = str(match or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        locked.append(value)
+        if len(locked) >= limit:
+            break
+
+    return locked
+
+
+def build_locked_scene_text_section(items: List[str]) -> str:
+    if not items:
+        return ""
+
+    rendered = "\n".join(
+        f'{index}. "{value}"'
+        for index, value in enumerate(items, start=1)
+    )
+
+    return f"""
+==================================================
+LOCKED SCENE TEXT — RENDER VERBATIM
+==================================================
+
+The user explicitly marked the following in-scene text as exact:
+
+{rendered}
+
+These strings are immutable visual content.
+
+• Render each listed string exactly as written.
+• Do not rewrite, shorten, improve, paraphrase, summarize, substitute,
+  autocorrect, or creatively reinterpret any listed string.
+• Preserve exact wording, spelling, punctuation, capitalization, and numbers.
+• Render each string only where the user's scene instructions place it.
+• Do not replace a listed string with stronger, cleaner, or more advertising-like copy.
+• If a listed phrase sounds unusual, render it anyway exactly as supplied.
+""".strip()
 
 
 def _extract_json_object(text: str) -> dict:
@@ -3763,7 +3829,7 @@ async def generate_ad(
         raise HTTPException(status_code=400, detail="product_name is required.")
 
     company_name = (payload.companyName or "").strip()[:80]
-    description = (payload.description or "").strip()[:800]
+    description = (payload.description or "").strip()[:3000]
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
     platform = (payload.platform or "Instagram").strip()[:40]
@@ -3836,6 +3902,11 @@ async def generate_ad(
         )
 
     set_generation_progress(db, "image", progress_job_id, "building_prompts")
+
+    locked_scene_text = extract_locked_scene_text(description)
+    locked_scene_text_section = build_locked_scene_text_section(
+        locked_scene_text
+    )
 
     copy_prompt = f"""Create high-performing ad copy as JSON ONLY.
     
@@ -3961,6 +4032,8 @@ Product:
 Product Description:
 {description}
 
+{locked_scene_text_section}
+
 Target Audience:
 {audience}
 
@@ -3996,8 +4069,17 @@ When exact creative copy is supplied:
 • Headline, Body Text, and CTA selections apply only to standard ad-copy elements.
 • Logo Mode applies only to standard logo/brand-mark treatment.
 • Always preserve text explicitly requested by the user as part of the scene, including
-  speech bubbles, signs, labels, packaging, computer/phone screens, interface text,
-  or other intentional in-scene wording.
+  speech bubbles, thought bubbles, captions, signs, labels, packaging, computer/phone
+  screens, interface text, or other intentional in-scene wording.
+• USER-SPECIFIED SCENE TEXT IS VERBATIM CONTENT. Reproduce every explicitly requested
+  in-scene word exactly as supplied by the user.
+• Never rewrite, shorten, improve, paraphrase, summarize, substitute, autocorrect, or
+  creatively reinterpret user-specified scene text.
+• Preserve its exact wording, spelling, punctuation, capitalization, numbers, and sequence.
+• If the user's requested scene text sounds unusual, awkward, incomplete, or less polished
+  than an alternative, render the user's wording anyway. Do not optimize it.
+• This verbatim scene-text rule is independent of Headline, Body Text, CTA, and Logo Mode
+  selections and has higher priority than general advertising-copy improvements.
 • Do not invent an additional standard advertising element when that element is disabled.
 
 Brand Style:
@@ -4664,7 +4746,7 @@ async def optimize_ad(
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
 
     product_name = (payload.product_name or "").strip()[:80]
-    description = (payload.description or "").strip()[:800]
+    description = (payload.description or "").strip()[:3000]
     audience = (payload.audience or "").strip()[:120]
     tone = (payload.tone or "confident").strip()[:40]
     offer = (payload.offer or "").strip()[:80]
@@ -4824,6 +4906,7 @@ ANALYSIS RULES:
 - likely_issues and recommended_changes remain concise arrays for compatibility.
 - improved_image_prompt must describe a complete, publish-ready advertisement
   and preserve the same product and campaign intent.
+- improved_image_prompt must be 3000 characters or fewer.
 
 Return exactly these keys:
 summary,
@@ -5112,7 +5195,7 @@ confidence
                 "same product and campaign intent while improving clarity, hierarchy, "
                 "readability, CTA visibility, and commercial quality."
             )
-        ).strip()
+        ).strip()[:3000]
 
         confidence = str(obj.get("confidence") or "medium").strip().lower()
         obj["confidence"] = confidence if confidence in {"low", "medium", "high"} else "medium"
@@ -5244,7 +5327,7 @@ async def generate_from_optimizer(
         or getattr(payload, "productName", None)
         or ""
     ).strip()[:80]
-    description = (getattr(payload, "description", None) or "").strip()[:800]
+    description = (getattr(payload, "description", None) or "").strip()[:3000]
     product_type = (getattr(payload, "productType", None) or "").strip()[:40] or None
     style = (getattr(payload, "stylePreset", None) or "Minimal").strip()[:30]
     tone = (getattr(payload, "tone", None) or "confident").strip()[:40]

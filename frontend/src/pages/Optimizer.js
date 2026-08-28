@@ -1561,7 +1561,11 @@ const [progress, setProgress] = useState({
                 value={form.description}
                 onChange={handleChange}
                 rows={4}
+                maxLength={3000}
               />
+              <small className="opt-fieldHelper">
+                {form.description.length}/3,000 characters · Detailed creative direction is supported.
+              </small>
 
               <div className="opt-grid">
                 <select name="audience_temp" value={form.audience_temp} onChange={handleChange}>

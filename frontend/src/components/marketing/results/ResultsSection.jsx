@@ -14,7 +14,7 @@ const metrics = [
   {
     value: "DNA",
     title: "Creative DNA",
-    text: "Turn winning colors, styles, messaging, and composition into reusable guidance.",
+    text: "Turn winning colors, styles, messaging, composition, and creative structure into reusable guidance.",
   },
   {
     value: "Image",

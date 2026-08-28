@@ -1598,3 +1598,13 @@
 .opt-structureRecommendationDetails strong {
   color: #cbd5e1;
 }
+
+
+/* Optimizer long-form creative description counter */
+.opt-fieldHelper {
+  display: block;
+  margin-top: 8px;
+  color: #8f9caf;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}

@@ -36,12 +36,12 @@ const sections = [
     title: "Turn ideas into campaign-ready creative.",
     outcome: "Go from campaign brief to polished ad creative.",
     text:
-      "Create branded image ads, strategic copy, hooks, calls to action, and multiple creative directions from one connected workflow.",
+      "Create polished ads or custom visual concepts with as much—or as little—creative control as you need. Start fast with Quick Create, or control copy, branding, references, format, and creative direction in the full workspace.",
     points: [
-      "Generate brand-aware image ads",
-      "Create campaign copy and hooks",
-      "Use references for stronger visual guidance",
-      "Produce multiple formats and variations",
+      "Create in seconds with Quick Create",
+      "Choose your copy, branding, and creative structure",
+      "Use Brand Kits and reference images for stronger direction",
+      "Create multiple formats, from structured ads to custom visual concepts",
     ],
     image: "/screenshots/image-generator.png",
     imageAlt:
@@ -75,12 +75,12 @@ const sections = [
     title: "Improve what is not working.",
     outcome: "Turn performance problems into stronger creative direction.",
     text:
-      "Analyze an existing ad alongside its campaign context and performance metrics to identify weaknesses and generate stronger recommendations.",
+      "Analyze an existing ad alongside its campaign context and performance metrics to identify weaknesses in messaging, creative structure, and execution—then generate stronger recommendations.",
     points: [
       "Import creatives directly from your Library",
       "Analyze Google Ads creative",
       "Analyze Meta Ads creative",
-      "Identify performance weaknesses",
+      "Identify performance and creative-structure weaknesses",
       "Generate optimized replacements",
     ],
     image: "/screenshots/optimizer.png",
@@ -141,7 +141,7 @@ const sections = [
     points: [
       "Connect Google, Meta Ads or add performance manually",
       "Qualify reliable winners and underperformers",
-      "Build Creative DNA from colors, styles, copy, and composition",
+      "Build Creative DNA from colors, styles, copy, composition, and creative structure",
       "Apply learned patterns to future image and video generations",
       "Use Campaign Intelligence to optimize your running campaign to maximize reach and ROI.",
     ],
@@ -175,112 +175,6 @@ const sections = [
 ];
 
 
-
-const imageExamples = [
-  {
-    src: "/examples/imagegen/image-ex1.png",
-    alt: "BaseBall University PowerBat campaign creative generated with ADGen MCM",
-    title: "Sports equipment",
-    detail: "Bold product campaign • Square format",
-    format: "square",
-  },
-  {
-    src: "/examples/imagegen/image-ex3.png",
-    alt: "Air Fresh household product campaign creative generated with ADGen MCM",
-    title: "Consumer goods",
-    detail: "Clean product campaign • Landscape format",
-    format: "landscape",
-  },
-  {
-    src: "/examples/imagegen/image-ex2.png",
-    alt: "Lumière vitamin C skincare campaign creative generated with ADGen MCM",
-    title: "Skincare",
-    detail: "Premium beauty campaign • Square format",
-    format: "square",
-  },
-];
-
-function GeneratedImageExamples() {
-  return (
-    <section id="generated-examples" className="platform-output-showcase platform-output-showcase-images">
-      <div className="platform-container platform-output-container">
-        <div className="platform-output-header">
-          <span className="platform-output-badge">Real platform output</span>
-          <h3>See what ADGen MCM creates.</h3>
-          <p>
-            Every creative below was generated inside ADGen MCM using the same
-            image workflow available to customers.
-          </p>
-        </div>
-
-        <div className="platform-output-grid">
-          {imageExamples.map((example) => (
-            <article
-              className={`platform-output-card platform-output-card-${example.format}`}
-              key={example.title}
-            >
-              <div className={`platform-output-media platform-output-media-${example.format}`}>
-                <img
-                  src={example.src}
-                  alt={example.alt}
-                  loading="lazy"
-                  decoding="async"
-                />
-                <span className="platform-output-watermark">Generated with ADGen MCM</span>
-              </div>
-
-              <div className="platform-output-card-copy">
-                <h4>{example.title}</h4>
-                <p>{example.detail}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function GeneratedVideoExample() {
-  return (
-    <section className="platform-output-showcase platform-output-showcase-video">
-      <div className="platform-container platform-video-example-grid">
-        <div className="platform-output-header platform-output-header-left">
-          <span className="platform-output-badge">Real platform output</span>
-          <h3>From prompt to polished motion.</h3>
-          <p>
-            A cinematic product video generated inside ADGen MCM from a short
-            creative direction—without a traditional production workflow.
-          </p>
-
-          <div className="platform-video-prompt">
-            <span>Example direction</span>
-            <p>
-              Cinematic energy drink product commercial with dramatic lighting,
-              premium motion, and a high-impact studio atmosphere.
-            </p>
-          </div>
-        </div>
-
-        <div className="platform-video-frame">
-          <div className="platform-video-glow" aria-hidden="true" />
-          <video
-            className="platform-generated-video"
-            src="/examples/videogen/video-ex1.mp4"
-            poster="/examples/imagegen/video-thumbnail-ex1.png"
-            controls
-            playsInline
-            preload="metadata"
-            aria-label="Energy drink product video generated with ADGen MCM"
-          >
-            Your browser does not support embedded video.
-          </video>
-          <span className="platform-video-label">Generated with ADGen MCM</span>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function ScreenshotCallouts({ items }) {
   return (
@@ -515,6 +409,17 @@ export default function Platform() {
                     ))}
                   </ul>
 
+                  {(section.number === "02" || section.number === "03") && (
+                    <MarketingButton
+                      href="/examples"
+                      size="md"
+                      variant="secondary"
+                      className="platform-examples-link"
+                    >
+                      See generated examples
+                    </MarketingButton>
+                  )}
+
                   <div className="platform-showcase-progress">
                     <span>
                       {String(index + 1).padStart(2, "0")}
@@ -561,18 +466,6 @@ export default function Platform() {
               </div>
               </section>
             </Reveal>
-
-            {section.number === "02" && (
-              <Reveal delay={100}>
-                <GeneratedImageExamples />
-              </Reveal>
-            )}
-
-            {section.number === "03" && (
-              <Reveal delay={100}>
-                <GeneratedVideoExample />
-              </Reveal>
-            )}
           </React.Fragment>
         ))}
       </div>

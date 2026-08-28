@@ -35,7 +35,7 @@ class OptimizeAdRequest(BaseModel):
 
     # Campaign and product context
     product_name: str
-    description: str
+    description: str = Field(max_length=3000)
     audience: str
     tone: str
     platform: Platform = "meta"
@@ -119,7 +119,7 @@ class OptimizeAdResponse(BaseModel):
     improved_headline: str = Field(max_length=50)
     improved_primary_text: str = Field(max_length=150)
     improved_cta: str = Field(max_length=25)
-    improved_image_prompt: str
+    improved_image_prompt: str = Field(max_length=3000)
     confidence: Confidence = "medium"
 
 

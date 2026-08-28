@@ -1,11 +1,11 @@
 import "./App.css";
-import Navbar from "./Navbar";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, Outlet, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+
 import Home from "./pages/Home";
 import AdGenerator from "./pages/AdGenerator";
-import ProtectedRoute from "./ProtectedRoute"; // auth-only, for /subscribe
-import PaidRoute from "./PaidRoute"; // auth + active sub
+import ProtectedRoute from "./ProtectedRoute";
+import PaidRoute from "./PaidRoute";
 import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
@@ -20,33 +20,37 @@ import CampaignManager from "./pages/CampaignManager";
 import DesignLab from "./pages/DesignLab";
 import ScrollToTop from "./components/ScrollToTop";
 
-// NEW: Public pages
+// Public pages
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Pricing from "./pages/Pricing";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Platform from "./pages/Platform";
+import Examples from "./pages/Examples";
 
 import Optimizer from "./pages/Optimizer";
 
-//Admin Imports 
+// Shared public layouts
+import Navbar from "./Navbar";
+import MarketingLayout from "./components/marketing/layout/MarketingLayout";
+
+// Admin imports
 import AdminRoute from "./AdminRoute";
 import AdminUsers from "./pages/AdminUsers";
 import AdminCreative from "./pages/AdminCreative";
 
-//App Styling 
+// App styling
 import DashboardRoute from "./components/DashboardRoute";
 import "./styles/animations.css";
 
-//Analytics 
+// Analytics
 import {
-    initAnalytics,
-    pageView,
-    initClarity
+  initAnalytics,
+  pageView,
+  initClarity,
 } from "./analytics/tracking";
 
-// Google tracking component
 function AnalyticsPageView() {
   const location = useLocation();
 
@@ -61,62 +65,55 @@ function AnalyticsPageView() {
   return null;
 }
 
-function ConditionalNavbar() {
-  const location = useLocation();
-
-  const dashboardRoutes = [
-    "/dashboard",
-    "/adgenerator",
-    "/video-ads",
-    "/creative-studio",
-    "/optimizer",
-    "/library",
-    "/insights",
-    "/reports",
-    "/brand-kit",
-    "/campaigns",
-    "/account",
-    "/admin/users",
-    "/admin/creative",
-  ];
-
-  const isDashboardRoute = dashboardRoutes.some((route) =>
-    location.pathname.startsWith(route)
+// Preserves the existing marketing navbar on public utility flows that
+// should not receive the full marketing footer.
+function NavbarOnlyLayout() {
+  return (
+    <>
+      <Navbar />
+      <Outlet />
+    </>
   );
-
-  return isDashboardRoute ? null : <Navbar />;
 }
 
 export default function App() {
   useEffect(() => {
     initAnalytics();
     initClarity();
-}, []);
+  }, []);
+
   return (
     <>
-    <ScrollToTop />
-    <ConditionalNavbar />
-    <div className="container">
-        <AnalyticsPageView />
+      <ScrollToTop />
+      <AnalyticsPageView />
+
+      <div className="container">
         <Routes>
-          {/* Public */}
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<AuthForm />} />
+          {/* Public marketing + legal pages share one navbar/footer layout */}
+          <Route element={<MarketingLayout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/platform" element={<Platform />} />
+            <Route path="/examples" element={<Examples />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+          </Route>
 
-          {/* Public informational + legal pages */}
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/platform" element={<Platform />} />
-          <Route path="/design-lab" element={<DesignLab />} />
+          {/* Public utility pages keep the navbar but no site footer */}
+          <Route element={<NavbarOnlyLayout />}>
+            <Route path="/login" element={<AuthForm />} />
+            <Route path="/design-lab" element={<DesignLab />} />
 
+            {/* Auth-only subscribe flow */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/subscribe" element={<Subscribe />} />
+            </Route>
+          </Route>
 
-          {/* Auth-only (Free + Paid) */}
+          {/* Auth-only workspace */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/subscribe" element={<Subscribe />} />
-
             <Route element={<DashboardRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/account" element={<MyAccount />} />
@@ -125,7 +122,7 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* Paid Users */}
+          {/* Paid users */}
           <Route element={<PaidRoute />}>
             <Route element={<DashboardRoute />}>
               <Route path="/brand-kit" element={<BrandKit />} />
@@ -146,20 +143,12 @@ export default function App() {
             </Route>
           </Route>
 
-
           {/* Fallback */}
-          <Route path="*" element={<Home />} />
+          <Route element={<MarketingLayout />}>
+            <Route path="*" element={<Home />} />
+          </Route>
         </Routes>
       </div>
     </>
   );
 }
-
-
-
-
-
-
-
-
-
