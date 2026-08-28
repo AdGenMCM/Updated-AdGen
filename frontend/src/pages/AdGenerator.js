@@ -289,6 +289,14 @@ function AdGenerator() {
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
   const [brandKitLoading, setBrandKitLoading] = useState(true);
+  const [creativeElements, setCreativeElements] = useState({
+    headline: true,
+    body: true,
+    cta: true,
+  });
+  const [logoMode, setLogoMode] = useState("none");
+  const [quickAdElementsEnabled, setQuickAdElementsEnabled] = useState(true);
+  const [quickLogoMode, setQuickLogoMode] = useState("none");
   const [brandKitAppliedFields, setBrandKitAppliedFields] = useState({});
   const [usePerformanceIntelligence, setUsePerformanceIntelligence] = useState(false);
   const [referenceImages, setReferenceImages] = useState([]);
@@ -311,6 +319,13 @@ function AdGenerator() {
   const [isFreePlan, setIsFreePlan] = useState(false);
   const [canUsePerformanceIntelligence, setCanUsePerformanceIntelligence] = useState(false);
   const hasReferenceImages = referenceImages.length > 0;
+  const hasBrandKit = Boolean(brandKit);
+  const hasBrandKitLogo = Boolean(brandKit?.logoUrl);
+  const canUseBrandKitLogo = Boolean(
+    !isFreePlan &&
+    useBrandKit &&
+    hasBrandKitLogo
+  );
 
 
   useEffect(() => {
@@ -422,6 +437,22 @@ function AdGenerator() {
     usePerformanceIntelligence,
     canUsePerformanceIntelligence,
   ]);
+
+  useEffect(() => {
+    setLogoMode((current) => {
+      if (canUseBrandKitLogo) {
+        return current === "none" ? "brand_kit" : current;
+      }
+      return current === "brand_kit" ? "none" : current;
+    });
+
+    setQuickLogoMode((current) => {
+      if (canUseBrandKitLogo) {
+        return current === "none" ? "brand_kit" : current;
+      }
+      return current === "brand_kit" ? "none" : current;
+    });
+  }, [canUseBrandKitLogo]);
 
 
 
@@ -713,6 +744,13 @@ function AdGenerator() {
     }
   };
 
+  const handleCreativeElementToggle = (element) => {
+    setCreativeElements((current) => ({
+      ...current,
+      [element]: !current[element],
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -758,10 +796,27 @@ function AdGenerator() {
 
       const token = await user.getIdToken(true);
 
+      const effectiveCreativeElements = advancedOpen
+        ? creativeElements
+        : {
+            headline: quickAdElementsEnabled,
+            body: quickAdElementsEnabled,
+            cta: quickAdElementsEnabled,
+          };
+
+      const effectiveLogoMode = advancedOpen ? logoMode : quickLogoMode;
+
       const payload = {
         ...form,
-        headline: form.headline.trim() || null,
-        primary_text: form.primaryText.trim() || null,
+        headline: effectiveCreativeElements.headline
+          ? form.headline.trim() || null
+          : null,
+        primary_text: effectiveCreativeElements.body
+          ? form.primaryText.trim() || null
+          : null,
+        cta: effectiveCreativeElements.cta
+          ? form.cta.trim() || null
+          : null,
         useBrandKit: isFreePlan ? false : useBrandKit,
         brandKitId: isFreePlan ? null : brandKitId,
         campaignObjective: form.campaignObjective,
@@ -771,6 +826,10 @@ function AdGenerator() {
         usePerformanceIntelligence:
           canUsePerformanceIntelligence &&
           usePerformanceIntelligence,
+        includeHeadline: effectiveCreativeElements.headline,
+        includeBody: effectiveCreativeElements.body,
+        includeCta: effectiveCreativeElements.cta,
+        logoMode: effectiveLogoMode,
       };
 
 
@@ -1065,9 +1124,34 @@ function AdGenerator() {
               </div>
 
               <form className="adgen-quick-form" onSubmit={handleSubmit}>
+                {!isFreePlan && (
+                  <div className="adgen-brandkit-state-loader" aria-hidden="true">
+                    <BrandKitSelector
+                      value={brandKitId}
+                      onChange={setBrandKitId}
+                      onKitChange={(selectedKit) => {
+                        setBrandKit(selectedKit);
+                        setBrandKitLoading(false);
+                      }}
+                      disabled={loading}
+                    />
+                  </div>
+                )}
+
                 <div className="adgen-quick-fields">
                   <label className="field">
-                    <span className="field-label">Product or Company</span>
+                    <span className="field-label">Company / Brand Name</span>
+                    <input
+                      name="companyName"
+                      placeholder="Example: Luma Skin"
+                      value={form.companyName}
+                      onChange={handleChange}
+                      disabled={loading}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Product or Service</span>
                     <input
                       name="product_name"
                       placeholder="What are you advertising?"
@@ -1101,6 +1185,161 @@ function AdGenerator() {
                       required
                     />
                   </label>
+                </div>
+
+                <div className="adgen-quick-aspect-ratio">
+                  <div className="adgen-quick-elements-copy">
+                    <strong>Aspect Ratio</strong>
+                    <small>Choose the format for the placement you are creating.</small>
+                  </div>
+
+                  <div
+                    className="adgen-quick-aspect-selector"
+                    role="group"
+                    aria-label="Quick Create aspect ratio"
+                  >
+                    <button
+                      type="button"
+                      className={form.imageSize === "1024x1024" ? "active" : ""}
+                      onClick={() => handleChange({ target: { name: "imageSize", value: "1024x1024" } })}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={form.imageSize === "1024x1024"}
+                    >
+                      Square 1:1
+                    </button>
+                    <button
+                      type="button"
+                      className={form.imageSize === "1024x1792" ? "active" : ""}
+                      onClick={() => handleChange({ target: { name: "imageSize", value: "1024x1792" } })}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={form.imageSize === "1024x1792"}
+                    >
+                      Portrait 9:16
+                    </button>
+                    <button
+                      type="button"
+                      className={form.imageSize === "1792x1024" ? "active" : ""}
+                      onClick={() => handleChange({ target: { name: "imageSize", value: "1792x1024" } })}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={form.imageSize === "1792x1024"}
+                    >
+                      Landscape 16:9
+                    </button>
+                  </div>
+                </div>
+
+                <div className="adgen-quick-elements">
+                  <div className="adgen-quick-elements-copy">
+                    <strong>Standard Ad Elements</strong>
+                    <small>
+                      Turn off to create a cleaner scene without a standard headline,
+                      body copy, or CTA. Text you explicitly request inside the scene
+                      can still appear.
+                    </small>
+                  </div>
+
+                  <div
+                    className="adgen-quick-elements-selector"
+                    role="group"
+                    aria-label="Standard ad elements"
+                  >
+                    <button
+                      type="button"
+                      className={quickAdElementsEnabled ? "active" : ""}
+                      onClick={() => setQuickAdElementsEnabled(true)}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={quickAdElementsEnabled}
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      className={!quickAdElementsEnabled ? "active" : ""}
+                      onClick={() => setQuickAdElementsEnabled(false)}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={!quickAdElementsEnabled}
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+
+                <div className="adgen-quick-elements adgen-quick-logo">
+                  <div className="adgen-quick-elements-copy">
+                    <strong>Logo</strong>
+                    <small>
+                      Choose whether ADGen should omit a logo, generate one, or use your
+                      Active Brand logo when available.
+                    </small>
+                  </div>
+
+                  <div
+                    className="adgen-quick-logo-selector"
+                    role="group"
+                    aria-label="Quick Create logo mode"
+                  >
+                    <button
+                      type="button"
+                      className={quickLogoMode === "none" ? "active" : ""}
+                      onClick={() => setQuickLogoMode("none")}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={quickLogoMode === "none"}
+                    >
+                      No Logo
+                    </button>
+                    <button
+                      type="button"
+                      className={quickLogoMode === "generate" ? "active" : ""}
+                      onClick={() => setQuickLogoMode("generate")}
+                      disabled={loading || referenceUploading}
+                      aria-pressed={quickLogoMode === "generate"}
+                    >
+                      Generate
+                    </button>
+                    <button
+                      type="button"
+                      className={quickLogoMode === "brand_kit" ? "active" : ""}
+                      onClick={() => setQuickLogoMode("brand_kit")}
+                      disabled={
+                        loading ||
+                        referenceUploading ||
+                        !canUseBrandKitLogo
+                      }
+                      aria-pressed={quickLogoMode === "brand_kit"}
+                    >
+                      Brand Kit
+                    </button>
+                  </div>
+
+                  {!isFreePlan && hasBrandKit && !hasBrandKitLogo && (
+                    <small className="adgen-logo-availability-note">
+                      Your Active Brand does not have a logo yet. Upload a logo in Brand Kit to enable this option.
+                    </small>
+                  )}
+
+                  {!isFreePlan && hasBrandKitLogo && !useBrandKit && (
+                    <small className="adgen-logo-availability-note">
+                      A Brand Kit logo is available. Enable Apply Brand Kit to access this option.
+                    </small>
+                  )}
+
+                  {!isFreePlan && !hasBrandKit && (
+                    <small className="adgen-logo-availability-note">
+                      Create or select a Brand Kit with an uploaded logo to enable Brand Kit Logo.
+                    </small>
+                  )}
+
+                  {isFreePlan && (
+                    <small className="adgen-logo-availability-note">
+                      Brand Kit Logo is available on paid plans with a saved Brand Kit logo.
+                    </small>
+                  )}
+
+                  {canUseBrandKitLogo && (
+                    <small className="adgen-logo-availability-note is-available">
+                      Brand Kit Logo is available from your Active Brand.
+                    </small>
+                  )}
                 </div>
 
                 {imageLimitReached && (
@@ -1302,7 +1541,7 @@ function AdGenerator() {
                   setBrandKit(selectedKit);
                   setBrandKitLoading(false);
                 }}
-                disabled={loading || !useBrandKit}
+                disabled={loading}
               />
             )}
 
@@ -1503,61 +1742,197 @@ function AdGenerator() {
             <StepSection
               step="3"
               title="Creative Copy"
-              description="Optionally provide exact copy for the creative, or leave these fields blank and let AdGen write it for you."
+              description="Choose which standard ad elements to include, then optionally provide exact copy for any enabled text element."
             >
-              <div className="field">
-                <div className="field-label">
-                  Headline <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter a specific headline to preserve it. Leave blank and AdGen will generate one for you." />
+              <div className="creative-elements-card">
+                <div className="creative-elements-heading">
+                  <div>
+                    <strong>Ad Elements</strong>
+                    <small>
+                      Choose which standard elements ADGen should include in the finished creative.
+                    </small>
+                  </div>
                 </div>
-                <input
-                  name="headline"
-                  placeholder="Leave blank to let AdGen generate a headline"
-                  value={form.headline}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={50}
-                />
-                <small className="field-helper">
-                  {form.headline.length}/50 characters · Best results are usually under 35 characters.
-                </small>
+
+                <div className="creative-elements-grid">
+                  <label className="creative-element-toggle">
+                    <input
+                      type="checkbox"
+                      checked={creativeElements.headline}
+                      onChange={() => handleCreativeElementToggle("headline")}
+                      disabled={loading}
+                    />
+                    <span>
+                      <strong>Headline</strong>
+                      <small>Adds a primary ad headline to the creative.</small>
+                    </span>
+                  </label>
+
+                  <label className="creative-element-toggle">
+                    <input
+                      type="checkbox"
+                      checked={creativeElements.body}
+                      onChange={() => handleCreativeElementToggle("body")}
+                      disabled={loading}
+                    />
+                    <span>
+                      <strong>Body Text</strong>
+                      <small>Adds a short supporting message below or near the headline.</small>
+                    </span>
+                  </label>
+
+                  <label className="creative-element-toggle">
+                    <input
+                      type="checkbox"
+                      checked={creativeElements.cta}
+                      onChange={() => handleCreativeElementToggle("cta")}
+                      disabled={loading}
+                    />
+                    <span>
+                      <strong>Call to Action</strong>
+                      <small>Adds an action-focused CTA such as “Shop Now” or “Learn More.”</small>
+                    </span>
+                  </label>
+
+                  <div className="creative-element-toggle creative-logo-mode-card">
+                    <span className="creative-logo-mode-copy">
+                      <strong>Logo</strong>
+                      <small>
+                        Choose whether to omit a logo, generate one, or use your Active Brand logo.
+                      </small>
+                    </span>
+
+                    <div
+                      className="creative-logo-mode-selector"
+                      role="group"
+                      aria-label="Logo mode"
+                    >
+                      <button
+                        type="button"
+                        className={logoMode === "none" ? "active" : ""}
+                        onClick={() => setLogoMode("none")}
+                        disabled={loading}
+                        aria-pressed={logoMode === "none"}
+                      >
+                        No Logo
+                      </button>
+                      <button
+                        type="button"
+                        className={logoMode === "generate" ? "active" : ""}
+                        onClick={() => setLogoMode("generate")}
+                        disabled={loading}
+                        aria-pressed={logoMode === "generate"}
+                      >
+                        Generate Logo
+                      </button>
+                      <button
+                        type="button"
+                        className={logoMode === "brand_kit" ? "active" : ""}
+                        onClick={() => setLogoMode("brand_kit")}
+                        disabled={
+                          loading ||
+                          !canUseBrandKitLogo
+                        }
+                        aria-pressed={logoMode === "brand_kit"}
+                      >
+                        Brand Kit Logo
+                      </button>
+                    </div>
+
+                    <small className="creative-logo-mode-help">
+                      {logoMode === "none" &&
+                        "ADGen will not invent or render a standard logo or brand mark."}
+                      {logoMode === "generate" &&
+                        "ADGen may create a simple logo or wordmark based on the company or product name."}
+                      {logoMode === "brand_kit" &&
+                        canUseBrandKitLogo &&
+                        "ADGen will use and preserve the logo from your selected Active Brand."}
+
+                      {!isFreePlan && hasBrandKit && !hasBrandKitLogo &&
+                        " Your Active Brand does not have a logo yet. Upload one in Brand Kit to enable Brand Kit Logo."}
+
+                      {!isFreePlan && hasBrandKitLogo && !useBrandKit &&
+                        " A Brand Kit logo is available. Enable Apply Brand Kit to access Brand Kit Logo."}
+
+                      {!isFreePlan && !hasBrandKit &&
+                        " Create or select a Brand Kit with an uploaded logo to enable Brand Kit Logo."}
+
+                      {isFreePlan &&
+                        " Brand Kit Logo is available on paid plans with a saved Brand Kit logo."}
+
+                      {canUseBrandKitLogo && logoMode !== "brand_kit" &&
+                        " Brand Kit Logo is available from your Active Brand."}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="creative-elements-note">
+                  Turning Headline, Body Text, or CTA off only removes that standard ad-copy
+                  element. The Logo setting controls standard logo treatment separately. Text you
+                  explicitly request in the scene—such as speech bubbles, signs, labels, packaging,
+                  or interface text—can still be included.
+                </div>
               </div>
 
-              <div className="field">
-                <div className="field-label">
-                  Body Text <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter supporting copy you want preserved in the creative. Leave blank and AdGen will write it for you." />
+              {creativeElements.headline && (
+                <div className="field">
+                  <div className="field-label">
+                    Headline <span className="field-optional">Optional</span>
+                    <InfoTip text="Enter a specific headline to preserve it. Leave blank and AdGen will generate one for you." />
+                  </div>
+                  <input
+                    name="headline"
+                    placeholder="Leave blank to let AdGen generate a headline"
+                    value={form.headline}
+                    onChange={handleChange}
+                    disabled={loading}
+                    maxLength={50}
+                  />
+                  <small className="field-helper">
+                    {form.headline.length}/50 characters · Best results are usually under 35 characters.
+                  </small>
                 </div>
-                <textarea
-                  name="primaryText"
-                  placeholder="Leave blank to let AdGen write the body text"
-                  value={form.primaryText}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={150}
-                />
-                <small className="field-helper">
-                  {form.primaryText.length}/150 characters · Shorter copy creates cleaner, more readable ads.
-                </small>
-              </div>
+              )}
 
-              <div className="field">
-                <div className="field-label">
-                  Call to Action {fieldBadge("cta")} <span className="field-optional">Optional</span>
-                  <InfoTip text="Enter the action you want viewers to take such as Learn More, Shop now, Get Offer, ect... Brand Kit can fill this automatically, or AdGen can choose one when left blank." />
+              {creativeElements.body && (
+                <div className="field">
+                  <div className="field-label">
+                    Body Text <span className="field-optional">Optional</span>
+                    <InfoTip text="Enter supporting copy you want preserved in the creative. Leave blank and AdGen will write it for you." />
+                  </div>
+                  <textarea
+                    name="primaryText"
+                    placeholder="Leave blank to let AdGen write the body text"
+                    value={form.primaryText}
+                    onChange={handleChange}
+                    disabled={loading}
+                    maxLength={150}
+                  />
+                  <small className="field-helper">
+                    {form.primaryText.length}/150 characters · Shorter copy creates cleaner, more readable ads.
+                  </small>
                 </div>
-                <input
-                  name="cta"
-                  placeholder="Leave blank to let AdGen choose a CTA"
-                  value={form.cta}
-                  onChange={handleChange}
-                  disabled={loading}
-                  maxLength={25}
-                />
-                <small className="field-helper">
-                  {form.cta.length}/25 characters · Keep CTAs concise and action-oriented.
-                </small>
-              </div>
+              )}
+
+              {creativeElements.cta && (
+                <div className="field">
+                  <div className="field-label">
+                    Call to Action {fieldBadge("cta")} <span className="field-optional">Optional</span>
+                    <InfoTip text="Enter the action you want viewers to take such as Learn More, Shop now, Get Offer, ect... Brand Kit can fill this automatically, or AdGen can choose one when left blank." />
+                  </div>
+                  <input
+                    name="cta"
+                    placeholder="Leave blank to let AdGen choose a CTA"
+                    value={form.cta}
+                    onChange={handleChange}
+                    disabled={loading}
+                    maxLength={25}
+                  />
+                  <small className="field-helper">
+                    {form.cta.length}/25 characters · Keep CTAs concise and action-oriented.
+                  </small>
+                </div>
+              )}
             </StepSection>
 
             <StepSection

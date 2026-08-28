@@ -1352,3 +1352,317 @@
 /* Tutorial entry point */
 .adgen-title-row { display:flex; align-items:center; justify-content:space-between; gap:18px; }
 @media (max-width: 720px) { .adgen-title-row { align-items:flex-start; flex-direction:column; } }
+
+
+/* =========================================================
+   Optional Image Ad Elements
+========================================================= */
+
+.creative-elements-card {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid var(--ag-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.creative-elements-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.creative-elements-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.creative-elements-heading strong {
+  color: var(--ag-text);
+  font-size: 0.98rem;
+}
+
+.creative-elements-heading small,
+.creative-element-toggle small {
+  color: var(--ag-muted);
+  line-height: 1.45;
+}
+
+.creative-elements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.creative-element-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 86px;
+  padding: 14px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.creative-element-toggle input {
+  width: auto;
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.creative-element-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.creative-element-toggle strong {
+  color: var(--ag-text);
+}
+
+.creative-element-toggle.is-unavailable {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.creative-elements-note {
+  padding: 12px 14px;
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
+  color: var(--ag-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* Quick Create keeps the feature intentionally simple: all standard ad
+   elements are either enabled together or disabled together. */
+.adgen-quick-elements {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--ag-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.adgen-quick-elements-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.adgen-quick-elements-copy strong {
+  color: var(--ag-text);
+  font-size: 0.9rem;
+}
+
+.adgen-quick-elements-copy small {
+  color: var(--ag-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.adgen-quick-elements-selector {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(58px, 1fr));
+  padding: 4px;
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.adgen-quick-elements-selector button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ag-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.adgen-quick-elements-selector button.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.22);
+}
+
+.adgen-quick-elements-selector button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .creative-elements-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adgen-quick-elements {
+    grid-template-columns: 1fr;
+  }
+
+  .adgen-quick-elements-selector {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   Image Logo Mode Selectors
+========================================================= */
+
+.creative-logo-mode-card {
+  display: grid;
+  gap: 12px;
+  cursor: default;
+}
+
+.creative-logo-mode-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.creative-logo-mode-selector,
+.adgen-quick-logo-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.creative-logo-mode-selector button,
+.adgen-quick-logo-selector button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ag-muted);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.creative-logo-mode-selector button.active,
+.adgen-quick-logo-selector button.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.22);
+}
+
+.creative-logo-mode-selector button:disabled,
+.adgen-quick-logo-selector button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.creative-logo-mode-help {
+  color: var(--ag-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .creative-logo-mode-selector,
+  .adgen-quick-logo-selector {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Brand Kit logo availability messaging */
+.adgen-logo-availability-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--ag-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.adgen-logo-availability-note.is-available {
+  color: #c4b5fd;
+}
+
+
+/* Load Active Brand state in Quick Create without displaying the full selector. */
+.adgen-brandkit-state-loader {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+
+/* =========================================================
+   Quick Create company/product + aspect ratio controls
+========================================================= */
+.adgen-quick-aspect-ratio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--ag-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.adgen-quick-aspect-selector {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  padding: 4px;
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.adgen-quick-aspect-selector button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ag-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.adgen-quick-aspect-selector button.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.22);
+}
+
+.adgen-quick-aspect-selector button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .adgen-quick-aspect-ratio {
+    grid-template-columns: 1fr;
+  }
+
+  .adgen-quick-aspect-selector {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+}

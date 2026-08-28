@@ -65,6 +65,15 @@ class OptimizeAdRequest(BaseModel):
     current_image_prompt: Optional[str] = None
     creative_image_urls: Optional[List[str]] = None
 
+    # Creative structure. For ADGen Library items these values can be known from
+    # saved generation metadata. For external/manual sources they are inferred
+    # and can be confirmed by the user before analysis.
+    include_headline: bool = True
+    include_body: bool = True
+    include_cta: bool = True
+    logo_mode: Literal["none", "generate", "brand_kit"] = "none"
+    structure_source: Literal["known", "inferred", "user_confirmed"] = "inferred"
+
     metrics: OptimizationMetrics = Field(default_factory=OptimizationMetrics)
 
 
@@ -82,12 +91,26 @@ class PriorityRecommendation(BaseModel):
     impact: Impact
 
 
+class CreativeStructureRecommendation(BaseModel):
+    headline: bool = True
+    body: bool = True
+    cta: bool = True
+    logo_mode: Literal["none", "generate", "brand_kit"] = "none"
+    headline_reason: str = ""
+    body_reason: str = ""
+    cta_reason: str = ""
+    logo_reason: str = ""
+
+
 class OptimizeAdResponse(BaseModel):
     summary: str
     overall_score: int = 70
     biggest_opportunity: str = "Creative clarity"
     audit_dimensions: List[AuditDimension] = Field(default_factory=list)
     priority_recommendations: List[PriorityRecommendation] = Field(default_factory=list)
+    recommended_structure: CreativeStructureRecommendation = Field(
+        default_factory=CreativeStructureRecommendation
+    )
 
     # Existing fields remain for frontend/backward compatibility.
     likely_issues: List[str]

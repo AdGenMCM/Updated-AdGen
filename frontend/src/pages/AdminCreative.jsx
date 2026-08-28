@@ -63,6 +63,37 @@ function tierLabel(value) {
   return TIER_LABELS[value] || value || "Unknown";
 }
 
+function formatStructureValue(value) {
+  if (value === true) return "On";
+  if (value === false) return "Off";
+  return "Unknown";
+}
+
+function logoModeLabel(value) {
+  const mode = String(value || "").trim().toLowerCase();
+  if (mode === "none") return "No Logo";
+  if (mode === "generate") return "Generated";
+  if (mode === "brand_kit") return "Brand Kit";
+  return "Unknown";
+}
+
+function structureSourceLabel(item) {
+  const explicit = String(item?.structureSource || "").trim().toLowerCase();
+  if (explicit === "known") return "ADGen";
+  if (explicit === "user_confirmed") return "User confirmed";
+  if (explicit === "inferred" || explicit === "inferred_from_platform") {
+    return "Inferred";
+  }
+
+  if (item?.kind === "image" && item?.creativeElements) {
+    if (item?.source === "ad_generator" || item?.source === "optimizer_generate") {
+      return "ADGen";
+    }
+  }
+
+  return "Unknown";
+}
+
 function creativeTitle(item) {
   if (item.productName) return item.productName;
   if (item.kind === "optimizer") return "Optimizer run";
@@ -152,6 +183,15 @@ function CreativeCard({ item, onSelect }) {
           <span>{isVideo && item.duration ? `${item.duration}s` : formatBytes(item.fileSizeBytes)}</span>
           <span>{item.model || "Model unavailable"}</span>
         </div>
+
+        {!isVideo && !isOptimizer && (
+          <div className="admin-creative-structure-row">
+            <span>H: {formatStructureValue(item.creativeElements?.headline)}</span>
+            <span>B: {formatStructureValue(item.creativeElements?.body)}</span>
+            <span>CTA: {formatStructureValue(item.creativeElements?.cta)}</span>
+            <span>Logo: {logoModeLabel(item.creativeElements?.logoMode)}</span>
+          </div>
+        )}
 
         <p className="admin-creative-prompt-preview">
           {item.prompt || "No generation prompt was stored for this creative."}
@@ -244,6 +284,41 @@ function DetailsDrawer({ item, onClose }) {
               <div><dt>Job ID</dt><dd className="is-code">{item.id}</dd></div>
             </dl>
           </section>
+
+          {item.kind === "image" && (
+            <section className="admin-creative-detail-section">
+              <h3>Creative Structure</h3>
+              <dl>
+                <div>
+                  <dt>Headline</dt>
+                  <dd>{formatStructureValue(item.creativeElements?.headline)}</dd>
+                </div>
+                <div>
+                  <dt>Body Text</dt>
+                  <dd>{formatStructureValue(item.creativeElements?.body)}</dd>
+                </div>
+                <div>
+                  <dt>CTA</dt>
+                  <dd>{formatStructureValue(item.creativeElements?.cta)}</dd>
+                </div>
+                <div>
+                  <dt>Logo</dt>
+                  <dd>{logoModeLabel(item.creativeElements?.logoMode)}</dd>
+                </div>
+                <div>
+                  <dt>Structure Source</dt>
+                  <dd>{structureSourceLabel(item)}</dd>
+                </div>
+              </dl>
+
+              {!item.creativeElements && (
+                <p className="admin-creative-structure-note">
+                  This creative predates structure tracking or was created by a source
+                  that did not save exact element metadata.
+                </p>
+              )}
+            </section>
+          )}
 
           <section className="admin-creative-detail-section">
             <h3>User feedback</h3>
@@ -363,7 +438,47 @@ export default function AdminCreative() {
     const optimizations = items.filter((item) => item.kind === "optimizer").length;
     const succeeded = items.filter((item) => item.status === "succeeded").length;
     const uniqueUsers = new Set(items.map((item) => item.uid).filter(Boolean)).size;
-    return { images, videos, optimizations, succeeded, uniqueUsers };
+
+    const structuredImages = items.filter(
+      (item) =>
+        item.kind === "image" &&
+        item.creativeElements &&
+        typeof item.creativeElements === "object"
+    );
+
+    const percentOn = (key) => {
+      const known = structuredImages.filter(
+        (item) => typeof item.creativeElements?.[key] === "boolean"
+      );
+      if (!known.length) return null;
+      const on = known.filter((item) => item.creativeElements[key] === true).length;
+      return Math.round((on / known.length) * 100);
+    };
+
+    const logoCounts = structuredImages.reduce(
+      (acc, item) => {
+        const mode = String(item.creativeElements?.logoMode || "").toLowerCase();
+        if (mode === "none") acc.none += 1;
+        else if (mode === "generate") acc.generate += 1;
+        else if (mode === "brand_kit") acc.brandKit += 1;
+        else acc.unknown += 1;
+        return acc;
+      },
+      { none: 0, generate: 0, brandKit: 0, unknown: 0 }
+    );
+
+    return {
+      images,
+      videos,
+      optimizations,
+      succeeded,
+      uniqueUsers,
+      structuredImages: structuredImages.length,
+      headlineOnPct: percentOn("headline"),
+      bodyOnPct: percentOn("body"),
+      ctaOnPct: percentOn("cta"),
+      logoCounts,
+    };
   }, [items]);
 
   const applyFilters = async (event) => {
@@ -467,6 +582,49 @@ export default function AdminCreative() {
           <article><Sparkles size={19} /><span><small>Optimizer shown</small><strong>{stats.optimizations}</strong></span></article>
           <article><SlidersHorizontal size={19} /><span><small>Succeeded</small><strong>{stats.succeeded}</strong></span></article>
           <article><UserRound size={19} /><span><small>Users shown</small><strong>{stats.uniqueUsers}</strong></span></article>
+        </section>
+
+        <section className="admin-creative-structure-summary">
+          <div className="admin-creative-structure-summary-head">
+            <div>
+              <span>Creative structure</span>
+              <strong>Current page usage</strong>
+            </div>
+            <small>
+              {stats.structuredImages
+                ? `${stats.structuredImages} image${stats.structuredImages === 1 ? "" : "s"} with structure metadata`
+                : "No tracked structure metadata on this page"}
+            </small>
+          </div>
+
+          <div className="admin-creative-structure-summary-grid">
+            <article>
+              <small>Headline On</small>
+              <strong>
+                {stats.headlineOnPct == null ? "—" : `${stats.headlineOnPct}%`}
+              </strong>
+            </article>
+            <article>
+              <small>Body On</small>
+              <strong>{stats.bodyOnPct == null ? "—" : `${stats.bodyOnPct}%`}</strong>
+            </article>
+            <article>
+              <small>CTA On</small>
+              <strong>{stats.ctaOnPct == null ? "—" : `${stats.ctaOnPct}%`}</strong>
+            </article>
+            <article className="admin-creative-logo-summary">
+              <small>Logo modes</small>
+              <div>
+                <span>No Logo <b>{stats.logoCounts.none}</b></span>
+                <span>Generated <b>{stats.logoCounts.generate}</b></span>
+                <span>Brand Kit <b>{stats.logoCounts.brandKit}</b></span>
+              </div>
+            </article>
+          </div>
+
+          <p>
+            Older creatives without saved structure metadata are excluded from these percentages.
+          </p>
         </section>
 
         <form className="admin-creative-toolbar" onSubmit={applyFilters}>

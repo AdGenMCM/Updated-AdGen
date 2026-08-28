@@ -399,6 +399,12 @@ class AdRequest(BaseModel):
     primary_text: Optional[str] = Field(default=None, max_length=150)
     cta: Optional[str] = Field(default=None, max_length=25)
 
+    # Optional standard ad elements. Defaults preserve the current behavior.
+    includeHeadline: bool = True
+    includeBody: bool = True
+    includeCta: bool = True
+    logoMode: str = "none"
+
     goal: Optional[str] = None
     stylePreset: Optional[str] = None
     productType: Optional[str] = None
@@ -454,6 +460,12 @@ class GenerateFromOptimizerRequest(BaseModel):
     tone: Optional[str] = None
     goal: Optional[str] = None
     platform: Optional[str] = None
+
+    # Preserve or intentionally change the structure used by the optimized image.
+    includeHeadline: bool = True
+    includeBody: bool = True
+    includeCta: bool = True
+    logoMode: str = "none"
 
 
 class PerformanceUpdate(BaseModel):
@@ -2218,6 +2230,9 @@ def _profile_values(
 def inject_performance_intelligence_image(
     base_text: str,
     intelligence_response: Optional[Dict[str, Any]],
+    *,
+    include_headline: bool = True,
+    include_cta: bool = True,
 ) -> str:
     """
     Adds concise, performance-learned creative direction.
@@ -2294,13 +2309,13 @@ def inject_performance_intelligence_image(
             + ", ".join(tones)
             + "."
         )
-    if cta_openers:
+    if cta_openers and include_cta:
         constraints.append(
             "When generating a CTA, favor an opener such as: "
             + ", ".join(cta_openers)
             + "."
         )
-    if headline_openers:
+    if headline_openers and include_headline:
         constraints.append(
             "When generating a headline, consider an opener such as: "
             + ", ".join(headline_openers)
@@ -2310,7 +2325,7 @@ def inject_performance_intelligence_image(
     headline_length = profile.get(
         "average_winning_headline_length"
     )
-    if headline_length is not None:
+    if headline_length is not None and include_headline:
         try:
             target = max(1, min(50, round(float(headline_length))))
             constraints.append(
@@ -3754,9 +3769,27 @@ async def generate_ad(
     platform = (payload.platform or "Instagram").strip()[:40]
     offer = (payload.offer or "").strip()[:80]
 
-    requested_headline = (payload.headline or "").strip()[:50]
-    requested_primary_text = (payload.primary_text or "").strip()[:150]
-    requested_cta = (payload.cta or "").strip()[:25]
+    include_headline = bool(getattr(payload, "includeHeadline", True))
+    include_body = bool(getattr(payload, "includeBody", True))
+    include_cta = bool(getattr(payload, "includeCta", True))
+
+    logo_mode = str(getattr(payload, "logoMode", "none") or "none").strip().lower()
+    if logo_mode not in {"none", "generate", "brand_kit"}:
+        logo_mode = "none"
+
+    has_brand_kit_logo = bool(brand_kit.get("logoUrl"))
+    if logo_mode == "brand_kit" and not has_brand_kit_logo:
+        logo_mode = "none"
+
+    requested_headline = (
+        (payload.headline or "").strip()[:50] if include_headline else ""
+    )
+    requested_primary_text = (
+        (payload.primary_text or "").strip()[:150] if include_body else ""
+    )
+    requested_cta = (
+        (payload.cta or "").strip()[:25] if include_cta else ""
+    )
 
     goal = (payload.goal or "Sales").strip()[:30]
     style = (payload.stylePreset or "Minimal").strip()[:30]
@@ -3775,6 +3808,8 @@ async def generate_ad(
             inject_performance_intelligence_image(
                 "",
                 intelligence_response,
+                include_headline=include_headline,
+                include_cta=include_cta,
             ).strip()
         )
         if performance_intelligence_line:
@@ -3832,6 +3867,12 @@ COPY PRESERVATION RULES:
 - If supplied_cta is not N/A, use it exactly as the CTA.
 - Do not rewrite, shorten, paraphrase, or replace supplied copy.
 - Generate only the copy fields that were left blank.
+- include_headline={include_headline}. If false, return headline as an empty string.
+- include_body={include_body}. If false, return primary_text as an empty string.
+- include_cta={include_cta}. If false, return cta as an empty string.
+- These switches control standard advertising copy only. They must never suppress,
+  remove, paraphrase, or reinterpret text the user explicitly asks to appear inside
+  the scene, such as speech bubbles, signs, labels, packaging, screens, or interface text.
 
 Return one JSON object with:
 - headline: string (<= 50 chars)
@@ -3872,6 +3913,34 @@ supplied_cta: {requested_cta or "N/A"}
         {winners_line}
         """
 
+    headline_instruction = (
+        requested_headline
+        if requested_headline
+        else (
+            "Generate one concise headline"
+            if include_headline
+            else "Do not generate or render a standard advertising headline"
+        )
+    )
+    body_instruction = (
+        requested_primary_text
+        if requested_primary_text
+        else (
+            "Generate one concise supporting line if useful"
+            if include_body
+            else "Do not generate or render standard supporting body copy"
+        )
+    )
+    cta_instruction = (
+        requested_cta
+        if requested_cta
+        else (
+            "Choose one concise action-oriented CTA"
+            if include_cta
+            else "Do not generate or render a standard call-to-action or CTA button"
+        )
+    )
+
     visual_prompt = f"""
 You are the Creative Director at a world-class advertising agency.
 
@@ -3910,13 +3979,13 @@ Offer:
 Exact Creative Copy:
 
 Headline:
-{requested_headline or "Generate one concise headline"}
+{headline_instruction}
 
 Body Text:
-{requested_primary_text or "Generate one concise supporting line if useful"}
+{body_instruction}
 
 CTA:
-{requested_cta or "Choose one concise action-oriented CTA"}
+{cta_instruction}
 
 When exact creative copy is supplied:
 
@@ -3924,6 +3993,12 @@ When exact creative copy is supplied:
 • Do not paraphrase, rewrite, or replace it.
 • Spell every supplied word exactly as written.
 • Use the supplied headline, body text, and CTA only once each.
+• Headline, Body Text, and CTA selections apply only to standard ad-copy elements.
+• Logo Mode applies only to standard logo/brand-mark treatment.
+• Always preserve text explicitly requested by the user as part of the scene, including
+  speech bubbles, signs, labels, packaging, computer/phone screens, interface text,
+  or other intentional in-scene wording.
+• Do not invent an additional standard advertising element when that element is disabled.
 
 Brand Style:
 {style}
@@ -3976,15 +4051,11 @@ When Brand Kit fonts are provided:
 • Use the CTA font style for buttons.
 • If the exact font is unavailable, closely match its visual appearance.
 
-If a logo reference image is provided:
+Logo Mode:
+{logo_mode}
 
-• Preserve the logo design as accurately as possible.
-• Scale it naturally for the composition.
-• Keep the logo sharp and legible.
-• Never stretch, crop, recolor, or distort the logo.
-• Place the logo where a professional advertising designer would (for example on product packaging, in the upper corner, or as subtle brand identification).
-• The logo should reinforce the advertisement, not dominate it.
-• Unless specifically requested, the logo should occupy less than 10% of the overall advertisement.
+Logo behavior:
+{"Do not invent, generate, or render a standard logo, wordmark, monogram, or brand mark anywhere in the advertisement. Continue using all other enabled Brand Kit guidance." if logo_mode == "none" else ("Create one simple, tasteful, original logo or wordmark based on the supplied company or product name. Keep it small, readable, and secondary to the main creative. Do not imitate a known brand or trademark." if logo_mode == "generate" else "Use the supplied Brand Kit logo as the only standard logo. Preserve it accurately, keep it sharp and legible, never stretch/crop/recolor/distort it, and place it as subtle professional brand identification occupying less than 10% unless specifically requested.")}
 
 If reference images are provided, use them as visual guidance.
 
@@ -4017,19 +4088,13 @@ The design should include:
 • Elegant spacing
 • Strong visual hierarchy
 • Professional marketing typography
-• CTA BUTTON
-    - Include one professionally designed call-to-action button.
-    - The button should:
-        • Be visually prominent without overpowering the design.
-        • Use strong contrast against the background.
-        • Have premium rounded corners.
-        • Include clean, readable typography.
-        • Feel modern and professionally designed.
-        • Match the Brand Kit colors when available.
-        • Position naturally near the bottom of the advertisement.
-• One clear headline
-• One supporting line if needed
-• One offer badge if appropriate
+• Standard ad elements:
+    - Headline: {"Include one clear headline." if include_headline else "Do not add a standard advertising headline."}
+    - Body Text: {"Include one supporting line if useful." if include_body else "Do not add standard supporting body copy."}
+    - CTA: {"Include one professionally designed CTA/button when appropriate. Keep it prominent, readable, modern, and consistent with enabled Brand Kit colors." if include_cta else "Do not add a standard CTA, CTA button, or action label."}
+    - Logo: {"Do not include a standard logo or brand mark." if logo_mode == "none" else ("Generate one simple original logo or wordmark." if logo_mode == "generate" else "Use the supplied Brand Kit logo tastefully and accurately.")}
+• Explicitly requested in-scene text remains independent from these selections and must still be rendered when requested.
+• One offer badge if appropriate and compatible with the user's selected standard elements
 
 ==================================================
 VISUAL HIERARCHY
@@ -4037,15 +4102,17 @@ VISUAL HIERARCHY
 
 Priority order:
 
-1. Product
-2. Brand
-3. Headline
+1. Product or primary requested subject
+2. Brand identity
+3. {"Headline" if include_headline else "Explicitly requested scene content"}
 4. Offer
-5. CTA
+5. {"CTA" if include_cta else "Supporting visual composition"}
 
-The product should occupy roughly 60% of the visual composition.
+Do not reserve layout space for disabled standard ad elements.
 
-Typography should complement the product—not overpower it.
+The product or primary requested subject should remain the visual focus of the composition.
+
+Typography should complement the subject—not overpower it.
 
 ==================================================
 TYPOGRAPHY
@@ -4105,8 +4172,6 @@ Unnecessary props
 
 Unrealistic lighting
 
-Comic-style graphics
-
 Cheap clip art
 
 Messy layouts
@@ -4159,19 +4224,25 @@ It should be visually impressive enough to appear in a professional design portf
             obj.setdefault("hooks", [])
             obj.setdefault("variants", [])
 
-            if requested_headline:
+            if not include_headline:
+                obj["headline"] = ""
+            elif requested_headline:
                 obj["headline"] = requested_headline
             else:
                 obj["headline"] = str(
                     obj.get("headline") or product_name or "Ad Headline"
                 ).strip()[:50]
 
-            if requested_primary_text:
+            if not include_body:
+                obj["primary_text"] = ""
+            elif requested_primary_text:
                 obj["primary_text"] = requested_primary_text
             else:
                 obj["primary_text"] = str(obj.get("primary_text") or "").strip()[:150]
 
-            if requested_cta:
+            if not include_cta:
+                obj["cta"] = ""
+            elif requested_cta:
                 obj["cta"] = requested_cta
             else:
                 obj["cta"] = str(obj.get("cta") or "Learn More").strip()[:25]
@@ -4184,15 +4255,18 @@ It should be visually impressive enough to appear in a professional design portf
                         continue
                     normalized_variants.append(
                         {
-                            "headline": str(
-                                variant.get("headline") or obj["headline"]
-                            ).strip()[:50],
-                            "primary_text": str(
-                                variant.get("primary_text") or obj["primary_text"]
-                            ).strip()[:150],
-                            "cta": str(
-                                variant.get("cta") or obj["cta"]
-                            ).strip()[:25],
+                            "headline": (
+                                str(variant.get("headline") or obj["headline"]).strip()[:50]
+                                if include_headline else ""
+                            ),
+                            "primary_text": (
+                                str(variant.get("primary_text") or obj["primary_text"]).strip()[:150]
+                                if include_body else ""
+                            ),
+                            "cta": (
+                                str(variant.get("cta") or obj["cta"]).strip()[:25]
+                                if include_cta else ""
+                            ),
                         }
                     )
             obj["variants"] = normalized_variants
@@ -4215,7 +4289,11 @@ It should be visually impressive enough to appear in a professional design portf
                 lambda: generate_gpt_image_bytes(
                     prompt=visual_prompt,
                     size=payload.imageSize or "1024x1024",
-                    input_image_url=brand_kit.get("logoUrl"),
+                    input_image_url=(
+                        brand_kit.get("logoUrl")
+                        if logo_mode == "brand_kit"
+                        else None
+                    ),
                     input_image_urls=reference_image_urls,
                 )
             )
@@ -4341,7 +4419,15 @@ It should be visually impressive enough to appear in a professional design portf
                         else None
                     ),
                     "brandKitUsed": bool(brand_kit_context),
-                    "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+                    "brandKitLogoUsed": bool(
+                        logo_mode == "brand_kit" and brand_kit.get("logoUrl")
+                    ),
+                    "creativeElements": {
+                        "headline": include_headline,
+                        "body": include_body,
+                        "cta": include_cta,
+                        "logoMode": logo_mode,
+                    },
                     "useMyWinners": bool(winner_profile),
                     "visualPrompt": visual_prompt,
                     "imageUrl": image_url,
@@ -4590,6 +4676,18 @@ async def optimize_ad(
     metrics = payload.metrics.model_dump() if payload.metrics else {}
     creative_urls = payload.creative_image_urls or []
 
+    include_headline = bool(getattr(payload, "include_headline", True))
+    include_body = bool(getattr(payload, "include_body", True))
+    include_cta = bool(getattr(payload, "include_cta", True))
+    logo_mode = str(getattr(payload, "logo_mode", "none") or "none").strip().lower()
+    if logo_mode not in {"none", "generate", "brand_kit"}:
+        logo_mode = "none"
+    structure_source = str(
+        getattr(payload, "structure_source", "inferred") or "inferred"
+    ).strip().lower()
+    if structure_source not in {"known", "inferred", "user_confirmed"}:
+        structure_source = "inferred"
+
     set_generation_progress(db, "optimizer", progress_job_id, "analyzing_creative")
     creative_analysis = (
         await analyze_uploaded_creatives(creative_urls) if creative_urls else ""
@@ -4656,6 +4754,19 @@ primary_text: {payload.current_primary_text or ""}
 cta: {payload.current_cta or ""}
 image_prompt_or_notes: {payload.current_image_prompt or ""}
 
+CURRENT CREATIVE STRUCTURE:
+headline_enabled: {include_headline}
+body_text_enabled: {include_body}
+cta_enabled: {include_cta}
+logo_mode: {logo_mode}
+structure_source: {structure_source}
+
+Structure interpretation:
+- "known" means ADGen saved the structure with the original Library generation.
+- "inferred" means the structure was inferred from an external/manual source and may be imperfect.
+- "user_confirmed" means the advertiser explicitly confirmed or changed the structure.
+- Treat disabled elements as intentional design choices, not automatically as defects.
+
 PERFORMANCE METRICS JSON:
 {json.dumps(metrics)}
 
@@ -4663,8 +4774,19 @@ ANALYSIS RULES:
 - Diagnose this specific creative, not the account as a whole.
 - Use metrics when supplied. If metrics are missing, perform a creative audit.
 - Focus recommendations on creative variables: hook, visual hierarchy, offer
-  clarity, readability, product prominence, CTA visibility, brand consistency,
+  clarity, readability, product prominence, CTA strategy, brand consistency,
   audience-message fit, and platform suitability.
+- Do not lower a score or call an element "missing" solely because Headline,
+  Body Text, CTA, or Logo was intentionally disabled in CURRENT CREATIVE STRUCTURE.
+- Evaluate the effectiveness of the structure the advertiser actually chose.
+- You MAY recommend testing an intentionally disabled element when the supplied
+  performance evidence or campaign goal provides a clear strategic reason.
+  Frame that as an optional test/recommendation, never as a correction of an error.
+- For inferred structure, acknowledge uncertainty internally and avoid strong
+  claims that depend on knowing whether an element was intentionally omitted.
+- Still return improved_headline, improved_primary_text, and improved_cta as
+  useful suggested copy. They are suggestions only; downstream generation will
+  render them only when the corresponding element is enabled by the user.
 - Do not recommend bid, budget, keyword, or campaign-structure changes unless
   needed to explain why a metric alone cannot prove a creative issue.
 - Never invent historical winner data or expected lift percentages.
@@ -4680,11 +4802,25 @@ ANALYSIS RULES:
 - audit_dimensions must contain exactly these six dimensions:
   Attention, Message Clarity, Visual Hierarchy, CTA & Offer,
   Brand Consistency, Platform Fit.
+- For CTA & Offer, if CTA is intentionally disabled, score the clarity of the
+  offer/action strategy without penalizing the creative simply for lacking a CTA button.
 - Each audit dimension must include:
   name, score (0-100), status (strong, watch, or weak), finding.
 - priority_recommendations must contain exactly three items ordered by impact.
 - Each priority recommendation must include:
   title, reason, action, impact (low, medium, or high).
+- recommended_structure must recommend the best Version 2 structure using:
+  headline (boolean), body (boolean), cta (boolean),
+  logo_mode (none, generate, or brand_kit),
+  headline_reason, body_reason, cta_reason, logo_reason.
+- Make structure recommendations only when supported by the creative, campaign
+  goal, or performance evidence. If evidence is weak or ambiguous, preserve the
+  advertiser's current confirmed/inferred selection instead of changing it.
+- A recommendation is advisory only. Never assume the user accepted it.
+- For logo_mode, do not recommend brand_kit unless Brand Kit context is actually
+  available. Prefer none over inventing a generated logo when there is no clear
+  strategic reason to add one.
+- Keep each structure reason concise and practical (<= 180 characters).
 - likely_issues and recommended_changes remain concise arrays for compatibility.
 - improved_image_prompt must describe a complete, publish-ready advertisement
   and preserve the same product and campaign intent.
@@ -4695,6 +4831,7 @@ overall_score,
 biggest_opportunity,
 audit_dimensions,
 priority_recommendations,
+recommended_structure,
 likely_issues,
 recommended_changes,
 improved_headline,
@@ -4879,6 +5016,64 @@ confidence
             )
         obj["priority_recommendations"] = priorities
 
+        raw_structure = obj.get("recommended_structure")
+        if not isinstance(raw_structure, dict):
+            raw_structure = {}
+
+        recommended_logo_mode = str(
+            raw_structure.get("logo_mode") or logo_mode
+        ).strip().lower()
+        if recommended_logo_mode not in {"none", "generate", "brand_kit"}:
+            recommended_logo_mode = logo_mode
+
+        # The optimizer only knows Brand Kit details when Brand Kit context
+        # was actually loaded. Never suggest an unavailable Brand Kit logo.
+        if recommended_logo_mode == "brand_kit" and not brand_kit_context:
+            recommended_logo_mode = logo_mode if logo_mode != "brand_kit" else "none"
+
+        obj["recommended_structure"] = {
+            "headline": bool(
+                raw_structure.get("headline")
+                if isinstance(raw_structure.get("headline"), bool)
+                else include_headline
+            ),
+            "body": bool(
+                raw_structure.get("body")
+                if isinstance(raw_structure.get("body"), bool)
+                else include_body
+            ),
+            "cta": bool(
+                raw_structure.get("cta")
+                if isinstance(raw_structure.get("cta"), bool)
+                else include_cta
+            ),
+            "logo_mode": recommended_logo_mode,
+            "headline_reason": str(
+                raw_structure.get("headline_reason")
+                or (
+                    "Preserve the current headline structure unless a focused test is warranted."
+                )
+            ).strip()[:180],
+            "body_reason": str(
+                raw_structure.get("body_reason")
+                or (
+                    "Preserve the current body-text structure unless a focused test is warranted."
+                )
+            ).strip()[:180],
+            "cta_reason": str(
+                raw_structure.get("cta_reason")
+                or (
+                    "Preserve the current CTA structure unless a focused test is warranted."
+                )
+            ).strip()[:180],
+            "logo_reason": str(
+                raw_structure.get("logo_reason")
+                or (
+                    "Preserve the current logo treatment unless a focused test is warranted."
+                )
+            ).strip()[:180],
+        }
+
         for field_name in ("likely_issues", "recommended_changes"):
             value = obj.get(field_name, [])
             if isinstance(value, dict):
@@ -4937,6 +5132,13 @@ confidence
                 "overallScore": obj.get("overall_score"),
                 "confidence": obj.get("confidence"),
                 "source": analysis_source,
+                "creativeStructure": {
+                    "headline": include_headline,
+                    "body": include_body,
+                    "cta": include_cta,
+                    "logoMode": logo_mode,
+                    "source": structure_source,
+                },
             },
         )
         return OptimizeAdResponse(**obj)
@@ -5006,6 +5208,27 @@ async def generate_from_optimizer(
     brand_kit_context = build_brand_kit_prompt_context(brand_kit)
     tier, status = get_tier_and_status(user_doc)
 
+    include_headline = bool(getattr(payload, "includeHeadline", True))
+    include_body = bool(getattr(payload, "includeBody", True))
+    include_cta = bool(getattr(payload, "includeCta", True))
+    logo_mode = str(getattr(payload, "logoMode", "none") or "none").strip().lower()
+    if logo_mode not in {"none", "generate", "brand_kit"}:
+        logo_mode = "none"
+
+    has_brand_kit_logo = bool(brand_kit.get("logoUrl"))
+    if logo_mode == "brand_kit" and not has_brand_kit_logo:
+        logo_mode = "none"
+
+    effective_headline = (
+        (payload.improved_headline or "").strip()[:50] if include_headline else ""
+    )
+    effective_primary_text = (
+        (payload.improved_primary_text or "").strip()[:150] if include_body else ""
+    )
+    effective_cta = (
+        (payload.improved_cta or "").strip()[:25] if include_cta else ""
+    )
+
     image_usage_reservation = None
     cap_result = {
         "used": 0,
@@ -5071,13 +5294,19 @@ UPDATED COPY
 ==================================================
 
 Headline:
-{payload.improved_headline}
+{effective_headline if include_headline else "DISABLED — do not render a standard advertising headline"}
 
 Primary Text:
-{payload.improved_primary_text}
+{effective_primary_text if include_body else "DISABLED — do not render standard supporting body copy"}
 
 CTA:
-{payload.improved_cta}
+{effective_cta if include_cta else "DISABLED — do not render a standard CTA or CTA button"}
+
+Creative Structure:
+- Headline: {"enabled" if include_headline else "disabled"}
+- Body Text: {"enabled" if include_body else "disabled"}
+- CTA: {"enabled" if include_cta else "disabled"}
+- Logo Mode: {logo_mode}
 
 ==================================================
 PRIORITY ORDER
@@ -5094,11 +5323,15 @@ When generating this optimized advertisement, follow these priorities in order:
    Only apply Brand Kit fields that are present.
    Never override the advertiser's branding.
 
-3. Apply the optimization recommendations.
-   Improve the creative using the optimizer's suggested copy, image prompt, and performance guidance,
-   but do not sacrifice brand consistency or product accuracy.
+3. Preserve the advertiser's selected creative structure.
+   Disabled standard elements are intentional and must not be reintroduced.
+   Explicitly requested in-scene text remains allowed even when standard ad copy is disabled.
 
-4. Follow modern advertising and conversion best practices.
+4. Apply the optimization recommendations.
+   Improve the creative using the optimizer's suggested copy, image prompt, and performance guidance,
+   but do not sacrifice brand consistency, product accuracy, or selected structure.
+
+5. Follow modern advertising and conversion best practices.
    Improve clarity, hierarchy, stopping power, trust, and commercial quality.
 
 ==================================================
@@ -5115,7 +5348,8 @@ BRAND KIT
 
 {brand_kit_context}
 
-If a logo reference image is provided, use it as the brand logo reference. Preserve the logo identity as accurately as possible and place it tastefully in the advertisement only when it improves the design.
+Logo behavior:
+{"Do not invent, generate, or render a standard logo, wordmark, monogram, or brand mark." if logo_mode == "none" else ("Create one simple, tasteful, original logo or wordmark based on the supplied brand/product name. Keep it secondary to the main creative and do not imitate a known trademark." if logo_mode == "generate" else "Use the supplied Brand Kit logo as the only standard logo. Preserve it accurately, keep it legible, and do not stretch, crop, recolor, or distort it.")}
 
 ==================================================
 CREATIVE DIRECTION
@@ -5146,16 +5380,18 @@ VISUAL HIERARCHY
 
 Priority:
 
-1. Product
-2. Brand
-3. Headline
-4. Supporting text
+1. Product or primary requested subject
+2. Brand identity
+3. {"Headline" if include_headline else "Explicitly requested scene content"}
+4. {"Supporting text" if include_body else "Offer / supporting visual composition"}
 5. Offer (if appropriate)
-6. CTA
+6. {"CTA" if include_cta else "Supporting visual composition"}
 
-The product should dominate the composition.
+Do not reserve layout space for disabled standard ad elements.
 
-Typography should support the product—not compete with it.
+The product or primary requested subject should dominate the composition.
+
+Typography should support the subject—not compete with it.
 
 ==================================================
 TYPOGRAPHY
@@ -5205,7 +5441,7 @@ Misspelled words
 
 Placeholder text
 
-Fake logos
+{"Any invented or fake logos" if logo_mode in {"none", "brand_kit"} else "Imitations of known trademarks or existing brand logos"}
 
 Messy layouts
 
@@ -5302,7 +5538,11 @@ Improve it.
             lambda: generate_gpt_image_bytes(
                 prompt=visual_prompt,
                 size=payload.imageSize or "1024x1024",
-                input_image_url=brand_kit.get("logoUrl"),
+                input_image_url=(
+                    brand_kit.get("logoUrl")
+                    if logo_mode == "brand_kit"
+                    else None
+                ),
                 input_image_urls=reference_image_urls,
             )
         )
@@ -5340,7 +5580,15 @@ Improve it.
                     "referenceImageCount": len(reference_image_urls),
                     "useBrandKit": payload.useBrandKit,
                     "brandKitUsed": bool(brand_kit_context),
-                    "brandKitLogoUsed": bool(brand_kit.get("logoUrl")),
+                    "brandKitLogoUsed": bool(
+                        logo_mode == "brand_kit" and brand_kit.get("logoUrl")
+                    ),
+                    "creativeElements": {
+                        "headline": include_headline,
+                        "body": include_body,
+                        "cta": include_cta,
+                        "logoMode": logo_mode,
+                    },
                     "visualPrompt": visual_prompt,
                     "imageUrl": image_url,
                     "storagePath": image_asset.get("storagePath"),
@@ -5348,9 +5596,9 @@ Improve it.
                     "contentType": image_asset.get("contentType"),
                     "storageState": "active",
                     "copy": {
-                        "headline": payload.improved_headline,
-                        "primary_text": payload.improved_primary_text,
-                        "cta": payload.improved_cta,
+                        "headline": effective_headline,
+                        "primary_text": effective_primary_text,
+                        "cta": effective_cta,
                     },
                     "error": None,
                     "usage": {
@@ -5379,6 +5627,12 @@ Improve it.
                     "aspectRatio": aspect_ratio,
                     "usedBrandKit": bool(brand_kit_context),
                     "usedPerformanceIntelligence": False,
+                    "creativeStructure": {
+                        "headline": include_headline,
+                        "body": include_body,
+                        "cta": include_cta,
+                        "logoMode": logo_mode,
+                    },
                 },
             )
         except Exception:
@@ -5386,9 +5640,15 @@ Improve it.
 
         return {
             "copy": {
-                "headline": payload.improved_headline,
-                "primary_text": payload.improved_primary_text,
-                "cta": payload.improved_cta,
+                "headline": effective_headline,
+                "primary_text": effective_primary_text,
+                "cta": effective_cta,
+            },
+            "creativeElements": {
+                "headline": include_headline,
+                "body": include_body,
+                "cta": include_cta,
+                "logoMode": logo_mode,
             },
             "imageUrl": image_url,
             "imageJobId": image_job_id,
@@ -5941,6 +6201,16 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         "fileSizeBytes": _safe_int(data.get("fileSizeBytes"), 0),
         "error": data.get("error") or None,
         "brandKitUsed": bool(data.get("brandKitUsed") or data.get("useBrandKit")),
+        "creativeElements": (
+            data.get("creativeElements")
+            if isinstance(data.get("creativeElements"), dict)
+            else None
+        ),
+        "structureSource": (
+            (data.get("creativeElements") or {}).get("source")
+            if isinstance(data.get("creativeElements"), dict)
+            else None
+        ),
         "user": user,
     }
 

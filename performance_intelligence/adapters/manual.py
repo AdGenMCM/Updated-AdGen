@@ -48,7 +48,9 @@ def manual_job_to_evidence(
         doc.get("body"),
         doc.get("primaryText"),
         doc.get("generatedPrimaryText"),
+        (doc.get("copy") or {}).get("primary_text"),
         (doc.get("copy") or {}).get("body"),
+        (doc.get("result") or {}).get("primary_text"),
         (doc.get("result") or {}).get("body"),
     )
     cta = _first(
@@ -83,6 +85,14 @@ def manual_job_to_evidence(
             "ratio": doc.get("ratio") or doc.get("imageSize"),
             "brandKitId": doc.get("brandKitId"),
             "prompt": doc.get("prompt"),
+            # Stored for future structure-level learning. Current PI profile
+            # computation intentionally does not score these fields yet.
+            "creativeElements": doc.get("creativeElements"),
+            "logoMode": (
+                (doc.get("creativeElements") or {}).get("logoMode")
+                if isinstance(doc.get("creativeElements"), dict)
+                else None
+            ),
         },
     )
 
@@ -163,6 +173,7 @@ def manual_job_to_evidence(
             "markedSuccessful": bool(
                 perf.get("marked_successful")
             ),
+            "creativeElements": doc.get("creativeElements"),
         },
     )
 

@@ -1325,3 +1325,276 @@
 .opt-resultsScrollTarget {
   scroll-margin-top: 96px;
 }
+
+
+/* =========================================================
+   Creative structure compatibility
+========================================================= */
+
+.opt-structureCard {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.opt-structureCard.compact {
+  margin: 18px 0 0;
+}
+
+.opt-structureHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.opt-structureHeader > div {
+  display: grid;
+  gap: 5px;
+}
+
+.opt-structureHeader strong {
+  color: #f8fafc;
+  font-size: 0.94rem;
+}
+
+.opt-structureHeader small,
+.opt-structureHelp,
+.opt-structureGenerateNote {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.opt-structureSource {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 999px;
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.12);
+  font-size: 0.66rem;
+  font-weight: 900;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.opt-structureChecks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opt-structureCheck {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 12px;
+  color: #e5e7eb;
+  background: rgba(31, 41, 55, 0.72);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.opt-structureCheck input {
+  width: 17px;
+  height: 17px;
+  accent-color: #8b5cf6;
+}
+
+.opt-logoModeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.opt-logoModeLabel {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.opt-logoModeSelector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.opt-logoModeSelector button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  color: #94a3b8;
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.opt-logoModeSelector button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 7px 18px rgba(124, 58, 237, 0.22);
+}
+
+.opt-logoModeSelector button:disabled,
+.opt-structureCheck:has(input:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.opt-structureHelp {
+  display: block;
+}
+
+.opt-structureHelp.available {
+  color: #c4b5fd;
+}
+
+.opt-structureGenerateNote {
+  margin: 10px 0 18px;
+}
+
+@media (max-width: 720px) {
+  .opt-structureHeader {
+    flex-direction: column;
+  }
+
+  .opt-structureChecks,
+  .opt-logoModeSelector {
+    grid-template-columns: 1fr;
+  }
+
+  .opt-logoModeRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================================================
+   Optimizer structure recommendations
+========================================================= */
+
+.opt-structureCheckCopy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.opt-structureCheck.has-recommendation {
+  border-color: rgba(167, 139, 250, 0.38);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.opt-recommendationBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.opt-recommendationBadge.keep {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.opt-recommendationBadge.change {
+  color: #ddd6fe;
+  background: rgba(124, 58, 237, 0.2);
+}
+
+.opt-logoModeSelector button {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.opt-logoModeSelector button small {
+  color: #c4b5fd;
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.opt-logoModeSelector button.recommended:not(.active) {
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.48);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.opt-structureRecommendationBanner {
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  border-radius: 13px;
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.opt-structureRecommendationBanner strong {
+  color: #ede9fe;
+  font-size: 0.82rem;
+}
+
+.opt-structureRecommendationBanner span {
+  color: #a8b3c7;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.opt-structureRecommendationDetails {
+  padding-top: 2px;
+}
+
+.opt-structureRecommendationDetails summary {
+  width: fit-content;
+  color: #c4b5fd;
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.opt-structureRecommendationDetails > div {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.opt-structureRecommendationDetails p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.opt-structureRecommendationDetails strong {
+  color: #cbd5e1;
+}

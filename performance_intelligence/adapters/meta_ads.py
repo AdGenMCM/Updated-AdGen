@@ -5,6 +5,7 @@ from integrations.meta_ads.store import (
     list_creative_sync,
 )
 
+from ..external_structure import infer_external_creative_elements
 from ..extractors import (
     analyze_copy,
     analyze_image,
@@ -92,6 +93,12 @@ def meta_creative_to_evidence(
             "mediaType": item.get("mediaType"),
             "destinationUrl": item.get("destinationUrl"),
             "effectiveStatus": item.get("effectiveStatus"),
+            "creativeElements": infer_external_creative_elements(
+                source="meta",
+                headline=headline,
+                body=body,
+                cta=cta,
+            ),
         },
     )
 

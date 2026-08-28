@@ -53,6 +53,184 @@ function metaCreativeTitle(item) {
   return item.headline || item.adName || "Meta ad";
 }
 
+function CreativeStructureControls({
+  value,
+  onChange,
+  canUseBrandKitLogo,
+  hasBrandKitLogo,
+  useBrandKit,
+  recommendation = null,
+  disabled = false,
+  compact = false,
+}) {
+  const setField = (field, nextValue) => {
+    onChange?.({
+      ...value,
+      [field]: nextValue,
+      source: "user_confirmed",
+    });
+  };
+
+  return (
+    <div className={`opt-structureCard ${compact ? "compact" : ""}`}>
+      <div className="opt-structureHeader">
+        <div>
+          <strong>Creative Structure</strong>
+          <small>
+            Confirm which standard ad elements this creative should use. Disabled
+            elements are not treated as mistakes by the Optimizer.
+          </small>
+        </div>
+        <span className="opt-structureSource">
+          {value.source === "known"
+            ? "Known from ADGen"
+            : value.source === "user_confirmed"
+            ? "User confirmed"
+            : "Inferred — confirm"}
+        </span>
+      </div>
+
+      <div className="opt-structureChecks">
+        {[
+          ["headline", "Headline", "headline_reason"],
+          ["body", "Body Text", "body_reason"],
+          ["cta", "CTA", "cta_reason"],
+        ].map(([key, label, reasonKey]) => {
+          const hasRecommendation =
+            recommendation && typeof recommendation[key] === "boolean";
+          const recommendedValue = hasRecommendation
+            ? recommendation[key]
+            : null;
+          const differs =
+            hasRecommendation && recommendedValue !== !!value[key];
+
+          return (
+            <label
+              key={key}
+              className={`opt-structureCheck ${
+                differs ? "has-recommendation" : ""
+              }`}
+              title={
+                recommendation?.[reasonKey] ||
+                `${label} structure selection`
+              }
+            >
+              <input
+                type="checkbox"
+                checked={!!value[key]}
+                onChange={(event) => setField(key, event.target.checked)}
+                disabled={disabled}
+              />
+              <span className="opt-structureCheckCopy">
+                <span>{label}</span>
+                {hasRecommendation && (
+                  <small
+                    className={`opt-recommendationBadge ${
+                      differs ? "change" : "keep"
+                    }`}
+                  >
+                    {differs
+                      ? `Optimizer: ${recommendedValue ? "On" : "Off"}`
+                      : "Recommended"}
+                  </small>
+                )}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="opt-logoModeRow">
+        <span className="opt-logoModeLabel">Logo</span>
+        <div className="opt-logoModeSelector" role="group" aria-label="Logo mode">
+          <button
+            type="button"
+            className={`${value.logoMode === "none" ? "active" : ""} ${
+              recommendation?.logo_mode === "none" ? "recommended" : ""
+            }`}
+            onClick={() => setField("logoMode", "none")}
+            disabled={disabled}
+            title={
+              recommendation?.logo_mode === "none"
+                ? recommendation?.logo_reason || "Optimizer recommended"
+                : "No standard logo"
+            }
+          >
+            <span>No Logo</span>
+            {recommendation?.logo_mode === "none" && (
+              <small>Recommended</small>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`${value.logoMode === "generate" ? "active" : ""} ${
+              recommendation?.logo_mode === "generate" ? "recommended" : ""
+            }`}
+            onClick={() => setField("logoMode", "generate")}
+            disabled={disabled}
+            title={
+              recommendation?.logo_mode === "generate"
+                ? recommendation?.logo_reason || "Optimizer recommended"
+                : "Generate a simple original logo"
+            }
+          >
+            <span>Generate</span>
+            {recommendation?.logo_mode === "generate" && (
+              <small>Recommended</small>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`${value.logoMode === "brand_kit" ? "active" : ""} ${
+              recommendation?.logo_mode === "brand_kit" ? "recommended" : ""
+            }`}
+            onClick={() => setField("logoMode", "brand_kit")}
+            disabled={disabled || !canUseBrandKitLogo}
+            title={
+              recommendation?.logo_mode === "brand_kit"
+                ? recommendation?.logo_reason || "Optimizer recommended"
+                : "Use the selected Brand Kit logo"
+            }
+          >
+            <span>Brand Kit</span>
+            {recommendation?.logo_mode === "brand_kit" && (
+              <small>Recommended</small>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {!useBrandKit && hasBrandKitLogo && (
+        <small className="opt-structureHelp">
+          A Brand Kit logo is available. Enable Apply Brand Kit to use it.
+        </small>
+      )}
+      {useBrandKit && !hasBrandKitLogo && (
+        <small className="opt-structureHelp">
+          Upload a logo to the selected Brand Kit to enable Brand Kit Logo.
+        </small>
+      )}
+      {canUseBrandKitLogo && value.logoMode !== "brand_kit" && (
+        <small className="opt-structureHelp available">
+          Brand Kit Logo is available from the selected Active Brand.
+        </small>
+      )}
+
+      {recommendation && (
+        <details className="opt-structureRecommendationDetails">
+          <summary>Why the Optimizer recommends this structure</summary>
+          <div>
+            <p><strong>Headline:</strong> {recommendation.headline_reason}</p>
+            <p><strong>Body:</strong> {recommendation.body_reason}</p>
+            <p><strong>CTA:</strong> {recommendation.cta_reason}</p>
+            <p><strong>Logo:</strong> {recommendation.logo_reason}</p>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export default function Optimizer() {
   const navigate = useNavigate();
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
@@ -127,6 +305,14 @@ export default function Optimizer() {
   const resultsRef = useRef(null);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
+  const [selectedBrandKit, setSelectedBrandKit] = useState(null);
+  const [creativeStructure, setCreativeStructure] = useState({
+    headline: true,
+    body: true,
+    cta: true,
+    logoMode: "none",
+    source: "inferred",
+  });
 
   // Regenerate state
   const [regenSize, setRegenSize] = useState("1024x1024");
@@ -186,6 +372,18 @@ const [progress, setProgress] = useState({
     const tier = (me.tier || "").toLowerCase();
     return tier === "pro_monthly" || tier === "business_monthly";
   }, [me]);
+
+  const hasBrandKitLogo = Boolean(selectedBrandKit?.logoUrl);
+  const canUseBrandKitLogo = Boolean(useBrandKit && hasBrandKitLogo);
+
+  useEffect(() => {
+    if (!canUseBrandKitLogo && creativeStructure.logoMode === "brand_kit") {
+      setCreativeStructure((current) => ({
+        ...current,
+        logoMode: "none",
+      }));
+    }
+  }, [canUseBrandKitLogo, creativeStructure.logoMode]);
 
   const analysisSources = useMemo(
     () => [
@@ -293,6 +491,7 @@ const [progress, setProgress] = useState({
         prompt: item.visualPrompt || "",
         copy: item.copy || {},
         performance: item.performance || {},
+        creativeElements: item.creativeElements || null,
         platform: normalizePlatform(item.platform || item.copy?.platform),
         raw: item,
       }));
@@ -459,6 +658,13 @@ const [progress, setProgress] = useState({
     if (sourceId === "manual") {
       resetImportedSource();
       setAnalysisSource("manual");
+      setCreativeStructure({
+        headline: true,
+        body: true,
+        cta: true,
+        logoMode: canUseBrandKitLogo ? "brand_kit" : "none",
+        source: "inferred",
+      });
       return;
     }
 
@@ -489,6 +695,37 @@ const [progress, setProgress] = useState({
     setUploadedUrls(item.creativeUrl ? [item.creativeUrl] : []);
     setSelectedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    const storedStructure =
+      item.sourceType === "library" &&
+      item.creativeElements &&
+      typeof item.creativeElements === "object"
+        ? item.creativeElements
+        : null;
+
+    const inferredHeadline = Boolean(copy.headline || copy.title);
+    const inferredBody = Boolean(
+      copy.primary_text || copy.primaryText || copy.body
+    );
+    const inferredCta = Boolean(copy.cta);
+
+    setCreativeStructure({
+      headline: storedStructure
+        ? storedStructure.headline !== false
+        : inferredHeadline,
+      body: storedStructure
+        ? storedStructure.body !== false
+        : inferredBody,
+      cta: storedStructure
+        ? storedStructure.cta !== false
+        : inferredCta,
+      logoMode:
+        storedStructure &&
+        ["none", "generate", "brand_kit"].includes(storedStructure.logoMode)
+          ? storedStructure.logoMode
+          : "none",
+      source: storedStructure ? "known" : "inferred",
+    });
 
     setForm((current) => ({
       ...current,
@@ -812,6 +1049,12 @@ const [progress, setProgress] = useState({
         current_cta: form.current_cta || null,
         current_image_prompt: form.current_image_prompt || null,
 
+        include_headline: creativeStructure.headline,
+        include_body: creativeStructure.body,
+        include_cta: creativeStructure.cta,
+        logo_mode: creativeStructure.logoMode,
+        structure_source: creativeStructure.source,
+
         metrics: {
           ctr: form.ctr ? Number(form.ctr) : null,
           cpc: form.cpc ? Number(form.cpc) : null,
@@ -951,6 +1194,12 @@ const [progress, setProgress] = useState({
         improved_primary_text: result.improved_primary_text,
         improved_cta: result.improved_cta,
         improved_image_prompt: result.improved_image_prompt,
+
+        // Creative structure
+        includeHeadline: creativeStructure.headline,
+        includeBody: creativeStructure.body,
+        includeCta: creativeStructure.cta,
+        logoMode: creativeStructure.logoMode,
 
         // Generation options
         imageSize: regenSize,
@@ -1095,7 +1344,8 @@ const [progress, setProgress] = useState({
           <BrandKitSelector
             value={brandKitId}
             onChange={setBrandKitId}
-            disabled={loading || regenLoading || !useBrandKit}
+            onKitChange={setSelectedBrandKit}
+            disabled={loading || regenLoading}
           />
         )}
 
@@ -1419,6 +1669,16 @@ const [progress, setProgress] = useState({
                 onChange={handleChange}
                 rows={3}
               />
+
+              <CreativeStructureControls
+                value={creativeStructure}
+                onChange={setCreativeStructure}
+                canUseBrandKitLogo={canUseBrandKitLogo}
+                hasBrandKitLogo={hasBrandKitLogo}
+                useBrandKit={useBrandKit}
+                recommendation={result?.recommended_structure || null}
+                disabled={loading || regenLoading}
+              />
             </StepSection>
 
             <StepSection
@@ -1587,18 +1847,35 @@ const [progress, setProgress] = useState({
                     </div>
                   </div>
                   <div className="opt-updatedCopyGrid">
-                    <div>
-                      <span>Headline</span>
-                      <p>{result.improved_headline}</p>
-                    </div>
-                    <div>
-                      <span>CTA</span>
-                      <p>{result.improved_cta}</p>
-                    </div>
-                    <div className="opt-copyWide">
-                      <span>Primary Text</span>
-                      <p>{result.improved_primary_text}</p>
-                    </div>
+                    {creativeStructure.headline && (
+                      <div>
+                        <span>Headline</span>
+                        <p>{result.improved_headline}</p>
+                      </div>
+                    )}
+                    {creativeStructure.cta && (
+                      <div>
+                        <span>CTA</span>
+                        <p>{result.improved_cta}</p>
+                      </div>
+                    )}
+                    {creativeStructure.body && (
+                      <div className="opt-copyWide">
+                        <span>Primary Text</span>
+                        <p>{result.improved_primary_text}</p>
+                      </div>
+                    )}
+                    {!creativeStructure.headline &&
+                      !creativeStructure.body &&
+                      !creativeStructure.cta && (
+                        <div className="opt-copyWide">
+                          <span>Standard Ad Copy</span>
+                          <p>
+                            Disabled for this version. The Optimizer can still recommend
+                            testing copy elements, but they will not be rendered unless you enable them.
+                          </p>
+                        </div>
+                      )}
                   </div>
                   <details className="opt-promptDetails">
                     <summary>View optimized image direction</summary>
@@ -1621,6 +1898,33 @@ const [progress, setProgress] = useState({
                         <option value="1792x1024">Landscape (1792x1024)</option>
                       </select>
                     </div>
+
+                    {result?.recommended_structure && (
+                      <div className="opt-structureRecommendationBanner">
+                        <strong>Optimizer structure recommendation</strong>
+                        <span>
+                          Recommended settings are marked below. Nothing changes
+                          automatically—you decide what Version 2 should use.
+                        </span>
+                      </div>
+                    )}
+
+                    <CreativeStructureControls
+                      value={creativeStructure}
+                      onChange={setCreativeStructure}
+                      canUseBrandKitLogo={canUseBrandKitLogo}
+                      hasBrandKitLogo={hasBrandKitLogo}
+                      useBrandKit={useBrandKit}
+                      recommendation={result?.recommended_structure || null}
+                      disabled={regenLoading}
+                      compact
+                    />
+
+                    <p className="opt-structureGenerateNote">
+                      These settings control the new Version 2 only. You can preserve
+                      the original structure or intentionally turn an element on or off
+                      before generating.
+                    </p>
 
                     <Button
                       type="button"
@@ -1663,20 +1967,26 @@ const [progress, setProgress] = useState({
                         />
 
                         <div className="opt-updatedCopyGrid">
-                          <div>
-                            <span>Headline</span>
-                            <p>{result.improved_headline}</p>
-                          </div>
+                          {regenResult?.copy?.headline && (
+                            <div>
+                              <span>Headline</span>
+                              <p>{regenResult.copy.headline}</p>
+                            </div>
+                          )}
 
-                          <div>
-                            <span>CTA</span>
-                            <p>{result.improved_cta}</p>
-                          </div>
+                          {regenResult?.copy?.cta && (
+                            <div>
+                              <span>CTA</span>
+                              <p>{regenResult.copy.cta}</p>
+                            </div>
+                          )}
 
-                          <div className="opt-copyWide">
-                            <span>Primary Text</span>
-                            <p>{result.improved_primary_text}</p>
-                          </div>
+                          {regenResult?.copy?.primary_text && (
+                            <div className="opt-copyWide">
+                              <span>Primary Text</span>
+                              <p>{regenResult.copy.primary_text}</p>
+                            </div>
+                          )}
                         </div>
 
                         <Button

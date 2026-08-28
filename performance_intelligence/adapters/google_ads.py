@@ -3,6 +3,7 @@ from typing import Any
 from integrations.google_ads.service import fetch_creative_assets
 from integrations.google_ads.store import get_connection
 
+from ..external_structure import infer_external_creative_elements
 from ..extractors import analyze_copy, analyze_image, analyze_video_metadata
 from ..models import CreativeFeatures, PerformanceEvidence
 from ..qualification import qualify_evidence
@@ -75,6 +76,12 @@ def google_asset_to_evidence(
             "source": asset.get("source"),
             "width": asset.get("width"),
             "height": asset.get("height"),
+            "creativeElements": infer_external_creative_elements(
+                source="google",
+                headline=headline,
+                body=body,
+                cta=cta,
+            ),
         },
     )
 

@@ -250,6 +250,173 @@ def _top_counter(counter: Counter, limit: int = 8) -> list[dict[str, Any]]:
     ]
 
 
+
+# Creative-structure learning gates. Data is collected immediately, but a
+# structure preference is exposed to generation only after all evidence gates pass.
+STRUCTURE_MIN_SAMPLES_PER_VALUE = 5
+STRUCTURE_MIN_RELATIVE_LIFT_PCT = 15.0
+
+
+def _creative_structure(item: dict[str, Any]) -> dict[str, Any]:
+    features = item.get("features") or {}
+    source_metadata = features.get("source_metadata") or {}
+    raw = source_metadata.get("creativeElements")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _structure_value(
+    structure: dict[str, Any],
+    dimension: str,
+) -> str | None:
+    if dimension == "headline":
+        value = structure.get("headline")
+        return "on" if value is True else ("off" if value is False else None)
+    if dimension == "body":
+        value = structure.get("body")
+        return "on" if value is True else ("off" if value is False else None)
+    if dimension == "cta":
+        value = structure.get("cta")
+        return "on" if value is True else ("off" if value is False else None)
+    if dimension == "logo_mode":
+        mode = str(structure.get("logoMode") or "").strip().lower()
+        return mode if mode in {"none", "generate", "brand_kit"} else None
+    return None
+
+
+def _structure_learning_profile(
+    qualified_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate structure performance and expose only sufficiently supported winners."""
+    dimensions = ("headline", "body", "cta", "logo_mode")
+    profile: dict[str, Any] = {
+        "thresholds": {
+            "minSamplesPerValue": STRUCTURE_MIN_SAMPLES_PER_VALUE,
+            "minRelativeLiftPct": STRUCTURE_MIN_RELATIVE_LIFT_PCT,
+        },
+        "dimensions": {},
+        "qualifiedFindings": [],
+    }
+
+    for dimension in dimensions:
+        groups: dict[str, dict[str, float]] = defaultdict(
+            lambda: {
+                "samples": 0,
+                "impressions": 0.0,
+                "clicks": 0.0,
+                "spend": 0.0,
+                "conversions": 0.0,
+                "revenue": 0.0,
+            }
+        )
+
+        for item in qualified_items:
+            structure = _creative_structure(item)
+            value = _structure_value(structure, dimension)
+            if value is None:
+                continue
+
+            group = groups[value]
+            group["samples"] += 1
+            group["impressions"] += float(item.get("impressions") or 0)
+            group["clicks"] += float(item.get("clicks") or 0)
+            group["spend"] += float(item.get("spend") or 0)
+            group["conversions"] += float(item.get("conversions") or 0)
+            group["revenue"] += float(item.get("revenue") or 0)
+
+        rows = {}
+        eligible = {}
+        for value, group in groups.items():
+            impressions = group["impressions"]
+            clicks = group["clicks"]
+            spend = group["spend"]
+            conversions = group["conversions"]
+            revenue = group["revenue"]
+            row = {
+                **group,
+                "samples": int(group["samples"]),
+                "ctrPercent": round((clicks / impressions) * 100, 4)
+                if impressions > 0 else None,
+                "cvrPercent": round((conversions / clicks) * 100, 4)
+                if clicks > 0 else None,
+                "roas": round(revenue / spend, 4)
+                if spend > 0 else None,
+            }
+            # Existing PI qualification is the performance-quality gate.
+            # Structure learning adds only the cross-treatment sample gate.
+            row["eligible"] = bool(
+                row["samples"] >= STRUCTURE_MIN_SAMPLES_PER_VALUE
+            )
+            rows[value] = row
+            if row["eligible"]:
+                eligible[value] = row
+
+        finding = None
+        if len(eligible) >= 2:
+            # Prefer ROAS only when at least two eligible treatments have actual
+            # conversion/revenue signal; otherwise use CTR.
+            roas_ready = [
+                (value, row)
+                for value, row in eligible.items()
+                if row["conversions"] > 0
+                and row["revenue"] > 0
+                and row["roas"] is not None
+            ]
+            metric = "roas" if len(roas_ready) >= 2 else "ctrPercent"
+            ranked = sorted(
+                eligible.items(),
+                key=lambda pair: (
+                    pair[1].get(metric)
+                    if pair[1].get(metric) is not None
+                    else -1
+                ),
+                reverse=True,
+            )
+            best_value, best = ranked[0]
+            second_value, second = ranked[1]
+            best_metric = best.get(metric)
+            second_metric = second.get(metric)
+
+            if (
+                best_metric is not None
+                and second_metric is not None
+                and second_metric > 0
+            ):
+                lift_pct = (
+                    (float(best_metric) - float(second_metric))
+                    / float(second_metric)
+                    * 100
+                )
+                if lift_pct >= STRUCTURE_MIN_RELATIVE_LIFT_PCT:
+                    finding = {
+                        "dimension": dimension,
+                        "preferredValue": best_value,
+                        "runnerUpValue": second_value,
+                        "metric": metric,
+                        "relativeLiftPct": round(lift_pct, 1),
+                        "sampleCounts": {
+                            key: int(value["samples"])
+                            for key, value in eligible.items()
+                        },
+                        "impressions": {
+                            key: round(float(value["impressions"]), 2)
+                            for key, value in eligible.items()
+                        },
+                        "spend": {
+                            key: round(float(value["spend"]), 2)
+                            for key, value in eligible.items()
+                        },
+                        "confidence": "qualified",
+                    }
+                    profile["qualifiedFindings"].append(finding)
+
+        profile["dimensions"][dimension] = {
+            "groups": rows,
+            "finding": finding,
+        }
+
+    return profile
+
+
 def _performance_unit_key(item: dict[str, Any]) -> str:
     explicit = str(item.get("performance_unit_id") or "").strip()
     if explicit:
@@ -387,6 +554,8 @@ def rebuild_summary(uid: str) -> dict[str, Any]:
             + min(source_count / 3.0, 1.0) * 0.15,
         )
 
+    creative_structure_learning = _structure_learning_profile(qualified)
+
     generation_profile = {
         "top_colors": _top_counter(colors, 5),
         "top_visual_styles": _top_counter(styles, 5),
@@ -402,6 +571,12 @@ def rebuild_summary(uid: str) -> dict[str, Any]:
         ),
         "average_winning_product_prominence_percent": _weighted_average(
             product_prominence
+        ),
+        # Raw structure aggregation is retained for future analysis, while only
+        # qualifiedFindings are eligible to influence generation.
+        "creative_structure_learning": creative_structure_learning,
+        "creative_structure_findings": creative_structure_learning.get(
+            "qualifiedFindings", []
         ),
     }
 
