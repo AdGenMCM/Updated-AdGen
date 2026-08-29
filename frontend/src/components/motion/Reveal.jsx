@@ -15,14 +15,25 @@ export default function Reveal({
     const node = ref.current;
     if (!node) return;
 
+    // Reveal as soon as even a small part of the element enters the viewport.
+    // A percentage threshold (such as 0.18) can never be reached by very tall
+    // sections on small mobile screens, leaving them permanently transparent.
+    if (!("IntersectionObserver" in window)) {
+      setVisible(true);
+      return undefined;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting || entry.intersectionRatio > 0) {
           setVisible(true);
           observer.unobserve(node);
         }
       },
-      { threshold: 0.18 }
+      {
+        threshold: 0.01,
+        rootMargin: "0px 0px -4% 0px",
+      }
     );
 
     observer.observe(node);

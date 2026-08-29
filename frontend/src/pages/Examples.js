@@ -142,8 +142,7 @@ export default function Examples() {
 
       <section className="examples-gallery-section">
         <div className="examples-container">
-          <Reveal delay={80}>
-            <div className="examples-gallery-heading">
+          <div className="examples-gallery-heading examples-gallery-heading-safe">
               <div>
                 <span>Creative range</span>
                 <h2>One generator. More ways to create.</h2>
@@ -235,7 +234,6 @@ export default function Examples() {
                 </div>
               </div>
             )}
-          </Reveal>
         </div>
       </section>
 
