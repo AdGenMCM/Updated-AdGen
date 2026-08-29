@@ -30,6 +30,14 @@ const examples = [
   },
   {
     type: "image",
+    src: "/examples/imagegen/image-ex12.webp",
+    title: "Air Freshener product campaign",
+    detail: "Home Goods advertising • Landscape 16:9",
+    tags: ["Brand-led", "Benefit copy", "CTA"],
+    format: "landscape",
+  },
+  {
+    type: "image",
     src: "/examples/imagegen/image-ex7.webp",
     title: "Collector's edition campaign",
     detail: "Gaming advertising • Square 1:1",
@@ -42,6 +50,14 @@ const examples = [
     title: "Performance apparel campaign",
     detail: "Apparel advertising • Square 1:1",
     tags: ["Brand-led", "Lifestyle creative", "CTA"],
+    format: "square",
+  },
+  {
+    type: "custom",
+    src: "/examples/imagegen/image-ex11.webp",
+    title: "Song release campaign",
+    detail: "Album Cover & Promo • Square 1:1",
+    tags: ["Ad elements off", "No logo", "Album Cover Art"],
     format: "square",
   },
   {

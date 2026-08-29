@@ -8,6 +8,7 @@ const rowOne = [
   { src: "/examples/imagegen/image-ex9.webp", alt: "Performance apparel campaign generated with ADGen" },
   { src: "/examples/imagegen/image-cartoon2.webp", alt: "Late-night pizza social creative generated with ADGen" },
   { src: "/examples/imagegen/image-cartoon3.webp", alt: "Futuristic sneaker concept generated with ADGen" },
+  { src: "/examples/imagegen/image-ex11.webp", alt: "Song release campaign generated with ADGen" },
 ];
 
 const rowTwo = [
@@ -16,6 +17,7 @@ const rowTwo = [
   { src: "/examples/imagegen/image-ex8.webp", alt: "Fitness program campaign generated with ADGen" },
   { src: "/examples/imagegen/image-cartoon1.webp", alt: "Music studio illustrated creative generated with ADGen" },
   { src: "/examples/imagegen/image-cartoon4.webp", alt: "Monday morning comic generated with ADGen" },
+  { src: "/examples/imagegen/image-ex12.webp", alt: "Air Freshener product campaign generated with ADGen" },
 ];
 
 function MarqueeRow({ items, reverse = false }) {
