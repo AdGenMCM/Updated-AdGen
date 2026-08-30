@@ -281,3 +281,29 @@ def extract_first_output_url(task: Dict[str, Any]) -> Optional[str]:
         if isinstance(out[0], dict):
             return out[0].get("url") or out[0].get("uri")
     return None
+async def create_multi_shot_video(
+    *,
+    shots: list[dict[str, Any]],
+    duration: int,
+    ratio: str,
+    audio: bool = True,
+    version: str = "2026-06",
+    first_frame: Optional[str] = None,
+) -> str:
+    """Create a Runway Multi-Shot Video recipe task in custom mode."""
+    payload: Dict[str, Any] = {
+        "version": version,
+        "mode": "custom",
+        "duration": int(duration),
+        "ratio": ratio,
+        "audio": bool(audio),
+        "shots": shots,
+    }
+    if first_frame:
+        payload["firstFrame"] = {"uri": first_frame}
+
+    data = await _post("/v1/recipes/multi_shot_video", payload)
+    task_id = data.get("id")
+    if not task_id:
+        raise RunwayError(f"multi_shot_video missing task id: {data}")
+    return task_id

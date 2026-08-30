@@ -2,12 +2,38 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./GenerationProgress.css";
 
 const STEP_MAP = {
+  videoV2: [
+    { stage: "queued", label: "Request prepared" },
+    { stage: "building_prompt", label: "Storyboard compiled for video" },
+    { stage: "submitting_video", label: "Generation submitted" },
+    { stage: "rendering_video", label: "Video generated" },
+    { stage: "processing_video", label: "Finished render processed" },
+    { stage: "adding_voiceover", label: "AI narration added", voiceModes: ["voiceover"] },
+    { stage: "adding_music", label: "Background music mixed", musicOnly: true },
+    { stage: "finalizing", label: "ADGen finishing applied" },
+    { stage: "uploading_video", label: "Finished ad uploaded" },
+    { stage: "saving_library", label: "Saved to Library" },
+    { stage: "succeeded", label: "Full Video Ad complete" },
+  ],
+  videoV2Quick: [
+    { stage: "queued", label: "Request prepared" },
+    { stage: "loading_brand_kit", label: "Brand context applied" },
+    { stage: "building_prompt", label: "Video direction built" },
+    { stage: "submitting_video", label: "Generation submitted" },
+    { stage: "rendering_video", label: "Video generated" },
+    { stage: "processing_video", label: "Finished render processed" },
+    { stage: "adding_voiceover", label: "AI narration added", voiceModes: ["voiceover"] },
+    { stage: "adding_music", label: "Background music mixed", musicOnly: true },
+    { stage: "uploading_video", label: "Video uploaded" },
+    { stage: "saving_library", label: "Saved to Library" },
+    { stage: "succeeded", label: "Video complete" },
+  ],
   video: [
     { stage: "queued", label: "Request prepared" },
     { stage: "loading_brand_kit", label: "Active Brand applied" },
     { stage: "building_prompt", label: "Creative direction built" },
-    { stage: "submitting_to_runway", label: "Request sent" },
-    { stage: "waiting_for_runway", label: "Video rendered" },
+    { stage: "submitting_video", label: "Request sent" },
+    { stage: "rendering_video", label: "Video rendered" },
     { stage: "processing_video", label: "Base video processed" },
     { stage: "generating_voiceover", label: "Voiceover generated", voiceModes: ["voiceover"] },
     { stage: "mixing_voiceover", label: "Voiceover added", voiceModes: ["voiceover"] },
@@ -55,6 +81,9 @@ const STEP_MAP = {
 };
 
 const COPY_MAP = {
+  videoV2: {
+    queued: 8, building_prompt: 14, submitting_video: 18, rendering_video: 64, processing_video: 74, adding_voiceover: 82, adding_music: 88, finalizing: 92, uploading_video: 97, saving_library: 99, succeeded: 100,
+  },
   video: {
     kicker: "VIDEO GENERATION",
     defaultTitle: "Creating your video",
@@ -82,12 +111,38 @@ const COPY_MAP = {
 };
 
 const TITLE_MAP = {
+  videoV2: {
+    queued: "Preparing your request",
+    building_prompt: "Preparing your creative direction",
+    submitting_video: "Submitting your video",
+    rendering_video: "Generating your advertisement",
+    processing_video: "Processing your video",
+    adding_voiceover: "Adding AI narration",
+    adding_music: "Adding background music",
+    finalizing: "Applying finishing touches",
+    uploading_video: "Uploading your finished ad",
+    saving_library: "Saving to your Library",
+    succeeded: "Your Full Video Ad is ready",
+  },
+  videoV2Quick: {
+    queued: "Preparing your request",
+    loading_brand_kit: "Applying your brand",
+    building_prompt: "Preparing creative direction",
+    submitting_video: "Submitting your video",
+    rendering_video: "Generating your video",
+    processing_video: "Processing your video",
+    adding_voiceover: "Adding AI narration",
+    adding_music: "Adding background music",
+    uploading_video: "Uploading your video",
+    saving_library: "Saving to your Library",
+    succeeded: "Your Quick Clip is ready",
+  },
   video: {
     queued: "Preparing your request",
     loading_brand_kit: "Applying your brand",
     building_prompt: "Building your commercial",
-    submitting_to_runway: "Sending your request",
-    waiting_for_runway: "Rendering your video",
+    submitting_video: "Sending your request",
+    rendering_video: "Rendering your video",
     processing_video: "Processing your base video",
     generating_voiceover: "Generating your voiceover",
     mixing_voiceover: "Adding your voiceover",
@@ -135,6 +190,32 @@ const TITLE_MAP = {
 };
 
 const HELPER_MESSAGES = {
+  videoV2: {
+    queued: ["Preparing your approved storyboard..."],
+    building_prompt: ["Combining storyboard, brand direction, creative learnings, motion, and audio direction..."],
+    submitting_video: ["Submitting one continuous multi-shot generation..."],
+    rendering_video: ["Generating video, motion, and native audio together...", "Preserving product identity and purposeful motion across shots...", "Building natural human performance and synchronized dialogue..."],
+    processing_video: ["Preparing and validating the completed video..."],
+    adding_voiceover: ["Generating and mixing the selected off-screen narrator..."],
+    adding_music: ["Creating campaign-matched instrumental music...", "Mixing it quietly beneath speech and visuals..."],
+    finalizing: ["Applying captions and CTA finishing...", "Preparing the final ADGen delivery..."],
+    uploading_video: ["Uploading your finished Full Video Ad..."],
+    saving_library: ["Adding the completed ad to your Library..."],
+    succeeded: ["Your finished Full Video Ad is ready."],
+  },
+  videoV2Quick: {
+    queued: ["Preparing your Quick Clip..."],
+    loading_brand_kit: ["Applying your active Brand Kit..."],
+    building_prompt: ["Expanding your inputs into production-ready creative direction..."],
+    submitting_video: ["Submitting your generation..."],
+    rendering_video: ["Generating the visual performance and audio...", "Building fluid motion and commercial cinematography...", "Preserving your subject and product details..."],
+    processing_video: ["Preparing the completed video..."],
+    adding_voiceover: ["Adding the selected off-screen narration..."],
+    adding_music: ["Adding subtle campaign-matched background music..."],
+    uploading_video: ["Uploading your video..."],
+    saving_library: ["Adding the video to your Library..."],
+    succeeded: ["Your Quick Clip is ready."],
+  },
   video: {
     queued: [
       "Setting up your generation workspace...",
@@ -152,12 +233,12 @@ const HELPER_MESSAGES = {
       "Refining the commercial concept...",
       "Optimizing the prompt for video generation...",
     ],
-    submitting_to_runway: [
+    submitting_video: [
       "Establishing the generation request...",
       "Sending your creative direction to server...",
       "Preparing the render job...",
     ],
-    waiting_for_runway: [
+    rendering_video: [
       "Rendering cinematic frames...",
       "Building realistic motion...",
       "Preserving product details...",
@@ -351,8 +432,8 @@ const CHARACTER_DIALOGUE_VISUAL_CEILINGS = {
   queued: 5,
   loading_brand_kit: 8,
   building_prompt: 12,
-  submitting_to_runway: 15,
-  waiting_for_runway: 45,
+  submitting_video: 15,
+  rendering_video: 45,
   processing_video: 48,
   generating_dialogue: 55,
   preparing_speaking_scene: 65,
@@ -370,8 +451,8 @@ const CHARACTER_DIALOGUE_VISUAL_FLOORS = {
   queued: 1,
   loading_brand_kit: 5,
   building_prompt: 8,
-  submitting_to_runway: 12,
-  waiting_for_runway: 15,
+  submitting_video: 12,
+  rendering_video: 15,
   processing_video: 45,
   generating_dialogue: 48,
   preparing_speaking_scene: 55,
@@ -385,13 +466,56 @@ const CHARACTER_DIALOGUE_VISUAL_FLOORS = {
   succeeded: 99,
 };
 
+const VIDEO_V2_VISUAL_FLOORS = {
+  queued: 3,
+  loading_brand_kit: 6,
+  building_prompt: 8,
+  submitting_video: 14,
+  rendering_video: 18,
+  processing_video: 64,
+  adding_voiceover: 74,
+  adding_music: 82,
+  finalizing: 88,
+  uploading_video: 92,
+  saving_library: 97,
+  succeeded: 100,
+};
+
+const VIDEO_V2_VISUAL_CEILINGS = {
+  queued: 8,
+  loading_brand_kit: 10,
+  building_prompt: 14,
+  submitting_video: 18,
+  rendering_video: 64,
+  processing_video: 74,
+  adding_voiceover: 82,
+  adding_music: 88,
+  finalizing: 92,
+  uploading_video: 97,
+  saving_library: 99,
+  succeeded: 100,
+};
+
 const VISUAL_CEILINGS = {
+  videoV2: {
+    queued: 8,
+    loading_brand_kit: 10,
+    building_prompt: 14,
+    submitting_video: 18,
+    rendering_video: 72,
+    processing_video: 78,
+    adding_voiceover: 86,
+    finalizing: 92,
+    uploading_video: 97,
+    saving_library: 99,
+    succeeded: 100,
+  },
   video: {
     queued: 11,
     loading_brand_kit: 21,
     building_prompt: 31,
-    submitting_to_runway: 47,
-    waiting_for_runway: 66,
+    submitting_video: 47,
+    rendering_video: 66,
     processing_video: 70,
     generating_voiceover: 78,
     mixing_voiceover: 84,
@@ -484,6 +608,14 @@ export default function GenerationProgress({
   );
 
   const backendPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+
+  const isVideoV2Progress = type === "videoV2" || type === "videoV2Quick";
+  const videoV2Floor = isVideoV2Progress
+    ? VIDEO_V2_VISUAL_FLOORS[stage]
+    : undefined;
+  const videoV2Ceiling = isVideoV2Progress
+    ? VIDEO_V2_VISUAL_CEILINGS[stage]
+    : undefined;
   const helperMessages =
     HELPER_MESSAGES[type]?.[stage] ||
     HELPER_MESSAGES[type]?.queued ||
@@ -492,31 +624,42 @@ export default function GenerationProgress({
   const isCharacterDialogueProgress =
     type === "video" && resolvedVoiceMode === "character_dialogue";
 
-  const stageVisualCeiling = isCharacterDialogueProgress
-    ? CHARACTER_DIALOGUE_VISUAL_CEILINGS[stage]
-    : VISUAL_CEILINGS[type]?.[stage];
+  const stageVisualCeiling = isVideoV2Progress
+    ? videoV2Ceiling
+    : isCharacterDialogueProgress
+      ? CHARACTER_DIALOGUE_VISUAL_CEILINGS[stage]
+      : VISUAL_CEILINGS[type]?.[stage];
 
-  const stageVisualFloor = isCharacterDialogueProgress
-    ? CHARACTER_DIALOGUE_VISUAL_FLOORS[stage]
-    : undefined;
+  const stageVisualFloor = isVideoV2Progress
+    ? videoV2Floor
+    : isCharacterDialogueProgress
+      ? CHARACTER_DIALOGUE_VISUAL_FLOORS[stage]
+      : undefined;
 
-  const visualCeiling = isCharacterDialogueProgress
+  const visualCeiling = isVideoV2Progress
     ? stageVisualCeiling ?? backendPercent
-    : Math.max(
-        backendPercent,
-        stageVisualCeiling ?? backendPercent
-      );
+    : isCharacterDialogueProgress
+      ? stageVisualCeiling ?? backendPercent
+      : Math.max(
+          backendPercent,
+          stageVisualCeiling ?? backendPercent
+        );
 
   // For Character Dialogue, backend percentages are treated only as a signal
   // that the stage changed. The visible percentage is animated within the
   // current stage's own floor/ceiling range so it never jumps from one backend
   // percentage to another.
-  const effectiveBackendPercent = isCharacterDialogueProgress
-    ? stageVisualFloor ?? Math.min(
-        backendPercent,
-        stageVisualCeiling ?? backendPercent
+  const effectiveBackendPercent = isVideoV2Progress
+    ? Math.max(
+        stageVisualFloor ?? 0,
+        Math.min(backendPercent, stageVisualCeiling ?? backendPercent)
       )
-    : backendPercent;
+    : isCharacterDialogueProgress
+      ? stageVisualFloor ?? Math.min(
+          backendPercent,
+          stageVisualCeiling ?? backendPercent
+        )
+      : backendPercent;
 
   useEffect(() => {
     if (!open) {
@@ -544,6 +687,15 @@ export default function GenerationProgress({
   useEffect(() => {
     setHelperIndex(0);
   }, [stage, type]);
+
+  useEffect(() => {
+    if (!open || !isVideoV2Progress) return;
+
+    const floor = VIDEO_V2_VISUAL_FLOORS[stage];
+    if (typeof floor !== "number") return;
+
+    setDisplayPercent((current) => Math.max(current, floor));
+  }, [open, stage, isVideoV2Progress]);
 
   useEffect(() => {
     if (!open || !isCharacterDialogueProgress) return;
@@ -584,8 +736,20 @@ export default function GenerationProgress({
     }
 
     const animationInterval =
-      isCharacterDialogueProgress
-        ? stage === "waiting_for_runway"
+      isVideoV2Progress
+        ? stage === "rendering_video"
+          ? 3200
+          : stage === "processing_video"
+            ? 1800
+            : stage === "adding_voiceover"
+              ? 2200
+              : stage === "finalizing"
+                ? 1800
+                : ["uploading_video", "saving_library"].includes(stage)
+                  ? 1400
+                  : 1800
+        : isCharacterDialogueProgress
+        ? stage === "rendering_video"
           ? 4200
           : stage === "processing_video"
             ? 1800
@@ -598,7 +762,7 @@ export default function GenerationProgress({
                   : ["normalizing_duration", "uploading_video", "saving_library"].includes(stage)
                     ? 1600
                     : 2000
-        : type === "video" && stage === "waiting_for_runway"
+        : type === "video" && stage === "rendering_video"
           ? 6500
           : 2400;
 
@@ -606,6 +770,28 @@ export default function GenerationProgress({
       setDisplayPercent((current) => {
         const baseline = Math.max(current, effectiveBackendPercent);
         if (baseline >= visualCeiling) return baseline;
+
+        if (isVideoV2Progress) {
+          const remaining = visualCeiling - baseline;
+
+          // Smoothly advance inside the current backend-confirmed stage only.
+          // Never visually complete a stage before the backend advances.
+          let increment = 0.45;
+          if (stage === "rendering_video") increment = 0.35;
+          else if (stage === "adding_voiceover") increment = 0.4;
+          else if (stage === "processing_video") increment = 0.5;
+          else if (stage === "finalizing") increment = 0.45;
+          else if (["uploading_video", "saving_library"].includes(stage)) increment = 0.35;
+
+          if (remaining <= 1) increment = 0.08;
+          else if (remaining <= 2) increment = 0.12;
+          else if (remaining <= 4) increment = 0.2;
+
+          return Math.min(
+            Math.max(stageVisualFloor ?? 0, visualCeiling - 0.1),
+            baseline + increment
+          );
+        }
 
         if (isCharacterDialogueProgress) {
           const remaining = visualCeiling - baseline;
@@ -642,6 +828,7 @@ export default function GenerationProgress({
     stageVisualFloor,
     resolvedVoiceMode,
     isCharacterDialogueProgress,
+    isVideoV2Progress,
   ]);
 
   if (!open) return null;
@@ -651,6 +838,11 @@ export default function GenerationProgress({
     return out;
   }, {});
 
+  const visiblePercent =
+    isVideoV2Progress && typeof videoV2Ceiling === "number"
+      ? Math.min(displayPercent, stage === "succeeded" ? 100 : videoV2Ceiling)
+      : displayPercent;
+
   const activeIndex =
     stage === "failed" ? steps.length - 1 : order[stage] ?? 0;
 
@@ -658,22 +850,22 @@ export default function GenerationProgress({
     ? copy.failedTitle
     : TITLE_MAP[type]?.[stage] || copy.defaultTitle;
 
-  const isRunwayRendering =
-    type === "video" &&
-    ["submitting_to_runway", "waiting_for_runway"].includes(stage);
+  const isVideoRendering =
+    ["videoV2", "videoV2Quick"].includes(type) &&
+    ["submitting_video", "rendering_video"].includes(stage);
 
   let reassurance = null;
 
-  if (isRunwayRendering) {
-    if (elapsedSeconds >= 180) {
+  if (isVideoRendering) {
+    if (elapsedSeconds >= 600) {
       reassurance =
-        "Your video is still rendering normally. Complex scenes or high demand can increase generation time.";
-    } else if (elapsedSeconds >= 60) {
+        "This render is taking longer than usual, but it may still complete normally. Keep this page open while ADGen continues checking it.";
+    } else if (elapsedSeconds >= 180) {
       reassurance =
-        "Your video is still actively generating. More detailed scenes may take a little longer.";
+        "Your video is still rendering normally. Full Video Ads commonly take about 5–10 minutes depending on scene complexity and demand.";
     } else {
       reassurance =
-        "High-quality video generation typically completes within 1–4 minutes.";
+        "Full Video Ads typically take about 5–10 minutes to finish. The percentage shown is an estimate based on the current processing stage.";
     }
   } else if (!failed && elapsedSeconds >= 45 && stage !== "succeeded") {
     reassurance =
@@ -699,7 +891,7 @@ export default function GenerationProgress({
             <span className="generation-progress-elapsed">
               {formatElapsed(elapsedSeconds)} elapsed
             </span>
-            <strong>{Math.round(displayPercent)}%</strong>
+            <strong>{isVideoV2Progress ? "Est. " : ""}{Math.round(visiblePercent)}%</strong>
           </div>
         </div>
 
@@ -725,13 +917,13 @@ export default function GenerationProgress({
 
         <div
           className="generation-progress-bar"
-          aria-label={`${Math.round(displayPercent)} percent complete`}
+          aria-label={`${isVideoV2Progress ? "Estimated " : ""}${Math.round(visiblePercent)} percent complete`}
           role="progressbar"
           aria-valuemin="0"
           aria-valuemax="100"
-          aria-valuenow={Math.round(displayPercent)}
+          aria-valuenow={Math.round(visiblePercent)}
         >
-          <span style={{ width: `${displayPercent}%` }}>
+          <span style={{ width: `${visiblePercent}%` }}>
             {!failed && <i aria-hidden="true" />}
           </span>
         </div>
@@ -766,7 +958,7 @@ export default function GenerationProgress({
           })}
         </div>
 
-        {!failed && type === "video" && (
+        {!failed && ["video", "videoV2", "videoV2Quick"].includes(type) && (
           <p className="generation-progress-footer">
             Keep this page open. Your finished video will be saved to your Library automatically.
           </p>

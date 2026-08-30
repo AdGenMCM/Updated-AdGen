@@ -72,6 +72,7 @@ from optimizer_schemas import OptimizeAdRequest, OptimizeAdResponse
 
 # Runway
 from video_jobs import router as video_router
+from video_ads_v2 import router as video_v2_router
 from storage_utils import (
     upload_bytes_to_firebase_storage,
     upload_bytes_to_firebase_storage_with_metadata,
@@ -135,6 +136,7 @@ app.include_router(line_items_router)
 app.include_router(campaign_assets_router)
 
 app.include_router(video_router)
+app.include_router(video_v2_router)
 app.include_router(brand_kits_router)
 
 

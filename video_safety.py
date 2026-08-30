@@ -1,4 +1,4 @@
-"""Preflight safety and cost controls for paid Runway video operations."""
+"""Preflight safety, submission, and cost controls for ADGen video operations."""
 from __future__ import annotations
 
 import asyncio
@@ -40,6 +40,7 @@ RUNWAY_AUDIO_ENHANCEMENT_MIN_COST_USD = max(0.0, float(os.getenv("RUNWAY_AUDIO_E
 VIDEO_CHARACTER_VISION_MODEL = (os.getenv("VIDEO_CHARACTER_VISION_MODEL") or "gpt-4.1-mini").strip()
 
 ACTIVE_VIDEO_STATUSES = {"queued", "running", "pending", "processing", "throttled"}
+ACTIVE_VIDEO_JOB_COLLECTIONS = ("video_jobs", "video_v2_jobs")
 BLOCKING_CATEGORIES = {
     # Sexual content
     "sexual",
@@ -125,60 +126,86 @@ def require_active_account(user_doc: Dict[str, Any]) -> None:
 
 def require_no_active_video_job(db, uid: str) -> None:
     """
-    Block duplicate paid video submissions without allowing an abandoned
-    pre-provider Firestore job to lock the user forever.
+    Prevent duplicate paid video submissions across both the legacy video job
+    collection and Video Ads V2.
 
-    Jobs that already have a provider video task ID remain blocking here.
-    Their provider state is reconciled by video_jobs before this guard runs.
+    A pre-provider job with no provider request/task ID is automatically recovered
+    after VIDEO_STALE_PRE_PROVIDER_SECONDS so an interrupted browser/deploy cannot
+    lock the account forever. Once a provider request ID exists, the job remains
+    blocking until its normal status flow resolves it.
     """
     now = int(time.time())
     active = 0
 
-    # Filter by UID only to avoid requiring a new composite Firestore index.
-    for snap in db.collection("video_jobs").where("uid", "==", uid).limit(25).stream():
-        data = snap.to_dict() or {}
-        status = str(data.get("status") or "").lower()
-        if status not in ACTIVE_VIDEO_STATUSES:
-            continue
+    for collection_name in ACTIVE_VIDEO_JOB_COLLECTIONS:
+        for snap in db.collection(collection_name).where("uid", "==", uid).limit(25).stream():
+            data = snap.to_dict() or {}
+            status = str(data.get("status") or "").lower()
+            if status not in ACTIVE_VIDEO_STATUSES:
+                continue
 
-        provider_task_id = str(data.get("runwayVideoTaskId") or "").strip()
-        created_at = int(data.get("createdAt") or 0)
-        progress_updated_at = int(data.get("progressUpdatedAt") or 0)
-        last_activity_at = max(created_at, progress_updated_at)
-        age_seconds = (now - last_activity_at) if last_activity_at else VIDEO_STALE_PRE_PROVIDER_SECONDS + 1
+            provider_task_id = str(
+                data.get("falRequestId")
+                or data.get("runwayVideoTaskId")
+                or data.get("providerTaskId")
+                or ""
+            ).strip()
 
-        # A job that never reached the paid provider should not permanently
-        # block the account after an interrupted request/deploy/browser session.
-        if not provider_task_id and age_seconds >= VIDEO_STALE_PRE_PROVIDER_SECONDS:
-            snap.reference.update({
-                "status": "failed",
-                "error": (
-                    "The previous video request was interrupted before generation "
-                    "started. Please try again."
-                ),
-                "staleRecovery": True,
-                "staleRecoveredAt": now,
-                "progressStage": "failed",
-                "progressPercent": 100,
-                "progressMessage": "Video generation failed.",
-                "progressUpdatedAt": now,
-            })
-            print(
-                "[Video Stale Job Recovery]",
-                f"uid={uid}",
-                f"job_id={snap.id}",
-                "provider_task_id=missing",
-                f"age_seconds={age_seconds}",
-                flush=True,
+            created_at = int(data.get("createdAt") or 0)
+            progress_updated_at = int(
+                data.get("progressUpdatedAt")
+                or data.get("updatedAt")
+                or 0
             )
-            continue
-
-        active += 1
-        if active >= VIDEO_MAX_ACTIVE_JOBS_PER_USER:
-            raise HTTPException(
-                status_code=429,
-                detail="You already have a video generation in progress.",
+            last_activity_at = max(created_at, progress_updated_at)
+            age_seconds = (
+                now - last_activity_at
+                if last_activity_at
+                else VIDEO_STALE_PRE_PROVIDER_SECONDS + 1
             )
+
+            if not provider_task_id and age_seconds >= VIDEO_STALE_PRE_PROVIDER_SECONDS:
+                update = {
+                    "status": "failed",
+                    "error": (
+                        "The previous video request was interrupted before generation "
+                        "started. Please try again."
+                    ),
+                    "staleRecovery": True,
+                    "staleRecoveredAt": now,
+                    "updatedAt": now,
+                }
+                if collection_name == "video_v2_jobs":
+                    update.update({
+                        "phase": "failed",
+                        "progressPercent": 100,
+                        "progressMessage": "Video generation failed.",
+                    })
+                else:
+                    update.update({
+                        "progressStage": "failed",
+                        "progressPercent": 100,
+                        "progressMessage": "Video generation failed.",
+                        "progressUpdatedAt": now,
+                    })
+                snap.reference.update(update)
+                print(
+                    "[Video Stale Job Recovery]",
+                    f"uid={uid}",
+                    f"collection={collection_name}",
+                    f"job_id={snap.id}",
+                    "provider_task_id=missing",
+                    f"age_seconds={age_seconds}",
+                    flush=True,
+                )
+                continue
+
+            active += 1
+            if active >= VIDEO_MAX_ACTIVE_JOBS_PER_USER:
+                raise HTTPException(
+                    status_code=429,
+                    detail="You already have a video generation in progress.",
+                )
 
 
 def enforce_user_submission_window(db, uid: str) -> None:
@@ -282,20 +309,29 @@ async def moderate_video_request(
     *,
     text_parts: Iterable[Optional[str]],
     image_url: Optional[str] = None,
+    record_violation: bool = True,
 ) -> Dict[str, Any]:
     text = "\n".join(part.strip() for part in text_parts if isinstance(part, str) and part.strip())
     normalized = _normalize(text)
 
     for pattern in HARD_BLOCK_PATTERNS:
         if re.search(pattern, normalized, flags=re.IGNORECASE | re.DOTALL):
-            count = record_policy_violation(db, uid, reason="local_policy_match", categories=["local/sexual"])
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "This video request contains prohibited content.",
-                    "policyViolationCount": count,
-                },
+            count = (
+                record_policy_violation(
+                    db,
+                    uid,
+                    reason="local_policy_match",
+                    categories=["local/sexual"],
+                )
+                if record_violation
+                else None
             )
+            detail: Dict[str, Any] = {
+                "message": "This video request contains prohibited content.",
+            }
+            if count is not None:
+                detail["policyViolationCount"] = count
+            raise HTTPException(status_code=400, detail=detail)
 
     if not VIDEO_MODERATION_ENABLED:
         return {"checked": False, "flagged": False, "categories": []}
@@ -334,20 +370,23 @@ async def moderate_video_request(
         return {"checked": False, "flagged": False, "categories": [], "warning": "moderation_error"}
 
     if flagged:
-        count = record_policy_violation(
-            db,
-            uid,
-            reason="moderation_flagged:" + ",".join(categories),
-            categories=categories,
+        count = (
+            record_policy_violation(
+                db,
+                uid,
+                reason="moderation_flagged:" + ",".join(categories),
+                categories=categories,
+            )
+            if record_violation
+            else None
         )
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "This video request contains prohibited content.",
-                "categories": categories,
-                "policyViolationCount": count,
-            },
-        )
+        detail: Dict[str, Any] = {
+            "message": "This video request contains prohibited content.",
+            "categories": categories,
+        }
+        if count is not None:
+            detail["policyViolationCount"] = count
+        raise HTTPException(status_code=400, detail=detail)
 
     return {"checked": True, "flagged": False, "categories": []}
 
@@ -491,6 +530,7 @@ async def validate_character_dialogue_request(
 
 
 
+# Legacy Runway cost helpers are retained temporarily for the old generator during rollout.
 def estimated_runway_cost(
     duration: int,
     *,

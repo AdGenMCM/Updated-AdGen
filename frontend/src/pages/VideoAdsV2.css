@@ -1,0 +1,3157 @@
+.videoV2 {
+  padding: 54px 50px 110px;
+  color: var(--ag-text);
+}
+
+.videoV2Landing {
+  min-height: calc(100vh - 90px);
+  display: grid;
+  align-content: start;
+}
+
+.videoV2LandingHero {
+  max-width: 860px;
+  margin: 20px 0 34px;
+}
+
+.videoV2Eyebrow,
+.videoV2 .sideKicker {
+  display: inline-block;
+  color: var(--ag-primary-hover);
+  font-size: .72rem;
+  font-weight: 950;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.videoV2LandingHero h1,
+.videoV2Hero h1 {
+  margin: 9px 0 0;
+  font-size: clamp(2.2rem, 4.8vw, 3.9rem);
+  line-height: 1;
+  letter-spacing: -.055em;
+  font-weight: 950;
+}
+
+.videoV2LandingHero p,
+.videoV2Hero p {
+  max-width: 850px;
+  margin: 18px 0 0;
+  color: var(--ag-text-soft);
+  line-height: 1.68;
+  font-size: 1rem;
+}
+
+.videoV2ChoiceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  max-width: 1180px;
+}
+
+.videoV2ChoiceCard {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  text-align: left;
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17,24,39,.8);
+  color: var(--ag-text);
+  cursor: pointer;
+  box-shadow: 0 18px 55px rgba(0,0,0,.18);
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.videoV2ChoiceCard:hover {
+  transform: translateY(-3px);
+  border-color: rgba(139,92,246,.5);
+  background: rgba(22,29,45,.9);
+}
+
+.videoV2ChoiceCard.flagship {
+  border-color: rgba(139,92,246,.42);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(124,58,237,.14), transparent 40%),
+    rgba(17,24,39,.84);
+}
+
+.videoV2ChoiceTop {
+  display: grid;
+  gap: 8px;
+}
+
+.videoV2ChoiceTop span {
+  color: var(--ag-primary-hover);
+  font-size: .7rem;
+  font-weight: 950;
+  letter-spacing: .1em;
+}
+
+.videoV2ChoiceTop strong {
+  font-size: 1.55rem;
+  letter-spacing: -.025em;
+}
+
+.videoV2ChoiceCard > p {
+  margin: 18px 0 0;
+  color: var(--ag-text-soft);
+  line-height: 1.62;
+}
+
+.videoV2ChoiceCard ul {
+  display: grid;
+  gap: 11px;
+  margin: 24px 0 30px;
+  padding-left: 20px;
+  color: var(--ag-muted);
+  font-size: .88rem;
+  line-height: 1.5;
+}
+
+.videoV2ChoiceAction {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 18px;
+  border-top: 1px solid var(--ag-border);
+  color: #fff;
+  font-weight: 950;
+}
+
+.videoV2Hero {
+  max-width: 1080px;
+  margin-bottom: 32px;
+}
+
+.videoV2Hero.compact h1 {
+  font-size: clamp(2.1rem, 4.2vw, 3.45rem);
+}
+
+.videoV2BackLink {
+  display: block;
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ag-muted);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.videoV2BackLink:hover {
+  color: var(--ag-text);
+}
+
+.videoV2Layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(320px, .58fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.videoV2Main {
+  display: grid;
+  gap: 30px;
+  min-width: 0;
+}
+
+.videoV2Side {
+  position: sticky;
+  top: 98px;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.videoV2Panel,
+.videoV2SideCard {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17,24,39,.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0,0,0,.2);
+}
+
+.videoV2Panel {
+  padding: 36px;
+}
+
+.videoV2SideCard {
+  padding: 25px;
+}
+
+.videoV2SectionHead {
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.videoV2SectionHead > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg,var(--ag-primary),var(--ag-primary-dark));
+  color: #fff;
+  font-size: .83rem;
+  font-weight: 950;
+}
+
+.videoV2SectionHead h2 {
+  margin: 2px 0 0;
+  font-size: 1.28rem;
+  letter-spacing: -.025em;
+}
+
+.videoV2SectionHead p {
+  max-width: 760px;
+  margin: 7px 0 0;
+  color: var(--ag-muted);
+  font-size: .9rem;
+  line-height: 1.58;
+}
+
+.videoV2Grid {
+  display: grid;
+  gap: 20px;
+}
+
+.videoV2Grid.two {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+}
+
+.videoV2 label,
+.videoV2Field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.videoV2 label > span,
+.videoV2Field > span {
+  color: var(--ag-text-soft);
+  font-size: .82rem;
+  font-weight: 900;
+}
+
+.videoV2 input,
+.videoV2 select,
+.videoV2 textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.052);
+  color: var(--ag-text);
+  padding: 14px 15px;
+  font: inherit;
+  font-size: .88rem;
+  outline: none;
+}
+
+.videoV2 select option {
+  color: #0f172a;
+}
+
+.videoV2 textarea {
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.videoV2 textarea.short {
+  min-height: 112px;
+}
+
+.videoV2Field {
+  margin-top: 22px;
+}
+
+.videoV2WideField {
+  grid-column: 1 / -1;
+}
+
+.videoV2 input:focus,
+.videoV2 select:focus,
+.videoV2 textarea:focus {
+  border-color: rgba(124,58,237,.58);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.12);
+  background: rgba(255,255,255,.068);
+}
+
+.videoV2Count {
+  justify-self: end;
+  color: var(--ag-muted);
+  font-size: .69rem;
+  font-weight: 800;
+}
+
+.videoV2Count.near {
+  color: #f59e0b;
+}
+
+.videoV2Reference {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px dashed rgba(196,181,253,.28);
+  border-radius: 17px;
+  background: rgba(124,58,237,.055);
+}
+
+.videoV2Reference img,
+.videoV2ReferenceIcon {
+  width: 62px;
+  height: 62px;
+  border-radius: 13px;
+  object-fit: cover;
+  border: 1px solid var(--ag-border);
+}
+
+.videoV2ReferenceIcon {
+  display: grid;
+  place-items: center;
+  color: var(--ag-primary-hover);
+  font-size: 1.5rem;
+}
+
+.videoV2Reference strong {
+  display: block;
+  font-size: .87rem;
+}
+
+.videoV2Reference p {
+  margin: 4px 0 0;
+  color: var(--ag-muted);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.videoV2Reference button {
+  border: 1px solid rgba(196,181,253,.28);
+  border-radius: 11px;
+  background: rgba(124,58,237,.14);
+  color: #ddd6fe;
+  padding: 9px 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.videoV2Reference button.ghost {
+  background: transparent;
+  border-color: var(--ag-border);
+  color: var(--ag-muted);
+}
+
+.videoV2Subsection {
+  margin-top: 26px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.videoV2Subsection:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.videoV2Subsection.last {
+  margin-bottom: 4px;
+}
+
+.videoV2SubsectionHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.videoV2SubsectionHead > div {
+  display: grid;
+  gap: 5px;
+}
+
+.videoV2SubsectionHead strong {
+  color: var(--ag-text);
+  font-size: .95rem;
+}
+
+.videoV2SubsectionHead span {
+  color: var(--ag-muted);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.videoV2Durations {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 12px;
+}
+
+.videoV2Durations button {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  align-content: center;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  background: rgba(255,255,255,.035);
+  color: var(--ag-text);
+  cursor: pointer;
+}
+
+.videoV2Durations button.selected {
+  border-color: rgba(139,92,246,.66);
+  background: rgba(124,58,237,.14);
+  box-shadow: 0 0 0 3px rgba(124,58,237,.07);
+}
+
+.videoV2Durations strong {
+  font-size: 1.1rem;
+}
+
+.videoV2Durations span {
+  color: var(--ag-muted);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.videoV2Durations em {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: var(--ag-primary);
+  color: #fff;
+  font-style: normal;
+  font-size: .56rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.videoV2VoiceCards {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 12px;
+}
+
+.videoV2VoiceCards button {
+  display: grid;
+  gap: 7px;
+  min-height: 104px;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  background: rgba(255,255,255,.03);
+  color: var(--ag-text);
+  cursor: pointer;
+}
+
+.videoV2VoiceCards button.selected {
+  border-color: rgba(139,92,246,.58);
+  background: rgba(124,58,237,.12);
+}
+
+.videoV2VoiceCards strong {
+  font-size: .86rem;
+}
+
+.videoV2VoiceCards span {
+  color: var(--ag-muted);
+  font-size: .73rem;
+  line-height: 1.4;
+}
+
+.videoV2VoiceConfig,
+.videoV2CharacterConfig {
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid rgba(139,92,246,.22);
+  border-radius: 16px;
+  background: rgba(124,58,237,.045);
+}
+
+.videoV2VoiceConfig {
+  display: grid;
+  grid-template-columns: minmax(220px,.45fr) minmax(0,1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.videoV2VoiceNote {
+  color: var(--ag-muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.videoV2CharacterIntro {
+  margin-bottom: 16px;
+}
+
+.videoV2CharacterIntro strong {
+  font-size: .9rem;
+}
+
+.videoV2CharacterIntro p {
+  margin: 6px 0 0;
+  color: var(--ag-muted);
+  font-size: .77rem;
+  line-height: 1.5;
+}
+
+.videoV2GenderSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+
+.videoV2GenderSwitch button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ag-muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.videoV2GenderSwitch button.selected {
+  border-color: rgba(139,92,246,.45);
+  background: rgba(124,58,237,.16);
+  color: #fff;
+}
+
+.videoV2NaturalPerformanceNote {
+  display: grid;
+  gap: 5px;
+  margin-top: 16px;
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.035);
+}
+
+.videoV2NaturalPerformanceNote strong {
+  font-size: .78rem;
+}
+
+.videoV2NaturalPerformanceNote span {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.videoV2Toggles {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 12px;
+}
+
+.videoV2Toggles label {
+  grid-template-columns: auto minmax(0,1fr);
+  align-items: start;
+  padding: 15px;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  background: rgba(255,255,255,.035);
+}
+
+.videoV2Toggles label.disabled {
+  opacity: .62;
+}
+
+.videoV2Toggles input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--ag-primary);
+}
+
+.videoV2Toggles span {
+  display: grid;
+  gap: 3px;
+}
+
+.videoV2Toggles strong {
+  color: var(--ag-text);
+  font-size: .82rem;
+}
+
+.videoV2Toggles small {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  line-height: 1.4;
+}
+
+.videoV2BrandKit {
+  margin-top: 16px;
+}
+
+.videoV2PI {
+  margin-top: 12px;
+}
+
+.videoV2Primary {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 26px;
+  border: 0;
+  border-radius: 15px;
+  background: linear-gradient(135deg,var(--ag-primary),var(--ag-primary-dark));
+  color: #fff;
+  font: inherit;
+  font-size: .98rem;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(79,70,229,.23);
+}
+
+.videoV2Primary:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.videoV2Concept {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.videoV2Concept > div {
+  padding: 18px;
+  border: 1px solid var(--ag-border);
+  border-radius: 16px;
+  background: rgba(255,255,255,.03);
+}
+
+.videoV2Concept span {
+  color: var(--ag-primary-hover);
+  font-size: .65rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.videoV2Concept h3 {
+  margin: 6px 0 0;
+  font-size: 1rem;
+}
+
+.videoV2Concept p {
+  margin: 7px 0 0;
+  color: var(--ag-muted);
+  font-size: .8rem;
+  line-height: 1.52;
+}
+
+.videoV2Scenes {
+  display: grid;
+  gap: 16px;
+}
+
+.videoV2Scene {
+  padding: 20px;
+  border: 1px solid var(--ag-border);
+  border-radius: 18px;
+  background: rgba(255,255,255,.03);
+}
+
+.videoV2SceneTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.videoV2SceneNum {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(124,58,237,.15);
+  color: #ddd6fe;
+  font-weight: 950;
+}
+
+.videoV2SceneTop span {
+  color: var(--ag-primary-hover);
+  font-size: .64rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.videoV2SceneTop h3 {
+  margin: 3px 0 0;
+  font-size: .94rem;
+}
+
+.videoV2Scene textarea {
+  min-height: 110px;
+}
+
+.videoV2Scene label {
+  margin-top: 12px;
+}
+
+.videoV2Scene input:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}
+
+.videoV2GenerateBar {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(240px,340px);
+  gap: 18px;
+  align-items: center;
+  margin-top: 22px;
+  padding: 19px;
+  border: 1px solid rgba(139,92,246,.35);
+  border-radius: 17px;
+  background: linear-gradient(135deg,rgba(124,58,237,.11),rgba(79,70,229,.04));
+}
+
+.videoV2GenerateBar > div {
+  display: grid;
+  gap: 4px;
+}
+
+.videoV2GenerateBar strong {
+  font-size: .92rem;
+}
+
+.videoV2GenerateBar span {
+  color: var(--ag-muted);
+  font-size: .76rem;
+}
+
+.videoV2GenerateBar .videoV2Primary {
+  margin: 0;
+}
+
+.videoV2SideCard h3 {
+  margin: 7px 0 0;
+  font-size: 1rem;
+}
+
+.videoV2Specs {
+  display: grid;
+  margin-top: 15px;
+}
+
+.videoV2Specs > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.videoV2Specs > div:last-child {
+  border: 0;
+}
+
+.videoV2Specs span {
+  color: var(--ag-muted);
+  font-size: .75rem;
+}
+
+.videoV2Specs strong {
+  max-width: 60%;
+  text-align: right;
+  font-size: .76rem;
+}
+
+.videoV2EmptyPreview {
+  min-height: 230px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 11px;
+  text-align: center;
+  color: var(--ag-muted);
+}
+
+.videoV2EmptyPreview > div:first-child {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(124,58,237,.13);
+  color: #ddd6fe;
+}
+
+.videoV2EmptyPreview p {
+  max-width: 240px;
+  margin: 0;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.videoV2Progress {
+  width: 100%;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
+}
+
+.videoV2Progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg,var(--ag-primary),var(--ag-primary-hover));
+  transition: width .3s ease;
+}
+
+.videoV2SideCard.preview video {
+  width: 100%;
+  margin-top: 14px;
+  border-radius: 15px;
+  background: #000;
+}
+
+.videoV2PreviewActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.videoV2PreviewActions button,
+.videoV2RegenList button {
+  border: 1px solid var(--ag-border);
+  border-radius: 11px;
+  background: rgba(255,255,255,.045);
+  color: var(--ag-text);
+  padding: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.sideCopy {
+  color: var(--ag-muted);
+  font-size: .76rem;
+  line-height: 1.5;
+}
+
+.videoV2RegenList {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.videoV2RegenList button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.videoV2RegenList button span {
+  color: var(--ag-muted);
+  font-size: .72rem;
+}
+
+.videoV2RegenList button strong {
+  color: #ddd6fe;
+  font-size: .72rem;
+}
+
+.videoV2RegenList button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.videoV2Error {
+  padding: 15px 17px;
+  border: 1px solid rgba(239,68,68,.34);
+  border-radius: 15px;
+  background: rgba(239,68,68,.09);
+  color: #fecaca;
+  font-size: .85rem;
+  font-weight: 800;
+}
+
+.videoV2QuickShell .videoV2ModeBar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ag-border);
+  background: rgba(9,13,24,.94);
+  backdrop-filter: blur(16px);
+  color: var(--ag-text);
+}
+
+.videoV2ModeBar button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
+  background: rgba(255,255,255,.055);
+  color: var(--ag-text);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.videoV2ModeBar span {
+  color: var(--ag-muted);
+  font-size: .78rem;
+}
+
+@media (max-width: 1120px) {
+  .videoV2Layout {
+    grid-template-columns: 1fr;
+  }
+
+  .videoV2Side {
+    position: static;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .videoV2SideCard.preview {
+    grid-row: span 2;
+  }
+
+  .videoV2Toggles {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .videoV2 {
+    padding: 30px 18px 80px;
+  }
+
+  .videoV2ChoiceGrid,
+  .videoV2Grid.two,
+  .videoV2VoiceCards,
+  .videoV2Toggles,
+  .videoV2Concept,
+  .videoV2Side {
+    grid-template-columns: 1fr;
+  }
+
+  .videoV2ChoiceCard {
+    min-height: 0;
+  }
+
+  .videoV2Panel {
+    padding: 24px;
+  }
+
+  .videoV2Durations {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .videoV2Reference {
+    grid-template-columns: auto minmax(0,1fr);
+  }
+
+  .videoV2Reference button {
+    width: 100%;
+  }
+
+  .videoV2GenerateBar,
+  .videoV2VoiceConfig {
+    grid-template-columns: 1fr;
+  }
+
+  .videoV2ModeBar {
+    flex-wrap: wrap;
+  }
+}
+
+
+.videoV2CampaignType {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--ag-border);
+  border-radius: 18px;
+  background: rgba(255,255,255,.025);
+}
+
+.videoV2CampaignType .videoV2SubsectionHead {
+  margin-bottom: 14px;
+}
+
+.videoV2CampaignTypeGrid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 10px;
+}
+
+.videoV2CampaignTypeGrid button {
+  min-height: 92px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px;
+  text-align: left;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.03);
+  color: var(--ag-text);
+  cursor: pointer;
+}
+
+.videoV2CampaignTypeGrid button.selected {
+  border-color: rgba(139,92,246,.58);
+  background: rgba(124,58,237,.13);
+  box-shadow: 0 0 0 3px rgba(124,58,237,.06);
+}
+
+.videoV2CampaignTypeGrid strong {
+  font-size: .8rem;
+}
+
+.videoV2CampaignTypeGrid span {
+  color: var(--ag-muted);
+  font-size: .69rem;
+  line-height: 1.38;
+}
+
+@media (max-width: 900px) {
+  .videoV2CampaignTypeGrid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .videoV2CampaignTypeGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.videoV2CharacterPromptWarning {
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr);
+  gap: 14px;
+  margin-top: 14px;
+  padding: 17px 18px;
+  border: 1px solid rgba(245,158,11,.38);
+  border-radius: 16px;
+  background: rgba(245,158,11,.075);
+}
+
+.videoV2CharacterPromptWarningIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(245,158,11,.16);
+  color: #fbbf24;
+  font-weight: 950;
+}
+
+.videoV2CharacterPromptWarning strong {
+  color: #fde68a;
+  font-size: .86rem;
+}
+
+.videoV2CharacterPromptWarning > div:last-child > p {
+  margin: 6px 0 0;
+  color: var(--ag-text-soft);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.videoV2CharacterPromptWarning small {
+  display: block;
+  margin-top: 9px;
+  color: var(--ag-muted);
+  font-size: .7rem;
+  line-height: 1.45;
+}
+
+.videoV2CharacterPromptExample {
+  margin-top: 12px;
+  padding: 12px 13px;
+  border: 1px solid rgba(245,158,11,.18);
+  border-radius: 12px;
+  background: rgba(0,0,0,.13);
+}
+
+.videoV2CharacterPromptExample span {
+  display: inline-block;
+  margin-bottom: 5px;
+  color: #fbbf24;
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.videoV2CharacterPromptExample p {
+  margin: 0;
+  color: var(--ag-text-soft);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.videoV2CharacterDescriptionHint {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 13px 14px;
+  border: 1px solid rgba(139,92,246,.18);
+  border-radius: 13px;
+  background: rgba(124,58,237,.045);
+}
+
+.videoV2CharacterDescriptionHint strong {
+  font-size: .76rem;
+  color: #ddd6fe;
+}
+
+.videoV2CharacterDescriptionHint span {
+  color: var(--ag-muted);
+  font-size: .71rem;
+  line-height: 1.45;
+}
+
+.videoV2SpeakingAction {
+  margin-top: 4px;
+  padding: 13px;
+  border: 1px solid rgba(139,92,246,.18);
+  border-radius: 13px;
+  background: rgba(124,58,237,.035);
+}
+.videoV2SpeakingAction textarea { min-height: 82px; }
+.videoV2FieldHelp {
+  display: block;
+  margin-top: 6px;
+  color: var(--ag-muted);
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+
+.videoV2PerformanceState {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px 13px;
+  border: 1px solid var(--ag-border);
+  border-radius: 13px;
+  background: rgba(255,255,255,.025);
+}
+
+.videoV2PerformanceState > div {
+  display: grid;
+  gap: 3px;
+}
+
+.videoV2PerformanceState > div > span {
+  color: var(--ag-muted);
+  font-size: .66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.videoV2PerformanceState > div > strong {
+  color: var(--ag-text);
+  font-size: .8rem;
+}
+
+.videoV2PerformanceBadge {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: .63rem;
+  font-weight: 950;
+}
+
+.videoV2PerformanceBadge.speaking {
+  color: #ddd6fe;
+  background: rgba(124,58,237,.15);
+  border: 1px solid rgba(139,92,246,.28);
+}
+
+.videoV2PerformanceBadge.silent {
+  color: #bfdbfe;
+  background: rgba(37,99,235,.12);
+  border: 1px solid rgba(96,165,250,.22);
+}
+
+.videoV2PerformanceBadge.no_person {
+  color: #cbd5e1;
+  background: rgba(148,163,184,.09);
+  border: 1px solid rgba(148,163,184,.16);
+}
+
+.videoV2PerformanceBeat {
+  margin-top: 10px;
+  padding: 13px;
+  border: 1px solid rgba(96,165,250,.14);
+  border-radius: 13px;
+  background: rgba(37,99,235,.025);
+}
+
+.videoV2PerformanceBeat textarea {
+  min-height: 82px;
+}
+
+/* ---------------- V2 QUICK CLIP MODE ---------------- */
+
+.videoAds {
+  padding: 64px 56px 104px;
+  color: var(--ag-text);
+}
+
+.videoAds .videoAdsHeader {
+  margin-bottom: 52px;
+}
+
+.videoAds .videoAdsHeader h1 {
+  margin: 0;
+  text-align: left;
+  font-size: clamp(2.1rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-weight: 900;
+}
+
+.videoAds .videoAdsHeader p {
+  max-width: 820px;
+  margin: 22px 0 0;
+  color: var(--ag-text-soft);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.videoAds .videoTopCard,
+.videoAds .videoPanel,
+.videoAds .box {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.videoAds .videoTopCard,
+.videoAds .videoPanel {
+  padding: 40px;
+  margin-bottom: 40px;
+}
+
+.videoAds .videoSectionHeading {
+  text-align: left;
+  margin-bottom: 30px;
+}
+
+.videoAds .videoSectionHeading h2 {
+  margin: 0;
+  color: var(--ag-text);
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+.videoAds .videoSectionHeading p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--ag-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.videoAds .videoTabs {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+}
+
+.videoAds .videoTabs button {
+  appearance: none;
+  border: 1px solid var(--ag-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text-soft);
+  padding: 14px 18px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.videoAds .videoTabs button:hover {
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.videoAds .videoTabs button.active {
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.videoAds .row {
+  display: grid;
+  grid-template-columns: 190px 1fr 170px 190px;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 30px;
+}
+
+.videoAds .grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+  margin-top: 6px;
+  margin-bottom: 28px;
+}
+
+.videoAds .field {
+  display: grid;
+  gap: 10px;
+}
+
+.videoAds .field {
+  display: grid;
+  gap: 10px;
+}
+
+.videoAds .field label {
+  display: block;
+  color: var(--ag-text-soft);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.videoAds .field input,
+.videoAds .field select,
+.videoAds .field textarea,
+.videoAds textarea,
+.videoAds select,
+.videoAds input {
+  width: 100%;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  padding: 15px 16px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.videoAds textarea {
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.videoAds .field input:focus,
+.videoAds .field select:focus,
+.videoAds .field textarea:focus,
+.videoAds textarea:focus,
+.videoAds select:focus,
+.videoAds input:focus {
+  border-color: rgba(124, 58, 237, 0.55);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.14);
+}
+
+.videoAds select option {
+  color: #0f172a;
+}
+
+.videoAds .checkbox,
+.videoAds .videoEnhancementCard,
+.videoAds .videoHelperCard {
+  border: 1px solid var(--ag-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 18px 20px;
+}
+
+.videoAds .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 900;
+  user-select: none;
+}
+
+.videoAds .checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.videoAds .box {
+  padding: 32px;
+  margin-bottom: 32px;
+}
+
+.videoAds .boxTitle {
+  color: var(--ag-text);
+  font-weight: 900;
+}
+
+.videoAds .hint {
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  margin-top: 6px;
+  line-height: 1.55;
+}
+
+.videoAds .primary,
+.videoAds .secondary,
+.videoAds .linkBtn {
+  border-radius: 16px;
+  padding: 15px 18px;
+  font-weight: 900;
+  cursor: pointer;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.videoAds .primary,
+.videoAds .linkBtn {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  border: none;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #ffffff;
+  margin-top: 34px;
+}
+
+.videoAds .secondary {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ag-text);
+  border: 1px solid var(--ag-border);
+}
+
+.videoAds .secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.videoAds .miniBtn {
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-weight: 900;
+}
+
+.videoAds .voiceHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.videoAds .audioPreview {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.videoAds .audioPreview audio {
+  width: 100%;
+  max-width: 520px;
+}
+
+.videoAds .voBox {
+  position: relative;
+}
+
+.videoAds .voBoxDisabled {
+  opacity: 0.72;
+}
+
+.videoAds .voBoxDisabled textarea {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--ag-muted);
+}
+
+.videoAds .voOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background: rgba(7, 11, 20, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.videoAds .voOverlayCard {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--ag-border);
+  background: rgba(17, 24, 39, 0.95);
+  padding: 14px 16px;
+  border-radius: 16px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+  max-width: 520px;
+}
+
+.videoAds .voOverlayTitle {
+  font-weight: 900;
+  color: var(--ag-text);
+}
+
+.videoAds .voOverlaySub {
+  font-size: 0.84rem;
+  color: var(--ag-muted);
+  margin-top: 3px;
+}
+
+.videoAds .dropzone {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 22px;
+  padding: 32px;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  margin-bottom: 28px;
+}
+
+.videoAds .dropzone.dragOver {
+  border-color: rgba(124, 58, 237, 0.65);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.videoAds .hiddenFile {
+  display: none;
+}
+
+.videoAds .dzTitle {
+  color: var(--ag-text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.videoAds .dzSub {
+  margin-top: 8px;
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.videoAds .previewWrap {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.videoAds .previewImg {
+  width: 108px;
+  height: 108px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid var(--ag-border);
+}
+
+.videoAds .previewMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.videoAds .previewName {
+  color: var(--ag-text);
+  font-weight: 900;
+}
+
+.videoAds .uploadTip {
+  margin: 24px 0 30px;
+  padding: 20px;
+  border: 1px solid rgba(124, 58, 237, 0.24);
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: 18px;
+}
+
+.videoAds .uploadTip strong {
+  display: block;
+  color: var(--ag-primary-hover);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.videoAds .uploadTip p {
+  margin: 0;
+  color: var(--ag-text-soft);
+  line-height: 1.6;
+}
+
+.videoAds .videoAiSection {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 32px;
+  margin: 32px 0;
+}
+
+.videoAds .videoToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.videoAds .videoToggle input {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  accent-color: var(--ag-primary);
+  flex: 0 0 auto;
+}
+
+.videoAds .videoToggle span {
+  display: grid;
+  gap: 5px;
+  line-height: 1.2;
+}
+
+.videoAds .videoToggle strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  white-space: nowrap;
+  color: var(--ag-text);
+  font-size: 0.95rem;
+}
+
+.videoAds .videoToggle strong .ui-info-tip {
+  margin-left: 0;
+  display: inline-grid;
+  flex: 0 0 auto;
+}
+
+.videoAds .videoToggle small {
+  color: var(--ag-muted);
+  font-weight: 800;
+}
+
+.videoAds .videoEnhancementCard p,
+.videoAds .videoHelperCard p {
+  margin: 12px 0 0;
+  color: var(--ag-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.videoAds .videoModeHeading {
+  margin-top: 10px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ag-border);
+}
+
+.videoAds .videoHelperCard {
+  text-align: left;
+}
+
+.videoAds .videoHelperCard strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ag-text);
+  font-size: 0.92rem;
+}
+
+.videoAds .statusBlock {
+  margin-top: 32px;
+  scroll-margin-top: 90px;
+}
+
+.videoAds .statusLine {
+  color: var(--ag-text-soft);
+  font-size: 0.95rem;
+  margin-bottom: 16px;
+}
+
+.videoAds .error {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.videoAds .result {
+  margin-top: 18px;
+}
+
+.videoAds .videoPlayer {
+  width: 100%;
+  border-radius: 22px;
+  border: 1px solid var(--ag-border);
+  background: #000;
+}
+
+.videoAds .videoLoadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 10, 20, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.videoAds .videoLoadingOverlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.videoAds .videoSpinner {
+  width: 54px;
+  height: 54px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: videoSpin 0.9s linear infinite;
+}
+
+.videoAds .videoLoadingText {
+  margin-top: 18px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+@keyframes videoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.videoAds button:disabled,
+.videoAds .videoTabs button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1180px) {
+  .videoAds .row,
+  .videoAds .grid2,
+  .videoAds .videoEnhancementGrid,
+  .videoAds .videoHelperGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .videoAds {
+    padding: 32px 20px 72px;
+  }
+
+  .videoAds .videoTopCard,
+  .videoAds .videoPanel,
+  .videoAds .box {
+    padding: 26px;
+  }
+
+  .videoAds .videoTabs {
+    flex-direction: column;
+  }
+
+  .videoAds .previewWrap {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.videoAds .videoAdsHeader {
+  max-width: 820px;
+}
+
+.videoAds .videoAdsHeader h1,
+.videoAds .videoAdsHeader p {
+  text-align: left;
+}
+
+.videoAds .videoTopCard,
+.videoAds .videoPanel {
+  max-width: 1180px;
+}
+
+.videoAds .videoPanel {
+  display: grid;
+  gap: 40px;
+}
+
+.videoAds .videoSectionHeading {
+  margin-bottom: 34px;
+}
+
+.videoAds .videoAiSection,
+.videoAds .box,
+.videoAds .dropzone,
+.videoAds .uploadTip {
+  margin-top: 10px;
+}
+
+.videoAds .primary {
+  margin-top: 44px;
+  padding: 17px 20px;
+}
+
+.videoAdsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.videoAdsMain {
+  min-width: 0;
+}
+
+.videoAdsSide {
+  position: sticky;
+  top: 106px;
+  display: grid;
+  gap: 32px;
+}
+
+.videoAdsSide .side-card {
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+  padding: 32px;
+}
+
+@media (max-width: 900px) {
+  .videoAdsLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAdsSide {
+    position: static;
+  }
+}
+
+.videoSpecList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.videoSpecRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.videoSpecRow:last-child {
+  border-bottom: none;
+}
+
+.videoSpecRow span {
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.videoSpecRow strong {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-align: right;
+  max-width: 60%;
+}
+
+.videoStatusPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem !important;
+  font-weight: 900 !important;
+  max-width: none !important;
+}
+
+.videoStatusPill.on {
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--ag-primary-hover);
+}
+
+.videoStatusPill.off {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ag-muted);
+}
+
+.videoAds .videoToggleCopy {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 5px !important;
+}
+
+.videoAds .videoToggleTitle {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  color: var(--ag-text);
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.videoAds .videoToggleTitle .ui-info-tip {
+  margin-left: 0 !important;
+  display: inline-grid !important;
+  flex: 0 0 auto !important;
+}
+
+.videoAds .videoEnhancementCard {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+}
+
+.videoAdsForm {
+    display: grid;
+    gap: 40px;
+}
+
+/* =========================================================
+   Video Ads page layout alignment with Ad Generator
+   ========================================================= */
+
+.videoAds {
+  padding: 64px 56px 104px;
+  color: var(--ag-text);
+}
+
+.videoAdsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 34px;
+  align-items: start;
+  width: 100%;
+}
+
+.videoAdsMain,
+.videoAdsSide,
+.videoAdsForm,
+.videoAds .videoPanel,
+.videoAds .form-section,
+.videoAds .row,
+.videoAds .grid2,
+.videoAds .videoEnhancementGrid {
+  min-width: 0;
+}
+
+.videoAdsMain {
+  width: 100%;
+}
+
+.videoAds .videoAdsHeader {
+  max-width: 820px;
+  margin-bottom: 52px;
+}
+
+.videoAds .videoAdsHeader h1 {
+  margin: 0;
+  text-align: left;
+  font-size: clamp(2.1rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-weight: 900;
+}
+
+.videoAds .videoAdsHeader p {
+  max-width: 820px;
+  margin: 22px 0 0;
+  color: var(--ag-text-soft);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  text-align: left;
+}
+
+.videoAdsForm {
+  display: grid;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.videoFreePlanHint {
+  margin: 0 0 40px;
+}
+
+.videoAdsSide {
+  position: sticky;
+  top: 106px;
+  display: grid;
+  gap: 32px;
+  min-width: 0;
+}
+
+.videoAdsSide .side-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.videoAds .row {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 0.85fr)
+    minmax(120px, 0.7fr)
+    minmax(170px, 0.95fr)
+    minmax(220px, 1.5fr);
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 30px;
+}
+
+.videoAds .field,
+.videoAds .field input,
+.videoAds .field select,
+.videoAds .field textarea,
+.videoAds .checkbox,
+.videoAds .videoEnhancementCard {
+  min-width: 0;
+}
+
+.videoAds select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1180px) {
+  .videoAdsLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAdsSide {
+    position: static;
+  }
+
+  .videoAds .row,
+  .videoAds .grid2,
+  .videoAds .videoEnhancementGrid,
+  .videoAds .videoHelperGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .videoAds {
+    padding: 32px 20px 72px;
+  }
+
+  .videoAds .videoTopCard,
+  .videoAds .videoPanel,
+  .videoAds .box,
+  .videoAdsSide .side-card {
+    padding: 26px;
+  }
+
+  .videoAdsForm {
+    gap: 30px;
+    margin-top: 30px;
+  }
+
+  .videoAds .videoAdsHeader {
+    margin-bottom: 36px;
+  }
+
+  .videoAds .videoTabs {
+    flex-direction: column;
+  }
+
+  .videoAds .previewWrap {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* =========================================================
+   FINAL Performance Intelligence tooltip/layout correction
+========================================================= */
+
+/* The tooltip must be allowed to extend beyond the card. */
+.videoAds .videoIntelligenceCard {
+  overflow: visible !important;
+}
+
+/* Style only the InfoTip root. The nested span is the tooltip box. */
+.videoAds .videoIntelligenceCard .ui-info-tip {
+  position: relative !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 17px !important;
+  width: 17px !important;
+  min-width: 17px !important;
+  height: 17px !important;
+  gap: 0 !important;
+  line-height: 1 !important;
+}
+
+.videoAds .videoIntelligenceCard .ui-info-tip-box {
+  position: absolute !important;
+  left: 50% !important;
+  bottom: calc(100% + 10px) !important;
+  display: block !important;
+  width: 260px !important;
+  min-width: 260px !important;
+  height: auto !important;
+  padding: 12px 14px !important;
+  transform: translateX(-50%) !important;
+  white-space: normal !important;
+  text-align: left !important;
+  line-height: 1.45 !important;
+  z-index: 1000 !important;
+}
+
+.videoAds .videoIntelligenceCard .videoToggleTitle {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  width: 100% !important;
+}
+
+.videoAds .videoIntelligenceCard::after {
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.videoAds .videoIntelligenceCard .videoToggle,
+.videoAds .videoIntelligenceCard .videoToggleCopy {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoIntelligenceCard .ui-info-tip-box {
+    left: auto !important;
+    right: -8px !important;
+    width: min(260px, calc(100vw - 48px)) !important;
+    min-width: 0 !important;
+    transform: none !important;
+  }
+
+  .videoAds
+    .videoIntelligenceCard
+    .ui-info-tip:hover
+    .ui-info-tip-box,
+  .videoAds
+    .videoIntelligenceCard
+    .ui-info-tip:focus
+    .ui-info-tip-box {
+    transform: translateY(-2px) !important;
+  }
+}
+
+
+/* Performance Intelligence expandable preview */
+.videoAds .videoIntelligenceCard {
+  align-self: start;
+}
+
+.videoAds .videoIntelligenceCard > .pi-preview {
+  position: relative;
+  z-index: 2;
+}
+
+/* =========================================================
+   Video enhancement card layout correction
+   ========================================================= */
+
+.videoAds .videoEnhancementGrid {
+  align-items: start;
+}
+
+.videoAds .videoEnhancementCard {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+}
+
+/* Performance Intelligence contains both the toggle and preview,
+   so its contents must stack vertically. */
+.videoAds .videoIntelligenceCard {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 18px;
+  min-width: 0;
+  overflow: visible !important;
+}
+
+/* Keep the toggle area full width. */
+.videoAds .videoIntelligenceCard > .videoToggle,
+.videoAds .videoIntelligenceCard > .videoToggleCopy {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Prevent the expandable preview from becoming a narrow side column. */
+.videoAds .videoIntelligenceCard > .pi-preview {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Allow the title to wrap safely inside the card. */
+.videoAds .videoIntelligenceCard .videoToggleTitle {
+  width: 100% !important;
+  min-width: 0;
+  white-space: normal !important;
+}
+
+/* Brand Kit should remain compact instead of stretching
+   to match the expanded intelligence card. */
+.videoAds .videoEnhancementGrid > .videoEnhancementCard:not(
+    .videoIntelligenceCard
+  ) {
+  align-self: start;
+}
+
+/* Keep preview content from forcing horizontal overflow. */
+.videoAds .videoIntelligenceCard .pi-preview,
+.videoAds .videoIntelligenceCard .pi-preview * {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+/* Video template starter spacing */
+.videoAds .video-template-starter {
+  margin-top: 40px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .videoAds .video-template-starter {
+    margin-top: 30px;
+  }
+}
+
+/* Larger primary video creation actions */
+.videoAds button[type="submit"],
+.videoAds .videoPrimaryBtn,
+.videoAds .videoGenerateBtn {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+@media (max-width: 700px) {
+  .videoAds .video-template-starter {
+    margin-top: 22px;
+  }
+}
+
+
+/* Keep guided-scroll destinations comfortably below the fixed app header. */
+.template-scroll-target {
+  scroll-margin-top: 118px;
+}
+
+.video-settings-scroll-target {
+  scroll-margin-top: 108px;
+}
+
+/* =========================================================
+   Video Quick Create / Full Workspace modes
+========================================================= */
+
+.videoQuickStart {
+  margin-bottom: 32px;
+  padding: 36px;
+  border: 1px solid var(--ag-border);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(124, 58, 237, 0.12), transparent 34%),
+    rgba(17, 24, 39, 0.82);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.videoQuickHead {
+  margin-bottom: 26px;
+}
+
+.videoQuickKicker,
+.videoFullWorkspaceKicker {
+  display: inline-flex;
+  margin-bottom: 9px;
+  color: var(--ag-primary-hover);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.videoQuickStart h2,
+.videoQuickCollapsed h2 {
+  margin: 0;
+  color: var(--ag-text);
+  font-size: clamp(1.65rem, 3vw, 2.25rem);
+  letter-spacing: -0.035em;
+}
+
+.videoQuickHead p,
+.videoQuickCollapsed p {
+  max-width: 720px;
+  margin: 11px 0 0;
+  color: var(--ag-muted);
+  line-height: 1.6;
+}
+
+.videoQuickFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.videoQuickDescription {
+  grid-column: 1 / -1;
+}
+
+.videoQuickGenerate,
+.videoQuickSecondary,
+.videoFullWorkspaceButton,
+.videoSwitchQuickButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 0 18px;
+  border-radius: 15px;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.videoQuickGenerate {
+  width: 100%;
+  margin-top: 22px;
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  box-shadow: 0 13px 30px rgba(79, 70, 229, 0.24);
+  font-size: 1.08rem;
+}
+
+.videoQuickDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--ag-muted);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.videoQuickDivider::before,
+.videoQuickDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ag-border);
+}
+
+.videoQuickTemplateAction {
+  display: flex;
+  justify-content: center;
+}
+
+.videoQuickSecondary {
+  width: min(100%, 460px);
+  border: 1px solid var(--ag-border);
+  color: var(--ag-text-soft);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.videoFullWorkspaceCallout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  margin-top: 22px;
+  padding: 24px;
+  border: 1px solid rgba(139, 92, 246, 0.42);
+  border-radius: 19px;
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(79, 70, 229, 0.08)),
+    rgba(255, 255, 255, 0.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 34px rgba(30, 20, 80, 0.18);
+}
+
+.videoFullWorkspaceCallout h3 {
+  margin: 0;
+  color: var(--ag-text);
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.videoFullWorkspaceCallout p {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: var(--ag-text-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.videoFullWorkspaceButton {
+  border: 1px solid rgba(196, 181, 253, 0.36);
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.26);
+  white-space: nowrap;
+}
+
+.videoQuickCollapsed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 22px 24px;
+  border: 1px solid rgba(139, 92, 246, 0.36);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.13), rgba(79, 70, 229, 0.05)),
+    rgba(17, 24, 39, 0.78);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.18);
+}
+
+.videoQuickCollapsed h2 {
+  font-size: 1.22rem;
+}
+
+.videoSwitchQuickButton {
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  color: #ffffff;
+  background: rgba(124, 58, 237, 0.18);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.videoQuickGenerate:hover:not(:disabled),
+.videoQuickSecondary:hover:not(:disabled),
+.videoFullWorkspaceButton:hover:not(:disabled),
+.videoSwitchQuickButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.videoQuickGenerate:disabled,
+.videoQuickSecondary:disabled,
+.videoFullWorkspaceButton:disabled,
+.videoSwitchQuickButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.videoAds #video-full-workspace {
+  display: grid;
+  gap: 32px;
+}
+
+.videoAds #video-full-workspace .videoAdsForm {
+  margin-top: 0;
+}
+
+.videoAds .video-template-starter {
+  scroll-margin-top: 118px;
+}
+
+@media (max-width: 850px) {
+  .videoFullWorkspaceCallout,
+  .videoQuickCollapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .videoFullWorkspaceButton,
+  .videoSwitchQuickButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .videoQuickStart {
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .videoQuickFields {
+    grid-template-columns: 1fr;
+  }
+
+  .videoQuickDescription {
+    grid-column: auto;
+  }
+}
+
+/* =========================================================
+   Guided Video Quick Create fields
+========================================================= */
+
+.videoQuickDefaultsNote {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: 15px;
+  background: rgba(124, 58, 237, 0.09);
+}
+
+.videoQuickDefaultsNote strong {
+  color: var(--ag-text);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.videoQuickDefaultsNote span {
+  color: var(--ag-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.videoQuickPromptHelper {
+  color: var(--ag-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.videoQuickOptional {
+  color: var(--ag-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.videoQuickStart .videoCharacterCount {
+  margin-top: 0;
+  text-align: right;
+  color: var(--ag-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.videoQuickStart .videoCharacterCount.nearLimit {
+  color: #f59e0b;
+}
+
+.videoQuickStart .field textarea {
+  min-height: 150px;
+}
+
+@media (max-width: 700px) {
+  .videoQuickStart .field textarea {
+    min-height: 138px;
+  }
+}
+
+/* =========================================================
+   Generator usage-limit upgrade state
+========================================================= */
+
+.generatorUsageLimitCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.09);
+}
+
+.generatorUsageLimitCard strong {
+  display: block;
+  color: #fef3c7;
+  font-size: 0.94rem;
+  font-weight: 900;
+}
+
+.generatorUsageLimitCard p {
+  margin: 6px 0 0;
+  color: var(--ag-text-soft);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.generatorUsageLimitCard button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(196, 181, 253, 0.38);
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .generatorUsageLimitCard {
+    grid-template-columns: 1fr;
+  }
+
+  .generatorUsageLimitCard button {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   Video Quick Create mobile callout correction
+========================================================= */
+
+.videoFullWorkspaceCallout,
+.videoFullWorkspaceCallout > div {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.videoFullWorkspaceButton {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 700px) {
+  .videoFullWorkspaceCallout {
+    width: 100%;
+    max-width: 100%;
+    gap: 18px;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  .videoFullWorkspaceCallout p {
+    overflow-wrap: anywhere;
+  }
+
+  .videoFullWorkspaceButton {
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+    padding: 13px 16px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
+  }
+}
+
+
+
+/* =========================================================
+   Tutorial entry point — match Image Generator positioning
+========================================================= */
+
+.videoAds .videoTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+}
+
+/* Let the header row span the full Video Generator main column
+   so "How to use" sits at the same right-side position as Image Generator. */
+.videoAds .videoAdsHeader.videoAdsHero {
+  max-width: none;
+  width: 100%;
+}
+
+.videoAds .videoAdsHeader.videoAdsHero > p {
+  max-width: 820px;
+}
+
+@media (max-width: 720px) {
+  .videoAds .videoTitleRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+/* =========================================================
+   FINAL — Video Settings hierarchy
+   Consolidated replacement for prior experimental overrides.
+========================================================= */
+
+.videoAds .videoSettingsCompact {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+/* Voice mode gets its own full-width row. */
+.videoAds .videoVoiceModeField {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.videoAds .videoVoiceModeField > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.videoAds .videoVoiceModes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.videoAds .videoVoiceMode {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--ag-text-soft);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.videoAds .videoVoiceMode:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.videoAds .videoVoiceMode.selected {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.28),
+    rgba(79, 70, 229, 0.14)
+  );
+  color: #fff;
+}
+
+.videoAds .videoVoiceMode input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--ag-primary);
+}
+
+/* Voice / Duration / Format line. */
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) {
+  display: grid;
+  grid-template-rows: auto 48px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+
+.videoAds .videoSettingsCompact > .field:not(.videoVoiceModeField) select {
+  height: 48px;
+  min-height: 48px;
+}
+
+/* Enhancements: two normal cards + PI can grow when its preview is present. */
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+  margin: 0 0 24px;
+}
+
+.videoAds .videoEnhancementGrid > .videoEnhancementCard {
+  width: 100%;
+  min-width: 0;
+  min-height: 94px;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.videoAds .videoEnhancementGrid > .videoEnhancementCard:not(.videoIntelligenceCard) {
+  height: 94px;
+}
+
+.videoAds .videoEnhancementCard.enabled {
+  border-color: rgba(139, 92, 246, 0.42);
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.09), rgba(79, 70, 229, 0.035)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.videoAds .videoEnhancementGrid .videoToggle,
+.videoAds .videoEnhancementGrid .videoToggleCopy {
+  width: 100%;
+  min-width: 0;
+}
+
+.videoAds .videoEnhancementGrid .videoToggleTitle {
+  white-space: normal !important;
+  line-height: 1.25;
+}
+
+/* Performance Intelligence is allowed to be taller so its descriptive
+   copy and expandable preview stay inside the card cleanly. */
+.videoAds .videoEnhancementGrid > .videoIntelligenceCard {
+  min-height: 94px;
+  height: auto;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 14px;
+  overflow: visible !important;
+}
+
+.videoAds .videoIntelligenceCard > .pi-preview {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100%;
+  margin-top: 2px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+/* Script lives on its own clear row. */
+.videoAds .voBox {
+  position: relative;
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.videoAds .voiceHeader {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.videoAds .voBox textarea {
+  min-height: 118px;
+  max-height: 220px;
+}
+
+/* Keep the disabled overlay inside the script card. */
+.videoAds .voOverlay {
+  border-radius: 18px;
+}
+
+/* Tablet */
+@media (max-width: 1180px) {
+  .videoAds .videoSettingsCompact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .videoAds .videoSettingsCompact > .field:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .videoAds .videoEnhancementGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoEnhancementGrid > .videoEnhancementCard:not(.videoIntelligenceCard) {
+    height: auto;
+    min-height: 84px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 700px) {
+  .videoAds .videoSettingsCompact {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoVoiceModes {
+    grid-template-columns: 1fr;
+  }
+
+  .videoAds .videoVoiceMode {
+    justify-content: flex-start;
+  }
+
+  .videoAds .videoSettingsCompact > .field:last-child {
+    grid-column: auto;
+  }
+
+  .videoAds .voiceHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .videoAds .voiceHeader .secondary {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   Video 400 validation UX
+========================================================= */
+.videoAds .videoValidationCard {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 18px 0 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.08);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
+}
+
+.videoAds .videoValidationIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  font-weight: 950;
+}
+
+.videoAds .videoValidationCopy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ag-text);
+  font-size: 0.9rem;
+}
+
+.videoAds .videoValidationCopy p {
+  margin: 0;
+  color: var(--ag-text-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.videoAds .videoValidationAction {
+  min-height: 38px;
+  padding: 9px 13px;
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  border-radius: 11px;
+  background: rgba(124, 58, 237, 0.14);
+  color: #ddd6fe;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.videoAds .videoValidationAction:hover {
+  background: rgba(124, 58, 237, 0.22);
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoValidationCard {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .videoAds .videoValidationAction {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   Corrective validation actions
+========================================================= */
+.videoAds .videoValidationCopy .videoValidationHelp {
+  margin-top: 7px;
+  color: var(--ag-muted);
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.videoAds .videoValidationActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 180px;
+}
+
+.videoAds .videoValidationAction.secondary {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: var(--ag-border);
+  color: var(--ag-text-soft);
+}
+
+.videoAds .videoValidationAction.secondary:hover {
+  background: rgba(255, 255, 255, 0.065);
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoValidationActions {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .videoAds .videoValidationAction {
+    width: 100%;
+  }
+}
+
+
+.videoCreativeScrollTarget {
+  scroll-margin-top: 108px;
+}
+
+.videoAds .voBox {
+  scroll-margin-top: 108px;
+}
+
+
+.videoCharacterActionField {
+  margin: 14px 0 4px;
+}
+
+.videoCharacterActionField textarea {
+  min-height: 84px;
+}
+
+/* V2 Quick Create duration selector */
+.videoQuickDurationPicker {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+
+.videoQuickDurationPicker > span {
+  color: var(--ag-text-soft);
+  font-size: .82rem;
+  font-weight: 900;
+}
+
+.videoQuickDurationPicker > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.videoQuickDurationPicker button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 15px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.035);
+  color: var(--ag-text);
+  cursor: pointer;
+}
+
+.videoQuickDurationPicker button.selected {
+  border-color: rgba(139,92,246,.6);
+  background: rgba(124,58,237,.13);
+  box-shadow: 0 0 0 3px rgba(124,58,237,.06);
+}
+
+.videoQuickDurationPicker button strong {
+  font-size: .95rem;
+}
+
+.videoQuickDurationPicker button small {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.videoQuickDurationPicker button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .videoQuickDurationPicker > div {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep the generated storyboard visible below the sticky workspace header. */
+.videoV2StoryboardAnchor {
+  scroll-margin-top: 96px;
+}

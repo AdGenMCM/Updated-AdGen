@@ -9,7 +9,7 @@ import PaidRoute from "./PaidRoute";
 import AuthForm from "./AuthForm";
 import Subscribe from "./pages/Subscribe";
 import MyAccount from "./pages/MyAccount";
-import VideoAds from "./pages/VideoAds";
+import VideoAdsV2 from "./pages/VideoAdsV2";
 import Library from "./pages/Library";
 import Insights from "./pages/Insights";
 import Reports from "./pages/Reports";
@@ -118,7 +118,7 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/account" element={<MyAccount />} />
               <Route path="/adgenerator" element={<AdGenerator />} />
-              <Route path="/video-ads" element={<VideoAds />} />
+              <Route path="/video-ads" element={<VideoAdsV2 />} />
             </Route>
           </Route>
 
