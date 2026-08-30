@@ -112,6 +112,7 @@ const examples = [
 
 const videos = [
   { src: "/examples/videogen/video-ex1.mp4", poster: "/examples/videogen/video-ex1-poster.webp", title: "Hydrate energy drink video" },
+  { src: "/examples/videogen/video-ex7.mp4", poster: "/examples/videogen/video-ex7-poster.webp", title: "Character Dialog & Multi Scene video" },
   { src: "/examples/videogen/video-ex2.mp4", poster: "/examples/videogen/video-ex2-poster.webp", title: "Watch Commercial" },
   { src: "/examples/videogen/video-ex3.mp4", poster: "/examples/videogen/video-ex3-poster.webp", title: "Sneaker product launch video" },
   { src: "/examples/videogen/video-ex4.mp4", poster: "/examples/videogen/video-ex4-poster.webp", title: "Beauty product campaign video" },

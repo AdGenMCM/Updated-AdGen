@@ -578,7 +578,14 @@ export default function VideoAdsV2() {
   }
 
   return (
-    <div className="videoV2">
+    <div className="videoV2FullShell">
+      <div className="videoV2ModeBar">
+        <button onClick={() => setMode(null)}>← Choose mode</button>
+        <strong>Full Video Ad</strong>
+        <span>Complete multi-scene campaign generation inside Video Ads V2.</span>
+      </div>
+
+      <div className="videoV2">
       <GenerationProgress
         open={generating && !!job}
         type="videoV2"
@@ -605,7 +612,6 @@ export default function VideoAdsV2() {
 
       <header className="videoV2Hero compact">
         <div>
-          <button className="videoV2BackLink" onClick={() => setMode(null)}>← Choose video mode</button>
           <span className="videoV2Eyebrow">FULL VIDEO AD</span>
           <h1>Build a complete multi-scene ad.</h1>
           <p>ADGen chooses a story structure for the kind of campaign you are making, turns your approved storyboard into one continuous multi-shot generation with native audiovisual performance.</p>
@@ -1225,6 +1231,7 @@ export default function VideoAdsV2() {
         </aside>
       </div>
     </div>
+    </div>
   );
 }
 
@@ -1242,11 +1249,12 @@ const QUICK_V2_CHARACTER_ACTION_MAX = 300;
 const VIDEO_GENERATOR_MODE_KEY = "adgen:video-generator-mode";
 
 const NARRATOR_VOICE_OPTIONS = [
-  "Maya","Arjun","Serene","Bernard","Billy","Mark","Clint","Mabel","Chad","Leslie",
-  "Eleanor","Elias","Elliot","Grungle","Brodie","Sandra","Kirk","Kylie","Lara","Lisa",
-  "Malachi","Marlene","Martin","Miriam","Paula","Pip","Rusty","Ragnar","Xylar","Maggie",
-  "Jack","Katie","Noah","James","Rina","Ella","Mariah","Frank","Claudia","Niki","Vincent",
-  "Kendrick","Myrna","Tom","Wanda","Benjamin","Kiana","Rachel"
+  "Leslie",
+  "Maya",
+  "Mark",
+  "Rachel",
+  "Benjamin",
+  "Ella",
 ];
 
 const QUICK_V2_CHARACTER_VOICES = [
@@ -1657,6 +1665,7 @@ function VideoAdsV2Quick() {
   const [ratio, setRatio] = useState(FORMAT_OPTIONS[0].ratio);
 
   // ========== Prompt → Video ==========
+  const [companyName, setCompanyName] = useState("");
   const [productName, setProductName] = useState("");
   const [description, setDescription] = useState("");
   const [offer, setOffer] = useState("");
@@ -1801,6 +1810,12 @@ function VideoAdsV2Quick() {
       !me.isAdmin &&
       String(me.tier || "").toLowerCase() === "free"
     );
+  }, [me]);
+
+  const canUseQuickTenSeconds = useMemo(() => {
+    if (me.isAdmin) return true;
+    if (!me.tier) return false;
+    return String(me.tier || "").toLowerCase() !== "free";
   }, [me]);
 
   useEffect(() => {
@@ -2037,6 +2052,7 @@ function VideoAdsV2Quick() {
     resetJob();
     setSelectedTemplateId("scratch");
     setAdvancedOpen(true);
+    setCompanyName("");
     setProductName("");
     setDescription("");
     setOffer("");
@@ -2372,6 +2388,7 @@ function VideoAdsV2Quick() {
       const promptImageUrl = await uploadImageToBackend(imageFile, ratio);
 
       const payload = {
+        companyName: companyName.trim() || null,
         useBrandKit,
         brandKitId,
         promptImageUrl,
@@ -2513,6 +2530,7 @@ function VideoAdsV2Quick() {
       const effectivePlatform = selectedFormat.platform;
 
       const payload = {
+        companyName: companyName.trim() || null,
         useBrandKit,
         brandKitId,
         productName,
@@ -2891,7 +2909,11 @@ return (
             </div>
 
             <div className="videoQuickDefaultsNote">
-              <strong>Quick Create uses Prompt → Video, your choice of 6 or 10 seconds, and no voiceover.</strong>
+              <strong>
+                {isFreePlan
+                  ? "Quick Create uses Prompt → Video, a 6-second duration, and no voiceover."
+                  : "Quick Create uses Prompt → Video, your choice of 6 or 10 seconds, and no voiceover."}
+              </strong>
               <span>
                 Open the Full Creative Workspace for image animation, narration,
                 character dialogue, and advanced motion controls.
@@ -2903,7 +2925,7 @@ return (
               <div>
                 {[
                   { value: 6, credits: 1 },
-                  { value: 10, credits: 2 },
+                  ...(canUseQuickTenSeconds ? [{ value: 10, credits: 2 }] : []),
                 ].map((item) => (
                   <button
                     key={item.value}
@@ -2920,6 +2942,26 @@ return (
             </div>
 
             <div className="videoQuickFields">
+              <div className="field">
+                <label>Company / Brand Name <span className="videoQuickOptional">Optional</span></label>
+                <input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Example: Ember Coffee Co."
+                  maxLength={LIMITS.companyName}
+                  disabled={isGenerating}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    companyName.length >= LIMITS.companyName * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {companyName.length}/{LIMITS.companyName}
+                </div>
+              </div>
+
               <div className="field">
                 <label>Product or Service</label>
                 <input
@@ -3423,7 +3465,7 @@ return (
                 disabled={isGenerating}
               >
                 <option value={6}>6 seconds (1 Credit)</option>
-                {!isFreePlan && (
+                {canUseQuickTenSeconds && (
                   <option value={10}>10 seconds (2 Credits)</option>
                 )}
               </select>
@@ -3651,6 +3693,52 @@ return (
               : "Describe the video you want to generate."
           }
         >
+          <div className={`videoQuickCreativeIdentity ${tab === "image" ? "imageMode" : ""}`}>
+            <div className="field">
+              <label>
+                Company / Brand Name <span className="videoQuickOptional">Optional</span>
+                <InfoTip text="Keeps the generated video associated with the correct company or brand and supports Brand Kit context when enabled." />
+              </label>
+              <input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Example: Ember Coffee Co."
+                maxLength={LIMITS.companyName}
+                disabled={isGenerating}
+              />
+              <div
+                className={`videoCharacterCount ${
+                  companyName.length >= LIMITS.companyName * 0.9 ? "nearLimit" : ""
+                }`}
+              >
+                {companyName.length}/{LIMITS.companyName}
+              </div>
+            </div>
+
+            {tab === "prompt" && (
+              <div className="field">
+                <label>
+                  Product or Service
+                  <InfoTip text="The product, service, app, property, event, or offer the video is advertising." />
+                </label>
+                <input
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="What are you advertising?"
+                  maxLength={QUICK_PRODUCT_MAX}
+                  disabled={isGenerating}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    productName.length >= QUICK_PRODUCT_MAX * 0.9 ? "nearLimit" : ""
+                  }`}
+                >
+                  {productName.length}/{QUICK_PRODUCT_MAX}
+                </div>
+              </div>
+            )}
+          </div>
+
           {tab === "image" && (
             <>
               <div
@@ -3706,8 +3794,8 @@ return (
               <div className="uploadTip">
                 <strong>💡 Best Results</strong>
                 <p>
-                  Upload clean product or lifestyle images with little or no text. Flyer-style images,
-                  posters, or graphics with heavy text may not generate successfully.
+                  Upload a clean product or lifestyle image with the important subject clearly visible.
+                  ADGen preserves the reference product and packaging while adapting it to the selected format.
                 </p>
               </div>
 
@@ -3811,42 +3899,10 @@ return (
 
           {tab === "prompt" && (
             <>
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Product Name
-                    <InfoTip text="Helps the AI understand what the advertisement is promoting." />
-                  </label>
-                  <input
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    disabled={isGenerating}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    Platform / Format
-                    <InfoTip text="Optimizes framing and aspect ratio for the selected video placement." />
-                  </label>
-                  <select
-                    value={formatId}
-                    onChange={(e) => setFormatId(e.target.value)}
-                    disabled={isGenerating}
-                  >
-                    {FORMAT_OPTIONS.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
               <div className="field">
                 <label>
                   Video Prompt & Product Description
-                  <InfoTip text="Describe the product, visuals, motion, offer, and commercial you want generated." />
+                  <InfoTip text="Describe the product, setting, action, environment, product interaction, camera movement, and desired ending shot." />
                 </label>
                 <textarea
                   value={description}
@@ -3902,10 +3958,10 @@ return (
                     <InfoTip text="Choose whether the video should focus on sales, leads, traffic, or awareness." />
                   </label>
                   <select value={goal} onChange={(e) => { setGoal(e.target.value); markControlOverride("goal"); }} disabled={isGenerating}>
-                    <option value="conversions">Conversions</option>
-                    <option value="leads">Leads</option>
-                    <option value="traffic">Traffic</option>
-                    <option value="awareness">Awareness</option>
+                    <option value="conversions">Sales / Conversions</option>
+                    <option value="leads">Generate Leads</option>
+                    <option value="traffic">Website Traffic</option>
+                    <option value="awareness">Brand Awareness</option>
                   </select>
                 </div>
 
