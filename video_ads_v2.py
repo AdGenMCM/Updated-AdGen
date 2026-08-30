@@ -10,7 +10,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException
@@ -50,7 +50,9 @@ QUICK_CREDITS = {6: 1, 10: 2}
 NEGATIVE_PROMPT = (
     "extra fingers, malformed hands, fused fingers, missing fingers, distorted hands, "
     "deformed face, warped mouth, duplicate limbs, exaggerated facial expressions, excessive gestures, "
-    "unnatural head movement, head bobbing, jitter, flicker, blur, low quality, unreadable product label"
+    "unnatural head movement, head bobbing, jitter, flicker, blur, low quality, "
+    "unreadable product label, altered logo, misspelled brand name, invented label text, pseudo-text, "
+    "redesigned packaging, changed bottle geometry, substituted product, warped typography"
 )
 
 # Voice names remain stable in the UI. Character Dialogue is generated natively by
@@ -594,10 +596,15 @@ def _product_motion_rule(campaign_type:str, purpose:str)->str:
     if str(campaign_type).lower()!='product': return ''
     role=str(purpose or '').lower()
     if role in {'product','demo','hook','cta','benefit'}:
-        return ('Keep the exact advertised product clearly recognizable and naturally integrated. '
-                'Use continuous purposeful motion: camera push, arc, parallax, hand interaction or product use as appropriate. '
-                'Never hold on a static still-image shot. Preserve packaging, proportions, colors and defining label details; do not substitute another product.')
-    return ''
+        return (
+            'Treat the supplied product reference as the authoritative product identity. '
+            'Keep the exact advertised product clearly recognizable and naturally integrated. '
+            'Preserve brand/logo spelling, visible label text, typography hierarchy, packaging graphics, colors, proportions, '
+            'container shape, cap/dropper and distinctive product details without rewriting or inventing text. '
+            'Use continuous purposeful motion: camera push, arc, parallax, hand interaction or product use as appropriate. '
+            'Never hold on a static still-image shot and never substitute or redesign the product.'
+        )
+    return '' 
 
 
 def _shot_prompt(scene:StoryboardScene, brief:FullAdBrief, storyboard:Storyboard, brand:str, intel:str)->str:
@@ -621,36 +628,70 @@ def _shot_prompt(scene:StoryboardScene, brief:FullAdBrief, storyboard:Storyboard
 
 
 
+def _is_product_fidelity_scene(scene: StoryboardScene, req: StartFullAdRequest) -> bool:
+    if str(req.campaignType or '').lower() != 'product':
+        return False
+    haystack = ' '.join([
+        str(scene.title or ''),
+        str(scene.purpose or ''),
+        str(scene.visualPrompt or ''),
+    ]).lower()
+    return any(term in haystack for term in (
+        'product', 'close-up', 'close up', 'macro', 'detail', 'dropper',
+        'bottle', 'packaging', 'label', 'hero', 'serum', 'demo'
+    ))
+
+
+def _product_identity_lock(req: StartFullAdRequest, scene: StoryboardScene) -> str:
+    if not req.referenceImageUrl or str(req.campaignType or '').lower() != 'product':
+        return ''
+    if _is_product_fidelity_scene(scene, req):
+        return (
+            'REFERENCE PRODUCT IS AUTHORITATIVE: preserve exact brand/logo spelling, visible label text, '
+            'typography layout, packaging graphics, colors, proportions, bottle/container shape and cap/dropper. '
+            'Do not invent, rewrite, misspell, pseudo-render or redesign any packaging text.'
+        )
+    return (
+        'Preserve the referenced product identity exactly: logo/brand spelling, packaging, colors, proportions and label layout.'
+    )
+
+
 def _provider_safe_shot_prompt(scene: StoryboardScene, req: StartFullAdRequest, storyboard: Storyboard, brand: str, intel: str) -> str:
     """
     Hard 512-character scene compiler.
-    Priority: exact dialogue/action > core visual/product interaction >
-    reference preservation > Brand Kit > Performance Intelligence >
-    continuity > non-speaking guardrails.
+
+    Priority:
+    1. Exact dialogue + speaking action
+    2. Authoritative product/reference identity for product-detail shots
+    3. Core visual action / product interaction
+    4. Brand Kit
+    5. Performance Intelligence
+    6. Continuity / non-speaking guardrails
     """
     chunks: List[str] = []
 
     if req.voiceMode == 'character_dialogue' and scene.dialogue:
         spoken = _clean(scene.dialogue, 170)
-        action = _clean(scene.actionWhileSpeaking or scene.performanceBeat, 110)
+        action = _clean(scene.actionWhileSpeaking or scene.performanceBeat, 105)
         chunks.append(f'Say exactly: "{spoken}"')
         if action:
             chunks.append('While speaking: ' + action)
 
-    visual = _clean(scene.visualPrompt, 245)
+    identity_lock = _product_identity_lock(req, scene)
+    if identity_lock:
+        chunks.append(_clean(identity_lock, 180 if _is_product_fidelity_scene(scene, req) else 120))
+
+    visual_budget = 210 if _is_product_fidelity_scene(scene, req) else 235
+    visual = _clean(scene.visualPrompt, visual_budget)
     if visual:
         chunks.append(visual)
 
-    if req.referenceImageUrl:
-        chunks.append('Preserve referenced product shape, packaging, colors and logo placement; show purposeful product interaction.')
-
-    # Full context already shaped the storyboard; reserve concise render-time cues too.
     if brand:
-        chunks.append('Brand: ' + _clean(brand, 62))
+        chunks.append('Brand direction: ' + _clean(brand, 52))
     if intel:
-        chunks.append('Performance cue: ' + _clean(intel, 62))
+        chunks.append('Performance cue: ' + _clean(intel, 52))
 
-    continuity = _clean(storyboard.continuity, 58)
+    continuity = _clean(storyboard.continuity, 48)
     if continuity:
         chunks.append('Continuity: ' + continuity)
 
@@ -856,7 +897,15 @@ def _build_storyboard_prompt(req:StoryboardRequest,brand:str,intel:str)->str:
       'voiceover':'Write concise off-screen narration per shot only. Do not write on-screen dialogue. Any visible people must remain nonverbal and must not mouth the narration or perform speech-like gestures. Keep narration at or below about 2.55 spoken words per second of that shot.',
       'character_dialogue':'Use native on-screen dialogue in at most two shots. If the user supplied an exact spoken line or explicitly tied speech to an action, preserve that wording and place it in the scene performing that action. Do not move action-linked dialogue to a generic hook, CTA, beauty shot, or final pose. Speaking characters must keep performing a meaningful physical action while speaking. Keep dialogue at or below about 2.25 spoken words per second of that shot.'
     }[req.voiceMode]
-    product_rule = ('For a PRODUCT campaign, product visibility is a first-class requirement: show the exact referenced product clearly in relevant shots, include real product interaction/use, give hero shots visible camera/parallax motion, and never plan a static reference-image hold.' if req.campaignType=='product' else 'Treat the reference according to campaign type; do not force a physical-product structure.')
+    product_rule = (
+        'For a PRODUCT campaign, the supplied reference image is the authoritative source of product appearance. '
+        'Do not reinterpret, rewrite, rename, redesign or invent packaging details. Preserve visible brand/logo spelling, '
+        'label hierarchy, packaging graphics, colors, proportions, container shape and distinctive product features in relevant shots. '
+        'Product visibility is a first-class requirement: include real product interaction/use, give hero/detail shots visible camera/parallax motion, '
+        'and never plan a static reference-image hold.'
+        if req.campaignType=='product'
+        else 'Treat the reference according to campaign type; do not force a physical-product structure.'
+    )
     return f"""Plan one continuous {req.duration}-second commercial for a multi-shot video generation.
 Brand: {req.companyName or 'Not supplied'}
 Campaign type: {req.campaignType}
@@ -1271,7 +1320,13 @@ def _quick_prompt(req:Any,base_prompt:str,brand:str,intel:str)->str:
     else:
         parts.append('No spoken dialogue. Visible people remain naturally nonverbal with relaxed mouths and no speech-like gestures.')
     if not audio.musicAndEffects and mode!='character_dialogue': parts.append('Do not create vocals or spoken audio.')
-    parts.append('Continuous meaningful motion; never freeze the supplied reference into a static still. Preserve product identity, packaging and proportions when a product is present. Natural anatomy, realistic fingers, smooth commercial cinematography, no jitter.')
+    parts.append(
+        'Continuous meaningful motion; never freeze the supplied reference into a static still. '
+        'When a product reference is present, treat it as authoritative: preserve exact brand/logo spelling, visible label text, '
+        'typography layout, packaging graphics, colors, proportions, container shape and distinctive product details. '
+        'Do not invent, rewrite, misspell or pseudo-render packaging text. '
+        'Natural anatomy, realistic fingers, smooth commercial cinematography, no jitter.'
+    )
     return _clean(' '.join(parts),2450)
 
 
