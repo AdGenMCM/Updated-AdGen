@@ -1,3 +1,4 @@
+import CreditPackModal from "../components/billing/CreditPackModal";
 import React, {
   useEffect,
   useMemo,
@@ -53,6 +54,8 @@ import {
   CheckCheck,
   Images,
   MessageSquareText,
+  ShoppingCart,
+  Crown,
 } from "lucide-react";
 
 import "../styles/dashboard-layout.css";
@@ -82,6 +85,7 @@ export default function DashboardLayout({ children }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
 
   const {
     usage,
@@ -130,6 +134,8 @@ export default function DashboardLayout({ children }) {
   const imageCap = usage?.cap ?? 0;
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
+  const purchasedImages = usage?.purchasedRemaining ?? 0;
+  const purchasedVideos = videoUsage?.purchasedRemaining ?? 0;
   const optimizerUsed = optimizerUsage?.used ?? 0;
   const optimizerCap = optimizerUsage?.cap ?? 0;
 
@@ -566,49 +572,91 @@ const getSafeNotificationDestination = (notification) => {
               <strong>{planLabel}</strong>
             </div>
 
-            <div className="dash-usage-group">
-              <div className="dash-usage-row">
-                <span>Images</span>
-                <strong>
-                  {imageUsed} / {imageCap}
-                </strong>
-              </div>
-              <div className="dash-usage-bar">
-                <span style={{ width: `${imagePct}%` }} />
+            <div className="dash-usage-group dash-usage-group-with-icon">
+              <span className="dash-usage-icon" aria-hidden="true">
+                <Images size={16} />
+              </span>
+              <div className="dash-usage-content">
+                <div className="dash-usage-row">
+                  <span>Images</span>
+                  <strong>
+                    {imageUsed} / {imageCap}
+                  </strong>
+                </div>
+                <div className="dash-usage-bar">
+                  <span style={{ width: `${imagePct}%` }} />
+                </div>
               </div>
             </div>
 
-            <div className="dash-usage-group">
-              <div className="dash-usage-row">
-                <span>Video credits</span>
-                <strong>
-                  {videoUsed} / {videoCap}
-                </strong>
-              </div>
-              <div className="dash-usage-bar">
-                <span style={{ width: `${videoPct}%` }} />
+            <div className="dash-usage-group dash-usage-group-with-icon">
+              <span className="dash-usage-icon" aria-hidden="true">
+                <Clapperboard size={16} />
+              </span>
+              <div className="dash-usage-content">
+                <div className="dash-usage-row">
+                  <span>Video credits</span>
+                  <strong>
+                    {videoUsed} / {videoCap}
+                  </strong>
+                </div>
+                <div className="dash-usage-bar">
+                  <span style={{ width: `${videoPct}%` }} />
+                </div>
               </div>
             </div>
 
             {optimizerCap > 0 && (
-              <div className="dash-usage-group">
-                <div className="dash-usage-row">
-                  <span>Optimizer runs</span>
-                  <strong>
-                    {optimizerUsed} / {optimizerCap}
-                  </strong>
-                </div>
-                <div className="dash-usage-bar">
-                  <span style={{ width: `${optimizerPct}%` }} />
+              <div className="dash-usage-group dash-usage-group-with-icon">
+                <span className="dash-usage-icon" aria-hidden="true">
+                  <Sparkles size={16} />
+                </span>
+                <div className="dash-usage-content">
+                  <div className="dash-usage-row">
+                    <span>Optimizer runs</span>
+                    <strong>
+                      {optimizerUsed} / {optimizerCap}
+                    </strong>
+                  </div>
+                  <div className="dash-usage-bar">
+                    <span style={{ width: `${optimizerPct}%` }} />
+                  </div>
                 </div>
               </div>
             )}
+            {(purchasedImages > 0 || purchasedVideos > 0) && (
+              <div className="dash-purchased-wallet" aria-label="Purchased credit balances">
+                {purchasedImages > 0 && (
+                  <div className="dash-purchased-wallet-row">
+                    <span>+ {purchasedImages} purchased images</span>
+                    <small>Never expire</small>
+                  </div>
+                )}
+
+                {purchasedVideos > 0 && (
+                  <div className="dash-purchased-wallet-row">
+                    <span>+ {purchasedVideos} purchased video credits</span>
+                    <small>Never expire</small>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className="dash-buy-credits-btn"
+              onClick={() => setCreditPacksOpen(true)}
+            >
+              <ShoppingCart size={15} />
+              <span>Buy more credits</span>
+            </button>
+
             {isFreePlan && (
               <Link
                 to="/subscribe?upgrade=1"
-                className="dash-upgrade-btn"
+                className="dash-upgrade-btn dash-upgrade-btn-sidebar"
               >
-                Upgrade Plan
+                <Crown size={15} />
+                <span>Upgrade Plan</span>
               </Link>
             )}
           </div>
@@ -654,9 +702,22 @@ const getSafeNotificationDestination = (notification) => {
           </div>
 
           <div className="dash-topbar-actions">
+            <button
+              type="button"
+              className="dash-buy-credits-btn dash-buy-credits-btn-topbar"
+              onClick={() => setCreditPacksOpen(true)}
+            >
+              <ShoppingCart size={15} />
+              <span>Buy more credits</span>
+            </button>
+
             {isFreePlan && (
-              <Link to="/subscribe?upgrade=1" className="dash-upgrade-btn">
-                Upgrade Plan
+              <Link
+                to="/subscribe?upgrade=1"
+                className="dash-upgrade-btn dash-upgrade-btn-topbar"
+              >
+                <Crown size={15} />
+                <span>Upgrade Plan</span>
               </Link>
             )}
 
@@ -853,6 +914,7 @@ const getSafeNotificationDestination = (notification) => {
 
         <main className="dash-content">{children}</main>
       </div>
+      <CreditPackModal open={creditPacksOpen} onClose={() => setCreditPacksOpen(false)} />
     </div>
   );
 }

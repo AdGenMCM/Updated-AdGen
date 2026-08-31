@@ -68,6 +68,8 @@ export default function Dashboard() {
   const imageCap = usage?.cap ?? 0;
   const videoUsed = videoUsage?.used ?? 0;
   const videoCap = videoUsage?.cap ?? 0;
+  const purchasedImages = usage?.purchasedRemaining ?? 0;
+  const purchasedVideos = videoUsage?.purchasedRemaining ?? 0;
 
   const stripeStatus = String(
     stripe?.status || ""
@@ -175,7 +177,7 @@ export default function Dashboard() {
             to="/account"
             label="Image Usage"
             value={`${imageUsed} / ${imageCap}`}
-            description="Monthly image credits used"
+            description={purchasedImages > 0 ? `Monthly credits used · +${purchasedImages} purchased` : "Monthly image credits used"}
             icon={<Image size={20} />}
           />
 
@@ -186,8 +188,8 @@ export default function Dashboard() {
             description={
               videoCap > 0
                 ? isFreePlan
-                  ? "Complimentary lifetime video credit"
-                  : "Monthly video credits used"
+                  ? purchasedVideos > 0 ? `Complimentary credit · +${purchasedVideos} purchased` : "Complimentary lifetime video credit"
+                  : purchasedVideos > 0 ? `Monthly credits used · +${purchasedVideos} purchased` : "Monthly video credits used"
                 : "Upgrade to unlock video"
             }
             icon={<Video size={20} />}

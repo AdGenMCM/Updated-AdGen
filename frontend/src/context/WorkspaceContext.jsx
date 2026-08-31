@@ -17,6 +17,7 @@ import {
 import { useAuth } from "../AuthProvider";
 import { getIdTokenResult } from "firebase/auth";
 import { auth } from "../firebaseConfig";
+import { claimCreditPurchase } from "../api/payments";
 
 const db = getFirestore();
 const WorkspaceContext = createContext(null);
@@ -492,6 +493,38 @@ export function WorkspaceProvider({ children }) {
       }),
     [fetchWorkspaceData]
   );
+
+  useEffect(() => {
+    if (!currentUser?.uid || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("credit_session_id");
+    if (!sessionId || params.get("credit_success") !== "1") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await currentUser.getIdToken(true);
+        const data = await claimCreditPurchase({ sessionId, token });
+        if (!cancelled && data?.track && typeof window.gtag === "function") {
+          window.gtag("event", "purchase", {
+            transaction_id: data.transactionId, value: Number(data.value || 0),
+            currency: data.currency || "USD",
+            items: [{ item_id: data.packId, item_name: data.packName, price: Number(data.value || 0), quantity: 1 }],
+          });
+        }
+        if (!cancelled) await fetchWorkspaceData({ force: true });
+      } catch (error) {
+        console.warn("[ADGen] Credit purchase sync failed:", error);
+      } finally {
+        if (!cancelled) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("credit_success");
+          url.searchParams.delete("credit_session_id");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser, fetchWorkspaceData]);
 
   const contextValue = useMemo(
     () => ({

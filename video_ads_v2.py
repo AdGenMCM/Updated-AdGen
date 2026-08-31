@@ -287,7 +287,11 @@ def _refund_once(db, ref, job:Dict[str,Any], reason:str)->bool:
     if job.get("usageRefunded"): return True
     credits=int(job.get("creditsReserved") or 0); period=job.get("usagePeriodKey")
     if credits<=0 or not period: return False
-    ok=rollback_video_usage(db, str(job.get("uid")), str(period), credits)
+    ok=rollback_video_usage(
+        db, str(job.get("uid")), str(period), credits,
+        plan_amount=job.get("planCreditsReserved"),
+        purchased_amount=int(job.get("purchasedCreditsReserved") or 0),
+    )
     if ok: ref.update({"usageRefunded":True,"usageRefundReason":reason,"usageRefundedAt":int(time.time())})
     return bool(ok)
 
@@ -1167,6 +1171,8 @@ async def start_full(req:StartFullAdRequest,authorization:str|None=Header(defaul
         'scenes':[s.model_dump() for s in req.storyboard.scenes],
         'creditsReserved':credits if not admin else 0,
         'usagePeriodKey':reservation.get('periodKey') or reservation.get('month'),
+        'planCreditsReserved':int(reservation.get('planCharged') or 0),
+        'purchasedCreditsReserved':int(reservation.get('purchasedCharged') or 0),
         'usageRefunded':False,
         'provider':'kling_v3_pro',
         'falRequestId':None,
@@ -1424,6 +1430,8 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         'ratio':req.ratio,
         'creditsReserved':credits if not admin else 0,
         'usagePeriodKey':reservation.get('periodKey') or reservation.get('month'),
+        'planCreditsReserved':int(reservation.get('planCharged') or 0),
+        'purchasedCreditsReserved':int(reservation.get('purchasedCharged') or 0),
         'usageRefunded':False,
         'provider':'kling_v3_pro',
         'falRequestId':None,

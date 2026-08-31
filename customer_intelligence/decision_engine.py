@@ -13,6 +13,26 @@ def _count(profile: Dict[str, Any], key: str) -> int:
         return 0
 
 
+
+def _credit_balance(profile: Dict[str, Any], resource: str) -> int:
+    key = "purchasedImageCredits" if resource == "images" else "purchasedVideoCredits"
+    try:
+        return max(0, int(profile.get(key, 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _included_exhausted(profile: Dict[str, Any], resource: str) -> bool:
+    state = ((profile.get("creditUsage") or {}).get(resource) or {})
+    if "includedExhausted" in state:
+        return bool(state.get("includedExhausted"))
+    try:
+        cap = int(state.get("cap") or 0)
+        used = int(state.get("used") or 0)
+        return cap > 0 and used >= cap
+    except (TypeError, ValueError):
+        return False
+
 def _attempted(profile: Dict[str, Any], feature_key: str) -> bool:
     attempts = profile.get("featureAccessAttempts") or {}
     return int(attempts.get(feature_key, 0) or 0) > 0
@@ -82,6 +102,41 @@ def _candidate_recommendations(
             )
         )
         return candidates
+
+    # Purchased credits extend generation capacity without changing entitlements.
+    if _included_exhausted(profile, "images"):
+        purchased_images = _credit_balance(profile, "images")
+        candidates.append(
+            _with_confidence(
+                get_recommendation(
+                    "use_purchased_image_credits" if purchased_images > 0 else "buy_image_credits",
+                    reason=(
+                        f"The included image allowance is exhausted, but {purchased_images} purchased image credits remain."
+                        if purchased_images > 0
+                        else "The included image allowance is exhausted and no purchased image credits remain."
+                    ),
+                    metadata={"purchasedRemaining": purchased_images},
+                ),
+                1.0 if purchased_images > 0 else 0.99,
+            )
+        )
+
+    if _included_exhausted(profile, "video_credits"):
+        purchased_videos = _credit_balance(profile, "video_credits")
+        candidates.append(
+            _with_confidence(
+                get_recommendation(
+                    "use_purchased_video_credits" if purchased_videos > 0 else "buy_video_credits",
+                    reason=(
+                        f"The included video allowance is exhausted, but {purchased_videos} purchased video credits remain."
+                        if purchased_videos > 0
+                        else "The included video allowance is exhausted and no purchased video credits remain."
+                    ),
+                    metadata={"purchasedRemaining": purchased_videos},
+                ),
+                1.0 if purchased_videos > 0 else 0.99,
+            )
+        )
 
     if (
         feature_available(tier, "image_generation")

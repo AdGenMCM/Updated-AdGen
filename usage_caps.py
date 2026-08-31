@@ -121,6 +121,13 @@ def _resource_fields(resource: str) -> tuple[str, str, str]:
     return mapping[resource]
 
 
+def _purchased_field(resource: str) -> Optional[str]:
+    return {
+        "images": "purchasedImageCredits",
+        "video_credits": "purchasedVideoCredits",
+    }.get(resource)
+
+
 def _resolve_period_scoped_bonus(
     *,
     data: Dict[str, Any],
@@ -164,6 +171,7 @@ def check_and_increment_resource(
     base_limit = get_limit(tier, resource)
 
     used_field, bonus_field, bonus_period_field = _resource_fields(resource)
+    purchased_field = _purchased_field(resource)
     ref = _usage_ref(db, uid)
 
     @gc_firestore.transactional
@@ -171,36 +179,24 @@ def check_and_increment_resource(
         snap = ref.get(transaction=transaction)
         data = snap.to_dict() or {}
         current_period = data.get("periodKey") or data.get("month")
-
-        # Backward compatibility for the original image counter.
-        if resource == "images":
-            used = int(data.get(used_field, data.get("used", 0)) or 0)
-        else:
-            used = int(data.get(used_field, 0) or 0)
-
+        used = int(data.get(used_field, data.get("used", 0) if resource == "images" else 0) or 0)
         if current_period != period_key:
             used = 0
 
         bonus, stale_bonus_found = _resolve_period_scoped_bonus(
-            data=data,
-            bonus_field=bonus_field,
-            bonus_period_field=bonus_period_field,
-            active_period_key=period_key,
-            current_usage_period=current_period,
+            data=data, bonus_field=bonus_field, bonus_period_field=bonus_period_field,
+            active_period_key=period_key, current_usage_period=current_period,
         )
-
         effective_limit = base_limit + bonus
+        plan_remaining = max(0, effective_limit - used)
+        purchased = max(0, int(data.get(purchased_field, 0) or 0)) if purchased_field else 0
+        total_available = plan_remaining + purchased
 
         base_update = {
-            "periodKey": period_key,
-            "periodStart": period.get("periodStart"),
-            "periodEnd": period.get("periodEnd"),
-            "periodSource": period.get("periodSource"),
-            "month": period.get("month"),
-            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
+            "periodKey": period_key, "periodStart": period.get("periodStart"),
+            "periodEnd": period.get("periodEnd"), "periodSource": period.get("periodSource"),
+            "month": period.get("month"), "updatedAt": gc_firestore.SERVER_TIMESTAMP,
         }
-
-        # Clear expired or legacy bonus data whenever this resource is touched.
         if stale_bonus_found:
             base_update[bonus_field] = 0
             base_update[bonus_period_field] = gc_firestore.DELETE_FIELD
@@ -211,48 +207,32 @@ def check_and_increment_resource(
             base_update[bonus_field] = 0
             base_update[bonus_period_field] = gc_firestore.DELETE_FIELD
 
-        if used + amount > effective_limit:
-            update = {
-                **base_update,
-                used_field: used,
-            }
-            if resource == "images":
-                update["used"] = used
-
+        if amount > total_available:
+            update = {**base_update, used_field: used}
+            if resource == "images": update["used"] = used
             transaction.set(ref, update, merge=True)
-
             return {
-                "allowed": False,
-                "resource": resource,
-                "used": used,
-                "cap": effective_limit,
-                "remaining": max(0, effective_limit - used),
-                "requested": amount,
-                "bonus": bonus,
-                **period,
+                "allowed": False, "resource": resource, "used": used, "cap": effective_limit,
+                "remaining": plan_remaining, "purchasedRemaining": purchased,
+                "totalRemaining": total_available, "requested": amount, "bonus": bonus, **period,
             }
 
-        new_used = used + amount
-
-        update = {
-            **base_update,
-            used_field: new_used,
-        }
-
-        if resource == "images":
-            update["used"] = new_used
-
+        plan_charged = min(amount, plan_remaining)
+        purchased_charged = amount - plan_charged
+        new_used = used + plan_charged
+        new_purchased = purchased - purchased_charged
+        update = {**base_update, used_field: new_used}
+        if resource == "images": update["used"] = new_used
+        if purchased_field:
+            update[purchased_field] = new_purchased
         transaction.set(ref, update, merge=True)
-
         return {
-            "allowed": True,
-            "resource": resource,
-            "used": new_used,
-            "cap": effective_limit,
+            "allowed": True, "resource": resource, "used": new_used, "cap": effective_limit,
             "remaining": max(0, effective_limit - new_used),
-            "charged": amount,
-            "bonus": bonus,
-            **period,
+            "purchasedRemaining": new_purchased,
+            "totalRemaining": max(0, effective_limit - new_used) + new_purchased,
+            "charged": amount, "planCharged": plan_charged,
+            "purchasedCharged": purchased_charged, "bonus": bonus, **period,
         }
 
     return _tx(db.transaction())
@@ -264,44 +244,38 @@ def rollback_resource(
     resource: str,
     expected_period_key: str,
     amount: int = 1,
+    *,
+    plan_amount: Optional[int] = None,
+    purchased_amount: int = 0,
 ) -> bool:
-    if not expected_period_key or amount <= 0:
+    if amount <= 0:
         return False
-
     used_field, _bonus_field, _bonus_period_field = _resource_fields(resource)
+    purchased_field = _purchased_field(resource)
     ref = _usage_ref(db, uid)
+    plan_refund = amount if plan_amount is None else max(0, int(plan_amount or 0))
+    purchased_refund = max(0, int(purchased_amount or 0))
 
     @gc_firestore.transactional
     def _tx(transaction: gc_firestore.Transaction):
         snap = ref.get(transaction=transaction)
         data = snap.to_dict() or {}
         current_period = data.get("periodKey") or data.get("month")
-
-        if current_period != expected_period_key:
-            return False
-
-        if resource == "images":
-            current_used = int(
-                data.get(used_field, data.get("used", 0)) or 0
-            )
-        else:
-            current_used = int(data.get(used_field, 0) or 0)
-
-        if current_used <= 0:
-            return False
-
-        new_used = max(0, current_used - amount)
-
-        update = {
-            used_field: new_used,
-            "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-        }
-
-        if resource == "images":
-            update["used"] = new_used
-
-        transaction.set(ref, update, merge=True)
-        return True
+        update = {"updatedAt": gc_firestore.SERVER_TIMESTAMP}
+        changed = False
+        if plan_refund > 0 and expected_period_key and current_period == expected_period_key:
+            current_used = int(data.get(used_field, data.get("used", 0) if resource == "images" else 0) or 0)
+            new_used = max(0, current_used - plan_refund)
+            update[used_field] = new_used
+            if resource == "images": update["used"] = new_used
+            changed = True
+        if purchased_refund > 0 and purchased_field:
+            current_purchased = max(0, int(data.get(purchased_field, 0) or 0))
+            update[purchased_field] = current_purchased + purchased_refund
+            changed = True
+        if changed:
+            transaction.set(ref, update, merge=True)
+        return changed
 
     return _tx(db.transaction())
 
@@ -368,12 +342,17 @@ def peek_resource(
         ref.set(cleanup, merge=True)
 
     cap = base_limit + bonus
+    purchased_field = _purchased_field(resource)
+    purchased = max(0, int(data.get(purchased_field, 0) or 0)) if purchased_field else 0
+    plan_remaining = max(0, cap - used)
 
     return {
         "resource": resource,
         "used": used,
         "cap": cap,
-        "remaining": max(0, cap - used),
+        "remaining": plan_remaining,
+        "purchasedRemaining": purchased,
+        "totalRemaining": plan_remaining + purchased,
         "bonus": bonus,
         **period,
     }

@@ -18,6 +18,7 @@ import { useAuth } from "../AuthProvider";
 import { createPortalSession, syncSubscription } from "../api/payments";
 import { auth } from "../firebaseConfig";
 import "./MyAccount.css";
+import CreditPackModal from "../components/billing/CreditPackModal";
 
 const SECTION_IDS = {
   account: "account",
@@ -94,6 +95,7 @@ export default function MyAccount() {
   const [dismissing, setDismissing] = useState(false);
   const [billingSyncing, setBillingSyncing] = useState(false);
   const [accountAccess, setAccountAccess] = useState(null);
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
 
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
@@ -451,6 +453,8 @@ export default function MyAccount() {
   const imageCap = Number(usage?.cap || 0);
   const videoUsed = Number(videoUsage?.used || 0);
   const videoCap = Number(videoUsage?.cap || 0);
+  const purchasedImages = Number(usage?.purchasedRemaining || 0);
+  const purchasedVideos = Number(videoUsage?.purchasedRemaining || 0);
   const optimizerUsed = Number(optimizerUsage?.used || 0);
   const optimizerCap = Number(optimizerUsage?.cap || 0);
   const storageUsedBytes = Number(storageUsage?.usedBytes || 0);
@@ -882,6 +886,50 @@ export default function MyAccount() {
                 </div>
               )}
 
+              <div className="acct-v2-credit-wallet">
+                <div className="acct-v2-credit-wallet-head">
+                  <div>
+                    <span className="acct-v2-credit-wallet-kicker">Purchased credits</span>
+                    <h3>Your non-expiring credit balance</h3>
+                    <p>
+                      Purchased credits stay separate from your plan allowance and remain available until you use them.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="acct-v2-primary acct-v2-credit-wallet-buy"
+                    onClick={() => setCreditPacksOpen(true)}
+                  >
+                    Buy more credits
+                  </button>
+                </div>
+
+                <div className="acct-v2-credit-wallet-grid">
+                  <article className="acct-v2-credit-wallet-card">
+                    <div className="acct-v2-credit-wallet-card-icon">
+                      <Image size={19} />
+                    </div>
+                    <div>
+                      <span>Image credits</span>
+                      <strong>{purchasedImages}</strong>
+                      <small>available · never expire</small>
+                    </div>
+                  </article>
+
+                  <article className="acct-v2-credit-wallet-card">
+                    <div className="acct-v2-credit-wallet-card-icon">
+                      <Video size={19} />
+                    </div>
+                    <div>
+                      <span>Video credits</span>
+                      <strong>{purchasedVideos}</strong>
+                      <small>available · never expire</small>
+                    </div>
+                  </article>
+                </div>
+              </div>
+
               <div className="acct-v2-usage-list">
                 <UsageRow
                   icon={Image}
@@ -965,6 +1013,7 @@ export default function MyAccount() {
           </div>
         </div>
       </div>
+      <CreditPackModal open={creditPacksOpen} onClose={() => setCreditPacksOpen(false)} />
     </main>
   );
 }

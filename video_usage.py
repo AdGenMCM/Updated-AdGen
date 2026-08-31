@@ -15,5 +15,11 @@ def check_and_increment_video_usage(db, uid: str, tier: str, credits: int = 1) -
     return result
 
 
-def rollback_video_usage(db, uid: str, expected_period_key: str, credits: int = 1) -> bool:
-    return rollback_resource(db, uid, "video_credits", expected_period_key, credits)
+def rollback_video_usage(
+    db, uid: str, expected_period_key: str, credits: int = 1, *,
+    plan_amount=None, purchased_amount: int = 0
+) -> bool:
+    return rollback_resource(
+        db, uid, "video_credits", expected_period_key, credits,
+        plan_amount=plan_amount, purchased_amount=purchased_amount
+    )

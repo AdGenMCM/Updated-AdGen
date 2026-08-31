@@ -1,3 +1,4 @@
+// ADGEN_USAGE_REFRESH_ESLINT_FIX_2026_08_31
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { auth } from "../firebaseConfig";
 import BrandKitSelector from "../components/BrandKitSelector";
@@ -10,6 +11,9 @@ import { useNavigate } from "react-router-dom";
 import "./AdGenerator.css"; // ✅ reuse AdGenerator overlay + spinner styles
 import StepSection from "../components/ui/StepSection";
 import FeatureTutorial from "../components/FeatureTutorial";
+import CreditPackModal from "../components/billing/CreditPackModal";
+import { useWorkspace } from "../context/WorkspaceContext";
+import { Crown, ShoppingCart } from "lucide-react";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8000").trim();
 
@@ -211,8 +215,42 @@ function hasCharacterDescription(...values) {
 }
 
 export default function VideoAdsV2() {
+  const { refreshWorkspace, videoUsage: workspaceVideoUsage } = useWorkspace() || {};
+  const refreshWorkspaceRef = useRef(refreshWorkspace);
+  refreshWorkspaceRef.current = refreshWorkspace;
   const [mode, setMode] = useState(null);
   const [me, setMe] = useState({ tier: null, isAdmin: false });
+  const [videoLimitReached, setVideoLimitReached] = useState(false);
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
+  const [videoUsageUsed, setVideoUsageUsed] = useState(null);
+  const [videoUsageCap, setVideoUsageCap] = useState(null);
+
+  useEffect(() => {
+    if (!workspaceVideoUsage) return;
+
+    const used = Number(workspaceVideoUsage?.used ?? 0);
+    const rawCap = workspaceVideoUsage?.cap ?? null;
+    const cap =
+      rawCap === null || rawCap === undefined || rawCap === ""
+        ? null
+        : Number(rawCap);
+    const purchased = Math.max(
+      0,
+      Number(workspaceVideoUsage?.purchasedRemaining ?? 0)
+    );
+    const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+
+    setVideoUsageUsed(Number.isFinite(used) ? used : null);
+    setVideoUsageCap(hasFiniteCap ? cap : null);
+    setVideoLimitReached(
+      Boolean(
+        hasFiniteCap &&
+          Number.isFinite(used) &&
+          used >= cap &&
+          purchased <= 0
+      )
+    );
+  }, [workspaceVideoUsage]);
 
   const [duration, setDuration] = useState(15);
   const [formatId, setFormatId] = useState("vertical");
@@ -490,11 +528,15 @@ export default function VideoAdsV2() {
         if (data.status === "succeeded") {
           setGenerating(false);
           setFeedbackOpen(true);
+          // Success is terminal: the backend has finalized the video-credit deduction.
+          void refreshWorkspaceRef.current?.();
           return;
         }
         if (data.status === "failed" || data.status === "canceled") {
           setGenerating(false);
           setError(data.error || "Full Video Ad generation failed.");
+          // Terminal failure/cancel reflects the finalized rollback/refund state.
+          void refreshWorkspaceRef.current?.();
           return;
         }
         timer = setTimeout(poll, 1800);
@@ -617,6 +659,59 @@ export default function VideoAdsV2() {
           <p>ADGen chooses a story structure for the kind of campaign you are making, turns your approved storyboard into one continuous multi-shot generation with native audiovisual performance.</p>
         </div>
       </header>
+
+      {videoLimitReached && (
+        <div className="generatorLimitTop">
+          <div className="generatorUsageLimitCard generatorUsageLimitCardV2" role="alert">
+            <div className="generatorLimitIntro">
+              <strong>Video credits used</strong>
+              <p className="generatorLimitSummary">
+                You've used all available video credits
+                {Number.isFinite(videoUsageCap)
+                  ? ` (${videoUsageUsed ?? videoUsageCap}/${videoUsageCap})`
+                  : ""}.
+              </p>
+              <p>
+                Choose how you want to keep generating. Purchased credits are a one-time add-on and never expire.
+              </p>
+            </div>
+
+            <div className="generatorLimitChoices">
+              <button
+                type="button"
+                className="generatorLimitChoice generatorLimitChoiceUpgrade"
+                onClick={() => window.location.assign("/subscribe?upgrade=1")}
+              >
+                <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                  <Crown size={20} />
+                </span>
+                <span className="generatorLimitChoiceCopy">
+                  <strong>Upgrade your plan</strong>
+                  <small>Get more included monthly video credits and additional ADGen features.</small>
+                </span>
+                <span className="generatorLimitChoiceAction">Upgrade Plan</span>
+              </button>
+
+              <span className="generatorLimitOr" aria-hidden="true">OR</span>
+
+              <button
+                type="button"
+                className="generatorLimitChoice generatorLimitChoiceCredits"
+                onClick={() => setCreditPacksOpen(true)}
+              >
+                <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                  <ShoppingCart size={20} />
+                </span>
+                <span className="generatorLimitChoiceCopy">
+                  <strong>Buy more video credits</strong>
+                  <small>Add video credits instantly with a one-time purchase.</small>
+                </span>
+                <span className="generatorLimitChoiceAction">Buy Video Credits</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="videoV2Layout">
         <main className="videoV2Main">
@@ -1025,7 +1120,7 @@ export default function VideoAdsV2() {
 
             <button
               className="videoV2Primary"
-              disabled={storyLoading || generating || !subjectName.trim() || !description.trim()}
+              disabled={videoLimitReached || storyLoading || generating || !subjectName.trim() || !description.trim()}
               onClick={createStoryboard}
             >
               {storyLoading
@@ -1180,7 +1275,7 @@ export default function VideoAdsV2() {
                   <strong>{duration}-second Full Video Ad</strong>
                   <span>{credits} video credits · {storyboard.scenes.length} storyboard shots · one continuous generation</span>
                 </div>
-                <button className="videoV2Primary" onClick={startFullAd} disabled={generating}>
+                <button className="videoV2Primary" onClick={startFullAd} disabled={videoLimitReached || generating}>
                   {generating ? "Creating Your Ad..." : `Generate Full Ad · ${credits} Credits`}
                 </button>
               </div>
@@ -1230,6 +1325,10 @@ export default function VideoAdsV2() {
           </section>
         </aside>
       </div>
+      <CreditPackModal
+        open={creditPacksOpen}
+        onClose={() => setCreditPacksOpen(false)}
+      />
     </div>
     </div>
   );
@@ -1633,6 +1732,9 @@ function hasUsefulCharacterDescription(...values) {
 // --- helpers for winners guidance ---
 
 function VideoAdsV2Quick() {
+  const { refreshWorkspace, videoUsage: workspaceVideoUsage } = useWorkspace() || {};
+  const refreshWorkspaceRef = useRef(refreshWorkspace);
+  refreshWorkspaceRef.current = refreshWorkspace;
   const navigate = useNavigate();
   const firstWorkspaceSectionRef = useRef(null);
   const videoSettingsSectionRef = useRef(null);
@@ -1783,8 +1885,41 @@ function VideoAdsV2Quick() {
   }, [characterGender, characterVoice, characterVoiceOptions]);
 
   const [videoLimitReached, setVideoLimitReached] = useState(false);
+  const [purchasedVideoCredits, setPurchasedVideoCredits] = useState(0);
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
   const [videoUsageUsed, setVideoUsageUsed] = useState(null);
   const [videoUsageCap, setVideoUsageCap] = useState(null);
+
+  // Keep the local Video limit state synchronized with WorkspaceContext.
+  // When a purchased pack is confirmed, WorkspaceContext refreshes /video/usage
+  // and this clears the warning immediately without a manual page refresh.
+  useEffect(() => {
+    if (!workspaceVideoUsage) return;
+
+    const used = Number(workspaceVideoUsage?.used ?? 0);
+    const rawCap = workspaceVideoUsage?.cap ?? null;
+    const cap =
+      rawCap === null || rawCap === undefined || rawCap === ""
+        ? null
+        : Number(rawCap);
+    const purchased = Math.max(
+      0,
+      Number(workspaceVideoUsage?.purchasedRemaining ?? 0)
+    );
+    const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+
+    setPurchasedVideoCredits(purchased);
+    setVideoUsageUsed(Number.isFinite(used) ? used : null);
+    setVideoUsageCap(hasFiniteCap ? cap : null);
+    setVideoLimitReached(
+      Boolean(
+        hasFiniteCap &&
+          Number.isFinite(used) &&
+          used >= cap &&
+          purchased <= 0
+      )
+    );
+  }, [workspaceVideoUsage]);
 
   // scroll targets
   const statusRef = useRef(null);
@@ -2156,15 +2291,17 @@ function VideoAdsV2Quick() {
             ? null
             : Number(rawCap);
         const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+        const purchased = Math.max(0, Number(data?.purchasedRemaining || 0));
         const exhausted =
           response.ok &&
           hasFiniteCap &&
           Number.isFinite(used) &&
-          used >= cap;
+          used >= cap && purchased <= 0;
 
         const hasPreviousGeneration =
           response.ok && Number.isFinite(used) && used > 0;
 
+        setPurchasedVideoCredits(purchased);
         setVideoUsageUsed(Number.isFinite(used) ? used : null);
         setVideoUsageCap(hasFiniteCap ? cap : null);
         setVideoLimitReached(exhausted);
@@ -2464,7 +2601,8 @@ function VideoAdsV2Quick() {
         if (
           Number.isFinite(next) &&
           Number.isFinite(videoUsageCap) &&
-          next >= videoUsageCap
+          next >= videoUsageCap &&
+          purchasedVideoCredits <= 0
         ) {
           setVideoLimitReached(true);
         }
@@ -2628,7 +2766,8 @@ function VideoAdsV2Quick() {
         if (
           Number.isFinite(next) &&
           Number.isFinite(videoUsageCap) &&
-          next >= videoUsageCap
+          next >= videoUsageCap &&
+          purchasedVideoCredits <= 0
         ) {
           setVideoLimitReached(true);
         }
@@ -2686,6 +2825,8 @@ function VideoAdsV2Quick() {
           setFinalVideoUrl(data.finalVideoUrl);
           setFeedbackOpen(true);
           void claimFirstGeneration("video", jobId, token);
+          // Success is terminal: refresh the shared plan/purchased-credit balances now.
+          void refreshWorkspaceRef.current?.();
           return;
         }
         if (data.status === "failed") {
@@ -2695,6 +2836,8 @@ function VideoAdsV2Quick() {
               "We couldn't create your video. Please try again."
             )
           );
+          // Terminal failure reflects the backend's finalized rollback/refund state.
+          void refreshWorkspaceRef.current?.();
           return;
         }
 
@@ -2859,6 +3002,60 @@ return (
             winning creative insights, optional voice, synchronized dialogue, music, and sound effects.
           </p>
         </div>
+
+        {videoLimitReached && (
+          <div className="generatorLimitTop">
+            <div className="generatorUsageLimitCard generatorUsageLimitCardV2" role="alert">
+                  <div className="generatorLimitIntro">
+                    <strong>Video credits used</strong>
+                    
+                    <p className="generatorLimitSummary">
+                      You've used all available video credits
+                      {Number.isFinite(videoUsageCap)
+                        ? ` (${videoUsageUsed ?? videoUsageCap}/${videoUsageCap})`
+                        : ""}.
+                    </p>
+                    <p>
+                      Choose how you want to keep generating. Purchased credits are a one-time add-on and never expire.
+                    </p>
+                  </div>
+
+                  <div className="generatorLimitChoices">
+                    <button
+                      type="button"
+                      className="generatorLimitChoice generatorLimitChoiceUpgrade"
+                      onClick={() => navigate("/subscribe?upgrade=1")}
+                    >
+                      <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                        <Crown size={20} />
+                      </span>
+                      <span className="generatorLimitChoiceCopy">
+                        <strong>Upgrade your plan</strong>
+                        <small>Get more included monthly video credits and additional ADGen features.</small>
+                      </span>
+                      <span className="generatorLimitChoiceAction">Upgrade Plan</span>
+                    </button>
+
+                    <span className="generatorLimitOr" aria-hidden="true">OR</span>
+
+                    <button
+                      type="button"
+                      className="generatorLimitChoice generatorLimitChoiceCredits"
+                      onClick={() => setCreditPacksOpen(true)}
+                    >
+                      <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                        <ShoppingCart size={20} />
+                      </span>
+                      <span className="generatorLimitChoiceCopy">
+                        <strong>Buy more video credits</strong>
+                        <small>Add video credits instantly with a one-time purchase.</small>
+                      </span>
+                      <span className="generatorLimitChoiceAction">Buy Video Credits</span>
+                    </button>
+                  </div>
+                </div>
+          </div>
+        )}
 
         {advancedOpen ? (
           <section className="videoQuickCollapsed" aria-label="Quick Create">
@@ -3098,27 +3295,6 @@ return (
                 </div>
               </div>
             </div>
-
-            {videoLimitReached && (
-              <div className="generatorUsageLimitCard" role="alert">
-                <div>
-                  <strong>Video credits used</strong>
-                  <p>
-                    You've used all available video credits
-                    {Number.isFinite(videoUsageCap)
-                      ? ` (${videoUsageUsed ?? videoUsageCap}/${videoUsageCap})`
-                      : ""}.
-                    Upgrade to continue creating videos.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/subscribe?upgrade=1")}
-                >
-                  Upgrade to Continue
-                </button>
-              </div>
-            )}
 
             <button
               type="button"
@@ -3822,23 +3998,6 @@ return (
                 </div>
               </div>
 
-              {videoLimitReached && (
-                <div className="generatorUsageLimitCard" role="alert">
-                  <div>
-                    <strong>Video credits used</strong>
-                    <p>
-                      Upgrade your plan to continue creating videos.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/subscribe?upgrade=1")}
-                  >
-                    Upgrade to Continue
-                  </button>
-                </div>
-              )}
-
 
               {validationError && (
                 <div
@@ -4078,23 +4237,6 @@ return (
                 </div>
               </div>
 
-              {videoLimitReached && (
-                <div className="generatorUsageLimitCard" role="alert">
-                  <div>
-                    <strong>Video credits used</strong>
-                    <p>
-                      Upgrade your plan to continue creating videos.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/subscribe?upgrade=1")}
-                  >
-                    Upgrade to Continue
-                  </button>
-                </div>
-              )}
-
 
               {validationError && (
                 <div
@@ -4313,6 +4455,7 @@ return (
           )}
         </div>
       </aside>
+      <CreditPackModal open={creditPacksOpen} onClose={() => setCreditPacksOpen(false)} />
     </div>
   </div>
 );

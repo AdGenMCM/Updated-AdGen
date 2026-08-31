@@ -12,7 +12,7 @@ from auth_helpers import get_db
 
 from .config import get_email_config
 from .resend_client import send_resend_email
-from .templates import render_welcome_email
+from .templates import render_welcome_email, render_credit_purchase_confirmation_email
 
 
 EMAIL_DELIVERIES_COLLECTION = "email_deliveries"
@@ -191,3 +191,61 @@ def send_welcome_email(
 
 def build_repeat_test_key(uid: str) -> str:
     return f"welcome_test:{uid}:{int(time.time())}:{uuid.uuid4().hex}"
+
+
+
+def send_credit_purchase_confirmation(
+    *,
+    uid: str,
+    recipient: str,
+    session_id: str,
+    pack_name: str,
+    resource: str,
+    credits_added: int,
+    balance_after: int,
+    amount: float,
+    currency: str,
+    display_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Send the immediate post-fulfillment credit confirmation exactly once.
+
+    This is transactional and intentionally bypasses lifecycle daily/weekly caps.
+    The Stripe Checkout Session ID is the durable idempotency boundary.
+    """
+    config = get_email_config()
+    first_name = _first_name(display_name, recipient)
+    is_video = str(resource or '').strip() == 'video_credits'
+    resource_label = 'Video' if is_video else 'Image'
+    cta_path = '/video-ads' if is_video else '/adgenerator'
+
+    subject, html = render_credit_purchase_confirmation_email(
+        first_name=first_name,
+        pack_name=pack_name,
+        resource_label=resource_label,
+        credits_added=int(credits_added or 0),
+        balance_after=int(balance_after or 0),
+        amount=float(amount or 0),
+        currency=currency,
+        cta_url=f"{config.app_url}{cta_path}",
+    )
+
+    return send_email_once(
+        uid=uid,
+        recipient=recipient,
+        email_key=f"credit_purchase:{session_id}",
+        category='transactional',
+        subject=subject,
+        html=html,
+        metadata={
+            'template': 'credit_purchase_confirmation',
+            'checkoutSessionId': session_id,
+            'packName': pack_name,
+            'resource': resource,
+            'creditsAdded': int(credits_added or 0),
+            'balanceAfter': int(balance_after or 0),
+            'amount': float(amount or 0),
+            'currency': str(currency or 'USD').upper(),
+            'schemaVersion': 1,
+        },
+    )

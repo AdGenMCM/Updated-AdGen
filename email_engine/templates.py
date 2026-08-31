@@ -601,6 +601,44 @@ def _campaign_template(
             ),
             accent=GREEN,
         ),
+        "image_credit_topup": LifecycleTemplate(
+            subject="Need more image generations? You now have two options",
+            preview="Buy non-expiring image credits or upgrade for recurring monthly capacity.",
+            eyebrow="Keep creating",
+            heading="Your included image generations are used — but you can keep going.",
+            intro=body,
+            detail=(
+                "Credit packs are one-time purchases, stay separate from your plan allowance, "
+                "and never expire. Buying a pack does not change your current plan or feature access."
+            ),
+            cta_label=cta_label,
+            panel_title="Choose what fits this session",
+            panel_items=(
+                "10 image credits for $4.99 or 30 for $12.99",
+                "Stay on your current plan and use credits as needed",
+                "Or upgrade for recurring monthly capacity and additional features",
+            ),
+            accent=GREEN,
+        ),
+        "video_credit_topup": LifecycleTemplate(
+            subject="Need more video credits? You now have two options",
+            preview="Buy non-expiring video credits or upgrade for recurring monthly capacity.",
+            eyebrow="Keep generating",
+            heading="Your included video credits are used — but you can keep creating.",
+            intro=body,
+            detail=(
+                "Video credit packs are one-time purchases, stay separate from your plan allowance, "
+                "and never expire. Buying video credits does not change your current plan or unlock unrelated features."
+            ),
+            cta_label=cta_label,
+            panel_title="Choose how you want to continue",
+            panel_items=(
+                "3 video credits for $9.99 or 8 for $22.99",
+                "Keep your current plan and top up only when needed",
+                "Or upgrade for recurring monthly capacity and additional features",
+            ),
+            accent=GREEN,
+        ),
         "free_upgrade": LifecycleTemplate(
             subject="Keep creating beyond your Free plan allowance",
             preview="Compare plans for more generation capacity and expanded creative tools.",
@@ -608,8 +646,8 @@ def _campaign_template(
             heading="You have reached the edge of your Free workspace.",
             intro=body,
             detail=(
-                "A paid plan gives you more monthly image capacity and access to a broader "
-                "creative workflow when you are ready to continue."
+                "A paid plan gives you recurring monthly capacity and a broader creative workflow. "
+                "If you only need more generations right now, one-time image and video credit packs are also available and never expire."
             ),
             cta_label=cta_label,
             panel_title="Upgrade when you need more room",
@@ -773,8 +811,8 @@ def _campaign_template(
             panel_title="Your options from here",
             panel_items=(
                 "Review your current usage and reset timing",
-                "Continue with the capacity still available",
-                "Compare plans if you need more room",
+                "Use any purchased credits already available on your account",
+                "Buy a one-time credit pack or compare plans if you need more room",
             ),
             accent=accent,
         )
@@ -1014,3 +1052,63 @@ def render_lifecycle_email(
         cta_url=cta_url,
         tier="",
     )
+
+
+
+def render_credit_purchase_confirmation_email(
+    *,
+    first_name: str,
+    pack_name: str,
+    resource_label: str,
+    credits_added: int,
+    balance_after: int,
+    amount: float,
+    currency: str,
+    cta_url: str,
+) -> tuple[str, str]:
+    """Immediate transactional confirmation after a credit pack is granted."""
+    safe_name = first_name or "there"
+    currency_code = (currency or "USD").upper()
+    amount_text = f"{currency_code} {float(amount or 0):.2f}"
+    credit_word = "credit" if int(credits_added or 0) == 1 else "credits"
+    subject = f"Your {credits_added} {resource_label.lower()} {credit_word} are ready"
+
+    body_html = (
+        _paragraph(f"Hi {safe_name},", margin_bottom=14)
+        + _paragraph(
+            f"Your {pack_name} purchase is complete and {credits_added} {resource_label.lower()} {credit_word} "
+            "have been added to your ADGen account.",
+            margin_bottom=14,
+        )
+        + _paragraph(
+            f"Your purchased {resource_label.lower()} balance is now {balance_after}. Purchased credits stay "
+            "separate from your plan allowance and never expire.",
+            margin_bottom=14,
+        )
+        + _paragraph(
+            f"Purchase total: {amount_text}. Stripe handles the separate payment receipt for the transaction."
+        )
+    )
+
+    supporting_html = _feature_panel(
+        "Purchase confirmed",
+        (
+            f"{pack_name}: {credits_added} {resource_label.lower()} {credit_word} added",
+            f"Purchased balance: {balance_after}",
+            "Purchased credits never expire and do not change your plan tier",
+        ),
+        GREEN,
+    )
+
+    html = render_base_email(
+        preview_text=f"{credits_added} {resource_label.lower()} credits were added to your ADGen account.",
+        eyebrow="Credits ready",
+        heading="Your extra credits are ready to use.",
+        body_html=body_html,
+        cta_label=f"Start creating with {resource_label.lower()}",
+        cta_url=cta_url,
+        accent=GREEN,
+        supporting_html=supporting_html,
+        footer_note="This is a transactional service email confirming credits added to your ADGen account.",
+    )
+    return subject, html

@@ -30,6 +30,7 @@ import {
 import "./Subscribe.css";
 
 import { trackEvent } from "../analytics/tracking";
+import CreditPackModal from "../components/billing/CreditPackModal";
 
 const db = getFirestore();
 
@@ -239,6 +240,8 @@ export default function Subscribe() {
   const success = params.get("success") === "1";
   const upgradeMode = params.get("upgrade") === "1";
   const canceled = params.get("canceled") === "1";
+  const addonsMode = params.get("addons") === "1";
+  const addonDestination = params.get("destination") || "/dashboard";
   const from = location.state?.from?.pathname || "/dashboard";
   const pollRef = useRef(null);
   const purchaseFiredRef = useRef(false);
@@ -370,12 +373,12 @@ export default function Subscribe() {
 
           if (paidCheckoutConfirmed) {
             const destination = storedTarget || "/brand-kit";
-
             localStorage.removeItem("adgen_post_checkout_redirect");
-
-            navigate(destination, { replace: true });
+            navigate(`/subscribe?addons=1&destination=${encodeURIComponent(destination)}`, { replace: true });
             return;
           }
+
+          if (addonsMode) return;
 
           if (!upgradeMode && !completedCheckout) {
             navigate(from || "/dashboard", { replace: true });
@@ -397,6 +400,7 @@ export default function Subscribe() {
     success,
     sessionId,
     upgradeMode,
+    addonsMode,
   ]);
 
   useEffect(() => {
@@ -568,7 +572,7 @@ export default function Subscribe() {
         plan: "free",
       });
 
-      navigate("/dashboard", {
+      navigate("/subscribe?addons=1&destination=%2Fdashboard", {
         replace: true,
       });
     } catch (err) {
@@ -962,7 +966,13 @@ export default function Subscribe() {
           </div>
         </div>
       </section>
-    </main>
+      <CreditPackModal
+        open={addonsMode}
+        onClose={() => navigate(addonDestination, { replace: true })}
+        returnPath={`/subscribe?addons=1&destination=${encodeURIComponent(addonDestination)}`}
+        title="Want extra generation credits?"
+      />
+      </main>
   );
 }
 

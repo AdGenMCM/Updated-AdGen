@@ -11,6 +11,7 @@ import Button from "../components/ui/Button";
 import InfoTip from "../components/ui/InfoTip";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
+import { useWorkspace } from "../context/WorkspaceContext";
 import {
   getGoogleAdsAssets,
   getGoogleAdsStatus,
@@ -233,6 +234,7 @@ function CreativeStructureControls({
 
 export default function Optimizer() {
   const navigate = useNavigate();
+  const { refreshWorkspace } = useWorkspace() || {};
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
 
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
@@ -959,10 +961,14 @@ const [progress, setProgress] = useState({
 
       if (data.status === "succeeded") {
         await new Promise((resolve) => setTimeout(resolve, 450));
+        // Terminal success means backend usage has been finalized.
+        void refreshWorkspace?.();
         return data.result;
       }
 
       if (data.status === "failed") {
+        // Terminal failure reflects the backend's finalized rollback/refund state.
+        void refreshWorkspace?.();
         const error = new Error(
           safeDetailMessage(data.error) || "The request failed."
         );

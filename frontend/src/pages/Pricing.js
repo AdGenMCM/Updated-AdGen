@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthProvider";
 import "./Pricing.css";
@@ -7,6 +7,7 @@ import Reveal from "../components/motion/Reveal";
 import MarketingButton from "../components/marketing/actions/MarketingButton";
 
 import { trackEvent } from "../analytics/tracking";
+import CreditPackModal from "../components/billing/CreditPackModal";
 
 const TIERS = [
   {
@@ -216,6 +217,7 @@ function CheckCell({ value }) {
 export default function Pricing() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
 
   useEffect(() => {
     trackEvent("view_pricing");
@@ -384,6 +386,25 @@ export default function Pricing() {
         </div>
       </section>
 
+      <section className="pricing-credit-packs">
+        <div className="pricing-v2-container">
+          <Reveal>
+            <div className="pricing-v2-section-head">
+              <span className="pricing-v2-pill">One-time add-ons</span>
+              <h2>Need more generations without changing plans?</h2>
+              <p>Purchase extra image or video credits anytime. Purchased credits are separate from plan allowances and never expire.</p>
+            </div>
+          </Reveal>
+          <div className="pricing-credit-grid">
+            <article><span>Image Mini</span><strong>10 image credits</strong><b>$4.99</b></article>
+            <article><span>Image Plus</span><strong>30 image credits</strong><b>$12.99</b></article>
+            <article><span>Video Mini</span><strong>3 video credits</strong><b>$9.99</b></article>
+            <article><span>Video Plus</span><strong>8 video credits</strong><b>$22.99</b></article>
+          </div>
+          <div className="pricing-credit-action"><button type="button" onClick={() => currentUser ? setCreditPacksOpen(true) : navigate("/login", { state: { from: { pathname: "/pricing" } } })}>{currentUser ? "Buy credits" : "Sign in to buy credits"}</button><small>One-time purchase · Credits never expire · Does not change your plan</small></div>
+        </div>
+      </section>
+
       <section className="pricing-v2-story">
         <div className="pricing-v2-container">
           <Reveal>
@@ -525,6 +546,7 @@ export default function Pricing() {
           </Reveal>
         </div>
       </section>
+      <CreditPackModal open={creditPacksOpen} onClose={() => setCreditPacksOpen(false)} returnPath="/pricing" />
     </main>
   );
 }

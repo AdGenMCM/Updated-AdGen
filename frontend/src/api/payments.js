@@ -127,3 +127,22 @@ export async function syncSubscription({
 
   return response.json();
 }
+
+
+export async function createCreditCheckoutSession({ packId, token, returnPath }) {
+  const response = await fetchWithStripeFallback("/create-credit-checkout-session", {
+    method: "POST", headers: authenticatedHeaders(token, true), credentials: "include",
+    body: JSON.stringify({ packId, returnPath }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+export async function claimCreditPurchase({ sessionId, token }) {
+  const response = await fetchWithStripeFallback("/analytics/claim-credit-purchase", {
+    method: "POST", headers: authenticatedHeaders(token, true), credentials: "include",
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}

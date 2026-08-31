@@ -11,10 +11,12 @@ from dotenv import load_dotenv
 import stripe
 
 from firebase_admin import firestore
+from firebase_admin import auth as firebase_auth
 from google.cloud import firestore as gc_firestore
 from auth_helpers import get_db, get_bearer_token, verify_firebase_token
 from notification_utils import create_notification
 from customer_intelligence.event_service import track_event
+from email_engine.email_service import send_credit_purchase_confirmation
 
 
 stripe_router = APIRouter()
@@ -29,11 +31,19 @@ FIREBASE_SA_PATH: Optional[str] = None
 PRICE_MAP: Dict[str, str] = {}
 LEGACY_PRICE_MAP: Dict[str, str] = {}
 PRICE_TO_TIER: Dict[str, str] = {}
+CREDIT_PRICE_MAP: Dict[str, str] = {}
+
+CREDIT_PACKS = {
+    "image_mini": {"resource": "images", "credits": 10, "price": 4.99, "name": "Image Mini"},
+    "image_plus": {"resource": "images", "credits": 30, "price": 12.99, "name": "Image Plus"},
+    "video_mini": {"resource": "video_credits", "credits": 3, "price": 9.99, "name": "Video Mini"},
+    "video_plus": {"resource": "video_credits", "credits": 8, "price": 22.99, "name": "Video Plus"},
+}
 
 
 def _load_settings_from_env() -> None:
     global STRIPE_SECRET_KEY, WEBHOOK_SECRET, FRONTEND_URL, FIREBASE_SA_PATH
-    global PRICE_MAP, LEGACY_PRICE_MAP, PRICE_TO_TIER
+    global PRICE_MAP, LEGACY_PRICE_MAP, PRICE_TO_TIER, CREDIT_PRICE_MAP
 
     load_dotenv(override=True)
 
@@ -44,6 +54,7 @@ def _load_settings_from_env() -> None:
 
     price_map_json = (os.getenv("STRIPE_PRICE_MAP_JSON") or "").strip()
     legacy_price_map_json = (os.getenv("STRIPE_LEGACY_PRICE_MAP_JSON") or "{}").strip()
+    credit_price_map_json = (os.getenv("STRIPE_CREDIT_PRICE_MAP_JSON") or "{}").strip()
 
     if not STRIPE_SECRET_KEY:
         raise RuntimeError("Missing STRIPE_SECRET_KEY")
@@ -61,6 +72,14 @@ def _load_settings_from_env() -> None:
         LEGACY_PRICE_MAP = json.loads(legacy_price_map_json)
     except Exception:
         raise RuntimeError("STRIPE_LEGACY_PRICE_MAP_JSON must be valid JSON")
+
+    try:
+        CREDIT_PRICE_MAP = json.loads(credit_price_map_json)
+    except Exception:
+        raise RuntimeError("STRIPE_CREDIT_PRICE_MAP_JSON must be valid JSON")
+
+    if not isinstance(CREDIT_PRICE_MAP, dict):
+        raise RuntimeError("STRIPE_CREDIT_PRICE_MAP_JSON must be a JSON object")
 
     if not isinstance(PRICE_MAP, dict):
         raise RuntimeError("STRIPE_PRICE_MAP_JSON must be a JSON object")
@@ -100,6 +119,11 @@ class CheckoutPayload(BaseModel):
 
 class PaidPurchaseClaimPayload(BaseModel):
     sessionId: str
+
+
+class CreditCheckoutPayload(BaseModel):
+    packId: str
+    returnPath: Optional[str] = None
 
 
 # ---------------- Helpers ----------------
@@ -454,6 +478,224 @@ def create_checkout_session(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@stripe_router.post("/create-credit-checkout-session")
+def create_credit_checkout_session(
+    body: CreditCheckoutPayload,
+    authorization: Optional[str] = Header(default=None),
+):
+    uid, token_email, _claims = _require_authenticated_user(authorization)
+    pack_id = str(body.packId or "").strip()
+    pack = CREDIT_PACKS.get(pack_id)
+    price_id = str(CREDIT_PRICE_MAP.get(pack_id) or "").strip()
+    if not pack or not price_id:
+        raise HTTPException(status_code=400, detail="Invalid or unavailable credit pack.")
+
+    db = get_db()
+    user_ref = db.collection("users").document(uid)
+    user_data = user_ref.get().to_dict() or {}
+    stripe_info = user_data.get("stripe") or {}
+    customer_id = str(stripe_info.get("customerId") or "").strip()
+    if not customer_id:
+        customer = stripe.Customer.create(email=token_email or None, metadata={"firebase_uid": uid})
+        customer_id = customer.id
+        user_ref.set({"stripe": {"customerId": customer_id}}, merge=True)
+    else:
+        try:
+            stripe.Customer.modify(customer_id, metadata={"firebase_uid": uid})
+        except Exception:
+            pass
+    db.collection("stripe_customers").document(customer_id).set({"uid": uid}, merge=True)
+
+    return_path = str(body.returnPath or "/account").strip()
+    if not return_path.startswith("/") or return_path.startswith("//"):
+        return_path = "/account"
+    separator = "&" if "?" in return_path else "?"
+    session = stripe.checkout.Session.create(
+        mode="payment", customer=customer_id, client_reference_id=uid,
+        metadata={
+            "firebase_uid": uid, "purchase_type": "credit_pack", "pack_id": pack_id,
+            "resource": pack["resource"], "credits": str(pack["credits"]),
+        },
+        line_items=[{"price": price_id, "quantity": 1}],
+        success_url=(f"{FRONTEND_URL}{return_path}{separator}credit_success=1&credit_session_id={{CHECKOUT_SESSION_ID}}"),
+        cancel_url=f"{FRONTEND_URL}{return_path}",
+        automatic_tax={"enabled": True}, billing_address_collection="required",
+        customer_update={"address": "auto", "shipping": "auto"},
+    )
+    return {"url": session.url}
+
+
+def _grant_credit_pack_from_session(db, session: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = session.get("metadata") or {}
+    if session.get("mode") != "payment" or metadata.get("purchase_type") != "credit_pack":
+        return {"granted": False, "reason": "not_credit_pack"}
+    if session.get("status") != "complete" or session.get("payment_status") != "paid":
+        return {"granted": False, "reason": "payment_not_confirmed"}
+    uid = session.get("client_reference_id") or metadata.get("firebase_uid")
+    pack_id = str(metadata.get("pack_id") or "").strip()
+    pack = CREDIT_PACKS.get(pack_id)
+    session_id = str(session.get("id") or "").strip()
+    if not uid or not pack or not session_id:
+        return {"granted": False, "reason": "invalid_metadata"}
+    usage_ref = db.collection("usage").document(uid)
+    purchase_ref = db.collection("credit_purchases").document(session_id)
+    field = "purchasedImageCredits" if pack["resource"] == "images" else "purchasedVideoCredits"
+
+    @gc_firestore.transactional
+    def _tx(transaction):
+        existing = purchase_ref.get(transaction=transaction)
+        if existing.exists:
+            return {"granted": False, "reason": "already_granted", **(existing.to_dict() or {})}
+        usage_snap = usage_ref.get(transaction=transaction)
+        usage_data = usage_snap.to_dict() or {}
+        current = max(0, int(usage_data.get(field, 0) or 0))
+        new_balance = current + int(pack["credits"])
+        transaction.set(usage_ref, {field: new_balance, "updatedAt": gc_firestore.SERVER_TIMESTAMP}, merge=True)
+        purchase_data = {
+            "uid": uid, "sessionId": session_id, "packId": pack_id, "resource": pack["resource"],
+            "credits": int(pack["credits"]), "amount": round(int(session.get("amount_total") or 0) / 100.0, 2),
+            "currency": str(session.get("currency") or "usd").upper(), "balanceAfter": new_balance,
+            "createdAt": gc_firestore.SERVER_TIMESTAMP,
+        }
+        transaction.set(purchase_ref, purchase_data)
+
+        # Never return Firestore SERVER_TIMESTAMP sentinels through FastAPI.
+        # The sentinel is valid for the Firestore write, but it is not JSON
+        # serializable and would turn an otherwise successful purchase into a
+        # 500 response after the transaction had already committed.
+        return {
+            "granted": True,
+            "uid": uid,
+            "sessionId": session_id,
+            "packId": pack_id,
+            "resource": pack["resource"],
+            "credits": int(pack["credits"]),
+            "amount": purchase_data["amount"],
+            "currency": purchase_data["currency"],
+            "balanceAfter": new_balance,
+        }
+    return _tx(db.transaction())
+
+
+def _resolve_credit_purchase_recipient(uid: str, session: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """Resolve recipient/display name without trusting client-supplied checkout data."""
+    db = get_db()
+    user_data = db.collection("users").document(uid).get().to_dict() or {}
+    recipient = str(user_data.get("email") or "").strip() or None
+    display_name = str(user_data.get("displayName") or user_data.get("name") or "").strip() or None
+
+    if not recipient:
+        customer_details = session.get("customer_details") or {}
+        recipient = str(customer_details.get("email") or "").strip() or None
+
+    if not recipient:
+        customer_id = session.get("customer")
+        if customer_id:
+            try:
+                customer = stripe.Customer.retrieve(customer_id)
+                recipient = str(customer.get("email") or "").strip() or None
+                if not display_name:
+                    display_name = str(customer.get("name") or "").strip() or None
+            except Exception:
+                pass
+
+    if not recipient:
+        try:
+            firebase_user = firebase_auth.get_user(uid)
+            recipient = str(firebase_user.email or "").strip() or None
+            if not display_name:
+                display_name = str(firebase_user.display_name or "").strip() or None
+        except Exception:
+            pass
+
+    return recipient, display_name
+
+
+def _send_credit_confirmation_after_grant(db, session: Dict[str, Any], grant: Dict[str, Any]) -> None:
+    """Best-effort immediate confirmation. Email failure never rolls back paid credits."""
+    metadata = session.get("metadata") or {}
+    uid = str(grant.get("uid") or session.get("client_reference_id") or metadata.get("firebase_uid") or "").strip()
+    session_id = str(session.get("id") or grant.get("sessionId") or "").strip()
+    pack_id = str(grant.get("packId") or metadata.get("pack_id") or "").strip()
+    pack = CREDIT_PACKS.get(pack_id)
+    if not uid or not session_id or not pack:
+        return
+
+    # Read the persisted purchase so retries can send after a previous provider failure
+    # and so the email always reflects the committed balance.
+    purchase = db.collection("credit_purchases").document(session_id).get().to_dict() or {}
+    balance_after = int(purchase.get("balanceAfter") or grant.get("balanceAfter") or 0)
+    credits = int(purchase.get("credits") or pack.get("credits") or 0)
+    amount = float(purchase.get("amount") or grant.get("amount") or 0)
+    currency = str(purchase.get("currency") or grant.get("currency") or session.get("currency") or "USD").upper()
+
+    recipient, display_name = _resolve_credit_purchase_recipient(uid, session)
+    if not recipient:
+        print("CREDIT PURCHASE EMAIL SKIPPED: recipient unavailable", uid, session_id, flush=True)
+        return
+
+    try:
+        send_credit_purchase_confirmation(
+            uid=uid,
+            recipient=recipient,
+            session_id=session_id,
+            pack_name=pack["name"],
+            resource=pack["resource"],
+            credits_added=credits,
+            balance_after=balance_after,
+            amount=amount,
+            currency=currency,
+            display_name=display_name,
+        )
+    except Exception as exc:
+        # Payment fulfillment is authoritative. Resend/provider failures must not
+        # make a successful purchase appear failed or revoke credits.
+        print("CREDIT PURCHASE CONFIRMATION EMAIL ERROR:", repr(exc), flush=True)
+
+
+@stripe_router.post("/analytics/claim-credit-purchase")
+def claim_credit_purchase(
+    body: PaidPurchaseClaimPayload,
+    authorization: Optional[str] = Header(default=None),
+):
+    uid, _email, _claims = _require_authenticated_user(authorization)
+    session_id = str(body.sessionId or "").strip()
+    session = stripe.checkout.Session.retrieve(session_id)
+    session_uid = session.get("client_reference_id") or (session.get("metadata") or {}).get("firebase_uid")
+    if session_uid != uid:
+        raise HTTPException(status_code=403, detail="Checkout session does not belong to this account.")
+    db = get_db()
+    grant = _grant_credit_pack_from_session(db, session)
+    _send_credit_confirmation_after_grant(db, session, grant)
+    metadata = session.get("metadata") or {}
+    pack_id = str(metadata.get("pack_id") or "")
+    pack = CREDIT_PACKS.get(pack_id)
+    if not pack or session.get("payment_status") != "paid":
+        return {"ok": True, "track": False}
+
+    purchase_ref = db.collection("credit_purchases").document(session_id)
+    @gc_firestore.transactional
+    def _claim_analytics(transaction):
+        snap = purchase_ref.get(transaction=transaction)
+        data = snap.to_dict() or {}
+        if data.get("analyticsClaimed"):
+            return False
+        transaction.set(purchase_ref, {
+            "analyticsClaimed": True,
+            "analyticsClaimedAt": gc_firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+        return True
+    should_track = _claim_analytics(db.transaction())
+
+    return {
+        "ok": True, "track": should_track, "transactionId": session_id,
+        "value": round(int(session.get("amount_total") or 0) / 100.0, 2),
+        "currency": str(session.get("currency") or "usd").upper(),
+        "packId": pack_id, "packName": pack["name"], "credits": pack["credits"],
+        "resource": pack["resource"], "grant": grant,
+    }
+
+
 @stripe_router.post("/analytics/claim-first-paid-purchase")
 def claim_first_paid_purchase(
     body: PaidPurchaseClaimPayload,
@@ -682,7 +924,17 @@ async def stripe_webhook(request: Request):
         "customer.subscription.deleted",
     }
 
-    if event_type in subscription_events:
+    if event_type == "checkout.session.completed" and obj.get("mode") == "payment":
+        try:
+            grant = _grant_credit_pack_from_session(db, obj)
+            _send_credit_confirmation_after_grant(db, obj, grant)
+        except Exception as exc:
+            print("CREDIT PACK FULFILLMENT ERROR:", repr(exc), flush=True)
+            return JSONResponse(status_code=500, content={"error": "Credit fulfillment failed"})
+
+    if event_type in subscription_events and not (
+        event_type == "checkout.session.completed" and obj.get("mode") == "payment"
+    ):
         customer_id = None
         sub_id = None
         status = None

@@ -49,6 +49,8 @@ def get_lifecycle_settings() -> LifecycleSettings:
         "image_usage": True,
         "video_usage": True,
         "optimizer_usage": True,
+        "image_credit_topup": True,
+        "video_credit_topup": True,
         "free_upgrade": True,
         "trial_upgrade": True,
         "starter_upgrade": True,

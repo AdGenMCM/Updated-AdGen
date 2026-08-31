@@ -1294,58 +1294,6 @@
   }
 }
 
-/* =========================================================
-   Generator usage-limit upgrade state
-========================================================= */
-
-.generatorUsageLimitCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  align-items: center;
-  padding: 18px 20px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 16px;
-  background: rgba(245, 158, 11, 0.09);
-}
-
-.generatorUsageLimitCard strong {
-  display: block;
-  color: #fef3c7;
-  font-size: 0.94rem;
-  font-weight: 900;
-}
-
-.generatorUsageLimitCard p {
-  margin: 6px 0 0;
-  color: var(--ag-text-soft);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.generatorUsageLimitCard button {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid rgba(196, 181, 253, 0.38);
-  border-radius: 13px;
-  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
-  color: #fff;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 900;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-@media (max-width: 700px) {
-  .generatorUsageLimitCard {
-    grid-template-columns: 1fr;
-  }
-
-  .generatorUsageLimitCard button {
-    width: 100%;
-  }
-}
 
 
 
@@ -1664,5 +1612,263 @@
   .adgen-quick-aspect-selector {
     width: 100%;
     grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   Generation limit: Upgrade OR Buy Credits
+========================================================= */
+.generatorUsageLimitCardV2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.08), transparent 36%),
+    rgba(245, 158, 11, 0.07);
+}
+
+.generatorLimitIntro {
+  display: grid;
+  gap: 6px;
+}
+
+.generatorLimitIntro > strong {
+  color: #fde68a;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.generatorLimitIntro p,
+.generatorLimitSummary {
+  margin: 0;
+  color: var(--ag-text-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.generatorLimitChoices {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.generatorLimitOr {
+  display: grid;
+  place-items: center;
+  color: var(--ag-muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+}
+
+.generatorLimitChoice {
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  gap: 8px 12px !important;
+  align-items: center !important;
+  min-width: 0;
+  min-height: 134px !important;
+  margin: 0 !important;
+  padding: 16px !important;
+  border-radius: 16px !important;
+  text-align: left !important;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.generatorLimitChoice:hover {
+  transform: translateY(-2px);
+}
+
+.generatorLimitChoiceUpgrade {
+  border: 1px solid rgba(139, 92, 246, 0.36) !important;
+  background: rgba(124, 58, 237, 0.08) !important;
+}
+
+.generatorLimitChoiceCredits {
+  border: 1px solid rgba(34, 197, 94, 0.32) !important;
+  background: rgba(34, 197, 94, 0.06) !important;
+}
+
+.generatorLimitChoiceUpgrade:hover {
+  border-color: rgba(167, 139, 250, 0.68) !important;
+  background: rgba(124, 58, 237, 0.13) !important;
+}
+
+.generatorLimitChoiceCredits:hover {
+  border-color: rgba(74, 222, 128, 0.56) !important;
+  background: rgba(34, 197, 94, 0.1) !important;
+}
+
+.generatorLimitChoiceIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+
+.generatorLimitChoiceUpgrade .generatorLimitChoiceIcon {
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.15);
+}
+
+.generatorLimitChoiceCredits .generatorLimitChoiceIcon {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.generatorLimitChoiceCopy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.generatorLimitChoiceCopy strong {
+  color: var(--ag-text) !important;
+  font-size: 0.9rem !important;
+  font-weight: 900 !important;
+}
+
+.generatorLimitChoiceCopy small {
+  color: var(--ag-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.generatorLimitChoiceAction {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin-top: 3px;
+  border-radius: 11px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.generatorLimitChoiceUpgrade .generatorLimitChoiceAction {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+}
+
+.generatorLimitChoiceCredits .generatorLimitChoiceAction {
+  border: 1px solid rgba(74, 222, 128, 0.42);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+@media (max-width: 780px) {
+  .generatorLimitChoices {
+    grid-template-columns: 1fr;
+  }
+
+  .generatorLimitOr {
+    min-height: 20px;
+  }
+}
+
+/* =========================================================
+   FINAL generation-limit card layout correction
+========================================================= */
+.generatorUsageLimitCard.generatorUsageLimitCardV2 {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 20px !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoices {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoice {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 142px !important;
+  padding: 16px !important;
+  white-space: normal !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoiceCopy {
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoiceCopy strong,
+.generatorUsageLimitCardV2 .generatorLimitChoiceCopy small {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoiceCopy strong {
+  line-height: 1.3 !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoiceCopy small {
+  line-height: 1.45 !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitChoiceAction {
+  width: 100% !important;
+  white-space: normal !important;
+  box-sizing: border-box !important;
+}
+
+.generatorUsageLimitCardV2 .generatorLimitOr {
+  position: static !important;
+  align-self: center !important;
+  justify-self: stretch !important;
+  display: grid !important;
+  place-items: center !important;
+  min-width: 38px !important;
+  color: var(--ag-muted) !important;
+  pointer-events: none !important;
+}
+
+@media (max-width: 900px) {
+  .generatorUsageLimitCardV2 .generatorLimitChoices {
+    grid-template-columns: 1fr !important;
+  }
+
+  .generatorUsageLimitCardV2 .generatorLimitOr {
+    min-height: 20px !important;
+  }
+}
+
+/* Generation limit notice placement */
+.generatorLimitTop {
+  width: 100%;
+  margin: 0 0 28px;
+}
+
+@media (max-width: 700px) {
+  .generatorLimitTop {
+    margin-bottom: 22px;
   }
 }

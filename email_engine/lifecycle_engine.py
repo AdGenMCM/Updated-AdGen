@@ -161,6 +161,25 @@ def _can_send(uid: str, now: int) -> tuple[bool, str]:
     return True, "ok"
 
 
+def _purchased_balance(user_doc: dict, resource: str, state: Optional[dict] = None) -> int:
+    state = state or {}
+    field = "purchasedImageCredits" if resource == "images" else "purchasedVideoCredits"
+    try:
+        return max(0, int(state.get("purchasedRemaining", user_doc.get(field, 0)) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _campaign_already_sent(uid: str, key: str, suffix: str) -> bool:
+    target = f"lifecycle:{key}:{suffix}"
+    query = get_db().collection(EMAIL_DELIVERIES_COLLECTION).where("uid", "==", uid)
+    for snap in query.stream():
+        data = snap.to_dict() or {}
+        if data.get("emailKey") == target and data.get("status") == "sent":
+            return True
+    return False
+
+
 def _usage_candidate(uid: str, tier: str, user_doc: dict, resource: str, key: str, noun: str, path: str) -> Optional[Candidate]:
     state = peek_resource(get_db(), uid, tier, resource, user_doc)
     cap = int(state.get("cap") or 0)
@@ -173,10 +192,21 @@ def _usage_candidate(uid: str, tier: str, user_doc: dict, resource: str, key: st
         return None
     period = str(state.get("periodKey") or state.get("month") or "current")
     remaining = max(0, cap - used)
-    title = f"You've used {threshold}% of your {noun} allowance" if threshold < 100 else f"You've reached your {noun} allowance"
-    body = f"You've used {used} of {cap} {noun} for this period. You have {remaining} remaining. Review your plan before your next creative session."
-    return Candidate(key, "usage", title, body, "View account usage", path, 95 + threshold, f"{period}:{threshold}")
+    purchased = _purchased_balance(user_doc, resource, state) if resource in {"images", "video_credits"} else 0
+    # For exhausted image/video balances with no purchased credits, the dedicated
+    # credit-top-up campaign is the single authoritative lifecycle message.
+    # Do not also enqueue the generic 100% usage email.
+    if threshold >= 100 and resource in {"images", "video_credits"} and purchased <= 0:
+        return None
 
+    title = f"You've used {threshold}% of your {noun} allowance" if threshold < 100 else f"You've reached your {noun} allowance"
+    if threshold >= 100 and purchased > 0:
+        body = f"You've used {used} of {cap} included {noun} for this period. You still have {purchased} purchased credit{'s' if purchased != 1 else ''} available, and purchased credits never expire."
+    elif threshold >= 100 and resource in {"images", "video_credits"}:
+        body = f"You've used {used} of {cap} included {noun} for this period. You can keep creating with a one-time credit pack or upgrade for more recurring capacity."
+    else:
+        body = f"You've used {used} of {cap} {noun} for this period. You have {remaining} included remaining. Review your usage before your next creative session."
+    return Candidate(key, "usage", title, body, "View account usage", path, 95 + threshold, f"{period}:{threshold}")
 
 def _last_sign_in(uid: str, fallback: int) -> int:
     try:
@@ -300,6 +330,25 @@ def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> lis
             candidates.append(Candidate("optimizer_intro", "activation", "Improve an ad with the Optimizer", "Your plan includes Ad Performance Optimization. Analyze an existing creative and generate actionable improvements.", "Try the Optimizer", "/optimizer", 68))
 
     if settings.usage_enabled:
+        for resource, campaign_key, noun, title, cta_label in (
+            ("images", "image_credit_topup", "image generations", "Keep creating with image credits", "View image credit options"),
+            ("video_credits", "video_credit_topup", "video credits", "Keep creating with video credits", "View video credit options"),
+        ):
+            if not settings.campaigns.get(campaign_key, False) or int(limits.get(resource) or 0) <= 0:
+                continue
+            state = peek_resource(get_db(), uid, tier, resource, user_doc)
+            cap = int(state.get("cap") or 0)
+            used = int(state.get("used") or 0)
+            purchased = _purchased_balance(user_doc, resource, state)
+            if cap <= 0 or used < cap or purchased > 0:
+                continue
+            period = str(state.get("periodKey") or state.get("month") or "current")
+            suffix = f"{period}:exhausted"
+            if _campaign_already_sent(uid, campaign_key, suffix):
+                continue
+            body = f"You've used all {cap} included {noun} for this period. You now have two ways to continue: buy a one-time credit pack that never expires, or upgrade your plan for more recurring capacity and additional ADGen features."
+            candidates.append(Candidate(campaign_key, "credits", title, body, cta_label, "/account", 205 if resource == "images" else 204, suffix))
+
         for resource, key, noun, path in (
             ("images", "image_usage", "image generations", "/account"),
             ("video_credits", "video_usage", "video credits", "/account"),
@@ -316,9 +365,12 @@ def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> lis
         pct = (used / cap * 100) if cap else 0
         upgrade_key = {"free": "free_upgrade", "trial_monthly": "trial_upgrade", "starter_monthly": "starter_upgrade", "pro_monthly": "pro_upgrade"}.get(tier)
         threshold = 100 if tier in {"free", "trial_monthly"} else 90
-        if upgrade_key and settings.campaigns.get(upgrade_key, False) and pct >= threshold:
+        # At 100% image exhaustion, do not enqueue a second generic upgrade email.
+        # The exhausted-credit top-up campaign (no purchased balance) or the
+        # purchased-credit usage message (balance remains) owns that state.
+        if upgrade_key and settings.campaigns.get(upgrade_key, False) and pct >= threshold and pct < 100:
             period = str(image_state.get("periodKey") or "current")
-            candidates.append(Candidate(upgrade_key, "upgrade", "Keep creating without interruption", "You're close to or at your current image allowance. Compare plans for more creative capacity and additional ADGen features.", "Compare plans", "/subscribe?upgrade=1", 130, f"{period}:{threshold}"))
+            candidates.append(Candidate(upgrade_key, "upgrade", "Keep creating without interruption", "You're approaching your current image allowance. Upgrade for recurring monthly capacity and additional ADGen features, or use a one-time credit pack when you only need extra generations.", "Compare plans", "/subscribe?upgrade=1", 130, f"{period}:{threshold}"))
 
     # One-time retention research for users who have actually created.
     # This is based on successful generation activity rather than sign-in activity,

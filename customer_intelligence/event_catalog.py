@@ -17,6 +17,7 @@ EVENTS: FrozenSet[str] = frozenset(
         "reporting.viewed",
         "feature.access_attempted",
         "usage.limit_reached",
+        "credit_pack.purchased",
         "email.sent.welcome",
         "email.sent.lifecycle",
         "subscription.activated",

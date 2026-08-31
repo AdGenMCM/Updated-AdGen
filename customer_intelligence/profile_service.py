@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 from google.cloud import firestore as gc_firestore
 
-from usage_caps import get_tier_and_status
+from usage_caps import get_tier_and_status, peek_resource
 
 from .decision_engine import build_recommendation_list, choose_next_best_action
 from .scoring import calculate_scores
@@ -16,6 +16,45 @@ PROFILE_COLLECTION = "customer_intelligence_profiles"
 
 def _profile_ref(db, uid: str):
     return db.collection(PROFILE_COLLECTION).document(uid)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _credit_usage_state(db, uid: str, tier: str, user_doc: Dict[str, Any]) -> Dict[str, Any]:
+    image_state = peek_resource(db, uid, tier, "images", user_doc) or {}
+    video_state = peek_resource(db, uid, tier, "video_credits", user_doc) or {}
+
+    purchased_images = max(0, _safe_int(image_state.get("purchasedRemaining"), _safe_int(user_doc.get("purchasedImageCredits"))))
+    purchased_videos = max(0, _safe_int(video_state.get("purchasedRemaining"), _safe_int(user_doc.get("purchasedVideoCredits"))))
+
+    def normalize(state: Dict[str, Any], purchased: int) -> Dict[str, Any]:
+        cap = max(0, _safe_int(state.get("cap")))
+        used = max(0, _safe_int(state.get("used")))
+        included_remaining = max(0, cap - used)
+        return {
+            "cap": cap,
+            "used": used,
+            "includedRemaining": included_remaining,
+            "purchasedRemaining": purchased,
+            "totalRemaining": included_remaining + purchased,
+            "includedExhausted": bool(cap > 0 and used >= cap),
+            "periodKey": state.get("periodKey") or state.get("month"),
+        }
+
+    return {
+        "purchasedImageCredits": purchased_images,
+        "purchasedVideoCredits": purchased_videos,
+        "hasPurchasedCredits": bool(purchased_images or purchased_videos),
+        "creditUsage": {
+            "images": normalize(image_state, purchased_images),
+            "video_credits": normalize(video_state, purchased_videos),
+        },
+    }
 
 
 def _base_profile(uid: str, user_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -32,6 +71,10 @@ def _base_profile(uid: str, user_doc: Optional[Dict[str, Any]] = None) -> Dict[s
         "brandKitCompleted": False,
         "googleAdsConnected": False,
         "metaAdsConnected": False,
+        "purchasedImageCredits": max(0, _safe_int(user_doc.get("purchasedImageCredits"))),
+        "purchasedVideoCredits": max(0, _safe_int(user_doc.get("purchasedVideoCredits"))),
+        "hasPurchasedCredits": bool(_safe_int(user_doc.get("purchasedImageCredits")) or _safe_int(user_doc.get("purchasedVideoCredits"))),
+        "creditUsage": {},
         "counters": {},
         "featureAccessAttempts": {},
         "completedActions": [],
@@ -47,11 +90,25 @@ def _base_profile(uid: str, user_doc: Optional[Dict[str, Any]] = None) -> Dict[s
 def get_or_create_profile(db, uid: str) -> Dict[str, Any]:
     ref = _profile_ref(db, uid)
     snap = ref.get()
-    if snap.exists:
-        return snap.to_dict() or {}
-
     user_doc = db.collection("users").document(uid).get().to_dict() or {}
+    tier, _status = get_tier_and_status(user_doc)
+    credit_state = _credit_usage_state(db, uid, tier or "free", user_doc)
+
+    if snap.exists:
+        profile = snap.to_dict() or {}
+        changed = any(profile.get(key) != value for key, value in credit_state.items())
+        if changed:
+            profile.update(credit_state)
+            profile["updatedAt"] = int(time.time())
+            profile["nextBestAction"] = choose_next_best_action(profile)
+            profile["recommendations"] = build_recommendation_list(profile)
+            ref.set(profile, merge=True)
+        return profile
+
     profile = _base_profile(uid, user_doc)
+    profile.update(credit_state)
+    profile["nextBestAction"] = choose_next_best_action(profile)
+    profile["recommendations"] = build_recommendation_list(profile)
     ref.set(profile)
     return profile
 
@@ -76,6 +133,7 @@ def apply_event_to_profile(
 
     profile["tier"] = tier or profile.get("tier") or "free"
     profile["subscriptionStatus"] = status or profile.get("subscriptionStatus") or "inactive"
+    profile.update(_credit_usage_state(db, uid, profile["tier"], user_doc))
 
     counters = dict(profile.get("counters") or {})
     attempts = dict(profile.get("featureAccessAttempts") or {})
@@ -109,6 +167,8 @@ def apply_event_to_profile(
     elif event_name == "usage.limit_reached":
         resource = str(metadata.get("resource") or "unknown").strip()
         counters = _increment_nested(counters, f"limitReached.{resource}")
+    elif event_name == "credit_pack.purchased":
+        counters = _increment_nested(counters, "creditPackPurchases")
     elif event_name in {"subscription.activated", "subscription.plan_changed", "subscription.upgraded"}:
         profile["subscriptionStatus"] = str(metadata.get("status") or "active")
         if metadata.get("tier"):
@@ -160,6 +220,7 @@ def rebuild_profile(db, uid: str) -> Dict[str, Any]:
     tier, status = get_tier_and_status(user_doc)
     profile["tier"] = tier or "free"
     profile["subscriptionStatus"] = status or "inactive"
+    profile.update(_credit_usage_state(db, uid, profile["tier"], user_doc))
 
     score = calculate_scores(profile)
     profile["activationScore"] = score.activation_score

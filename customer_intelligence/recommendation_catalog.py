@@ -4,6 +4,38 @@ from typing import Any, Dict
 
 
 RECOMMENDATIONS: Dict[str, Dict[str, Any]] = {
+    "buy_image_credits": {
+        "title": "Keep creating with image credits",
+        "body": "Your included image allowance is used. Buy a one-time image credit pack to keep creating without changing your plan, or upgrade for recurring monthly capacity.",
+        "actionLabel": "View image credit options",
+        "actionPath": "/account",
+        "category": "credits",
+        "priority": 110,
+    },
+    "buy_video_credits": {
+        "title": "Keep creating with video credits",
+        "body": "Your included video allowance is used. Buy a one-time video credit pack to keep generating, or upgrade for recurring monthly capacity and additional features.",
+        "actionLabel": "View video credit options",
+        "actionPath": "/account",
+        "category": "credits",
+        "priority": 110,
+    },
+    "use_purchased_image_credits": {
+        "title": "Your purchased image credits are ready",
+        "body": "Your included image allowance is used, but you still have purchased image credits available. Purchased credits never expire.",
+        "actionLabel": "Create an image",
+        "actionPath": "/adgenerator",
+        "category": "credits",
+        "priority": 112,
+    },
+    "use_purchased_video_credits": {
+        "title": "Your purchased video credits are ready",
+        "body": "Your included video allowance is used, but you still have purchased video credits available. Purchased credits never expire.",
+        "actionLabel": "Create a video",
+        "actionPath": "/video-ads",
+        "category": "credits",
+        "priority": 112,
+    },
     "create_first_creative": {
         "title": "Create your first creative",
         "body": "Generate your first campaign-ready image and start building your Library.",

@@ -10,6 +10,9 @@ import StepSection from "../components/ui/StepSection";
 import BrandKitSelector from "../components/BrandKitSelector";
 import GenerationProgress from "../components/GenerationProgress";
 import FeatureTutorial from "../components/FeatureTutorial";
+import { useWorkspace } from "../context/WorkspaceContext";
+import CreditPackModal from "../components/billing/CreditPackModal";
+import { Crown, ShoppingCart } from "lucide-react";
 
 
 const INITIAL_FORM = {
@@ -272,6 +275,7 @@ async function claimFirstGeneration(apiBase, kind, jobId, token) {
 
 function AdGenerator() {
   const navigate = useNavigate();
+  const { refreshWorkspace, usage: workspaceImageUsage } = useWorkspace() || {};
   const referenceInputRef = useRef(null);
   const firstWorkspaceSectionRef = useRef(null);
   const templateSectionRef = useRef(null);
@@ -283,8 +287,42 @@ function AdGenerator() {
   const [hasGeneratedBefore, setHasGeneratedBefore] = useState(false);
   const [usageLoaded, setUsageLoaded] = useState(false);
   const [imageLimitReached, setImageLimitReached] = useState(false);
+  const [purchasedImageCredits, setPurchasedImageCredits] = useState(0);
+  const [creditPacksOpen, setCreditPacksOpen] = useState(false);
   const [imageUsageUsed, setImageUsageUsed] = useState(null);
   const [imageUsageCap, setImageUsageCap] = useState(null);
+
+  // Keep this page's local limit state in sync with the shared workspace usage.
+  // This is especially important after Stripe returns from a credit-pack purchase:
+  // WorkspaceContext confirms the grant, refreshes /usage, and this immediately
+  // removes the limit warning without requiring a browser refresh.
+  useEffect(() => {
+    if (!workspaceImageUsage) return;
+
+    const used = Number(workspaceImageUsage?.used ?? 0);
+    const rawCap = workspaceImageUsage?.cap ?? null;
+    const cap =
+      rawCap === null || rawCap === undefined || rawCap === ""
+        ? null
+        : Number(rawCap);
+    const purchased = Math.max(
+      0,
+      Number(workspaceImageUsage?.purchasedRemaining ?? 0)
+    );
+    const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+
+    setPurchasedImageCredits(purchased);
+    setImageUsageUsed(Number.isFinite(used) ? used : null);
+    setImageUsageCap(hasFiniteCap ? cap : null);
+    setImageLimitReached(
+      Boolean(
+        hasFiniteCap &&
+          Number.isFinite(used) &&
+          used >= cap &&
+          purchased <= 0
+      )
+    );
+  }, [workspaceImageUsage]);
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
@@ -385,14 +423,16 @@ function AdGenerator() {
             ? null
             : Number(rawCap);
         const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
+        const purchased = Math.max(0, Number(data?.purchasedRemaining || 0));
         const exhausted =
           response.ok &&
           hasFiniteCap &&
           Number.isFinite(used) &&
-          used >= cap;
+          used >= cap && purchased <= 0;
         const hasPreviousGeneration =
           response.ok && Number.isFinite(used) && used > 0;
 
+        setPurchasedImageCredits(purchased);
         setImageUsageUsed(Number.isFinite(used) ? used : null);
         setImageUsageCap(hasFiniteCap ? cap : null);
         setImageLimitReached(exhausted);
@@ -728,6 +768,8 @@ function AdGenerator() {
       }
 
       if (statusData.status === "failed") {
+        // A terminal failed job has completed its backend rollback/refund path.
+        void refreshWorkspace?.();
         const detail = statusData.error;
         const error = new Error(
           customerSafeMessage(
@@ -915,6 +957,10 @@ function AdGenerator() {
 
       data = await pollImageJob(data.jobId, token);
 
+      // The backend has confirmed success and finalized the credit deduction.
+      // Refresh shared usage immediately so the sidebar/dashboard stay current.
+      void refreshWorkspace?.();
+
       if (data?.imageJobId) {
         void claimFirstGeneration(apiBase, "image", data.imageJobId, token);
       }
@@ -931,7 +977,8 @@ function AdGenerator() {
         if (
           Number.isFinite(next) &&
           Number.isFinite(imageUsageCap) &&
-          next >= imageUsageCap
+          next >= imageUsageCap &&
+          purchasedImageCredits <= 0
         ) {
           setImageLimitReached(true);
         }
@@ -1077,6 +1124,60 @@ function AdGenerator() {
               </p>
             </div>
           </div>
+
+          {imageLimitReached && (
+            <div className="generatorLimitTop">
+              <div className="generatorUsageLimitCard generatorUsageLimitCardV2" role="alert">
+                <div className="generatorLimitIntro">
+                  <strong>Image generations used</strong>
+                  
+                <p className="generatorLimitSummary">
+                  You've used all available image generations
+                  {Number.isFinite(imageUsageCap)
+                    ? ` (${imageUsageUsed ?? imageUsageCap}/${imageUsageCap})`
+                    : ""}.
+                </p>
+                  <p>
+                    Choose how you want to keep creating. Purchased credits are a one-time add-on and never expire.
+                  </p>
+                </div>
+
+                <div className="generatorLimitChoices">
+                  <button
+                    type="button"
+                    className="generatorLimitChoice generatorLimitChoiceUpgrade"
+                    onClick={() => navigate("/subscribe?upgrade=1")}
+                  >
+                    <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                      <Crown size={20} />
+                    </span>
+                    <span className="generatorLimitChoiceCopy">
+                      <strong>Upgrade your plan</strong>
+                      <small>Get more included credits plus additional ADGen features.</small>
+                    </span>
+                    <span className="generatorLimitChoiceAction">Upgrade Plan</span>
+                  </button>
+
+                  <span className="generatorLimitOr" aria-hidden="true">OR</span>
+
+                  <button
+                    type="button"
+                    className="generatorLimitChoice generatorLimitChoiceCredits"
+                    onClick={() => setCreditPacksOpen(true)}
+                  >
+                    <span className="generatorLimitChoiceIcon" aria-hidden="true">
+                      <ShoppingCart size={20} />
+                    </span>
+                    <span className="generatorLimitChoiceCopy">
+                      <strong>Buy more image credits</strong>
+                      <small>One-time purchase. Credits remain available until you use them.</small>
+                    </span>
+                    <span className="generatorLimitChoiceAction">Buy Image Credits</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {advancedOpen ? (
             <section className="adgen-quick-collapsed" aria-label="Quick Create">
@@ -1345,27 +1446,6 @@ function AdGenerator() {
                     </small>
                   )}
                 </div>
-
-                {imageLimitReached && (
-                  <div className="generatorUsageLimitCard" role="alert">
-                    <div>
-                      <strong>Image generations used</strong>
-                      <p>
-                        You've used all available image generations
-                        {Number.isFinite(imageUsageCap)
-                          ? ` (${imageUsageUsed ?? imageUsageCap}/${imageUsageCap})`
-                          : ""}.
-                        Upgrade to continue creating ads.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/subscribe?upgrade=1")}
-                    >
-                      Upgrade to Continue
-                    </button>
-                  </div>
-                )}
 
                 <button
                   type="submit"
@@ -2026,30 +2106,6 @@ function AdGenerator() {
                 </div>
               </div>
             </StepSection>
-            
-            
-
-            
-
-            
-
-
-            {imageLimitReached && (
-              <div className="generatorUsageLimitCard" role="alert">
-                <div>
-                  <strong>Image generations used</strong>
-                  <p>
-                    Upgrade your plan to continue creating image ads.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/subscribe?upgrade=1")}
-                >
-                  Upgrade to Continue
-                </button>
-              </div>
-            )}
 
             <div className="button-row">
               <button type="submit" disabled={loading || referenceUploading || imageLimitReached}>
@@ -2154,6 +2210,7 @@ function AdGenerator() {
         percent={progress.percent}
         failed={progress.failed}
       />
+      <CreditPackModal open={creditPacksOpen} onClose={() => setCreditPacksOpen(false)} />
     </div>
   );
 }

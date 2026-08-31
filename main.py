@@ -787,6 +787,8 @@ def rollback_reserved_usage_with_logging(
             resource,
             period_key,
             amount,
+            plan_amount=reservation.get("planCharged"),
+            purchased_amount=int(reservation.get("purchasedCharged") or 0),
         )
 
         print(

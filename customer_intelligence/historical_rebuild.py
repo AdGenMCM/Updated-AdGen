@@ -197,6 +197,8 @@ def collect_historical_snapshot(db, uid: str) -> Dict[str, Any]:
         "brandKitCount": len(brand_kits),
         "googleAdsConnected": google_connected,
         "metaAdsConnected": meta_connected,
+        "purchasedImageCredits": max(0, _safe_int(user_doc.get("purchasedImageCredits"))),
+        "purchasedVideoCredits": max(0, _safe_int(user_doc.get("purchasedVideoCredits"))),
         "latestHistoricalActivityAt": _latest_timestamp(all_activity),
         "sourceCounts": {
             "imageJobs": len(generated_images),
@@ -240,10 +242,13 @@ def rebuild_profile_from_history(db, uid: str) -> Dict[str, Any]:
         "brandKitPercent": int(snapshot["brandKitPercent"]),
         "googleAdsConnected": bool(snapshot["googleAdsConnected"]),
         "metaAdsConnected": bool(snapshot["metaAdsConnected"]),
+        "purchasedImageCredits": int(snapshot.get("purchasedImageCredits") or 0),
+        "purchasedVideoCredits": int(snapshot.get("purchasedVideoCredits") or 0),
+        "hasPurchasedCredits": bool(snapshot.get("purchasedImageCredits") or snapshot.get("purchasedVideoCredits")),
         "lastHistoricalActivityAt": snapshot.get("latestHistoricalActivityAt"),
         "historyRebuild": {
             "completedAt": now,
-            "version": 1,
+            "version": 2,
             "sourceCounts": snapshot["sourceCounts"],
             "brandKitCount": snapshot["brandKitCount"],
         },
