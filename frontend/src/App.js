@@ -28,6 +28,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Platform from "./pages/Platform";
 import Examples from "./pages/Examples";
+import RetentionFeedback from "./pages/RetentionFeedback";
 
 import Optimizer from "./pages/Optimizer";
 
@@ -39,6 +40,7 @@ import MarketingLayout from "./components/marketing/layout/MarketingLayout";
 import AdminRoute from "./AdminRoute";
 import AdminUsers from "./pages/AdminUsers";
 import AdminCreative from "./pages/AdminCreative";
+import AdminFeedback from "./pages/AdminFeedback";
 
 // App styling
 import DashboardRoute from "./components/DashboardRoute";
@@ -99,6 +101,7 @@ export default function App() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/feedback/retention" element={<RetentionFeedback />} />
           </Route>
 
           {/* Public utility pages keep the navbar but no site footer */}
@@ -139,6 +142,7 @@ export default function App() {
             <Route element={<DashboardRoute />}>
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/creative" element={<AdminCreative />} />
+              <Route path="/admin/feedback" element={<AdminFeedback />} />
               <Route path="/campaigns" element={<CampaignManager />} />
             </Route>
           </Route>

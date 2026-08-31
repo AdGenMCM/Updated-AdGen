@@ -840,6 +840,95 @@ def render_lifecycle_campaign_email(
 
 
 
+def render_retention_feedback_email(
+    *,
+    first_name: str,
+    option_urls: dict[str, str],
+) -> tuple[str, str]:
+    """Render the one-time activated-user retention feedback email."""
+    name = _safe(first_name or "there", "there")
+    subject = "What stopped you from creating another ad?"
+
+    options = (
+        ("no_need", "I haven't needed another ad yet"),
+        ("results", "The results weren't what I needed"),
+        ("complexity", "It was too complicated"),
+        ("missing_feature", "I couldn't find the feature I needed"),
+        ("pricing", "The plans or pricing didn't work for me"),
+        ("other", "Something else"),
+    )
+
+    option_rows = []
+    for key, label in options:
+        url = _safe(option_urls.get(key), "")
+        if not url:
+            continue
+        option_rows.append(
+            f"""
+            <tr>
+              <td style="padding:0 0 9px;">
+                <a
+                  href="{url}"
+                  target="_blank"
+                  style="
+                    display:block;
+                    padding:13px 15px;
+                    border:1px solid {BORDER};
+                    border-radius:12px;
+                    color:{TEXT};
+                    background:{SURFACE_ALT};
+                    font-size:14px;
+                    font-weight:750;
+                    line-height:1.35;
+                    text-decoration:none;
+                  "
+                >
+                  {_safe(label)}
+                </a>
+              </td>
+            </tr>
+            """
+        )
+
+    body_html = f"""
+      <p style="margin:0 0 14px;">Hi {name},</p>
+      <p style="margin:0 0 14px;">
+        You recently created something with ADGen, and I'm working on making the experience better.
+      </p>
+      <p style="margin:0 0 18px;font-weight:800;color:{TEXT};">
+        What stopped you from coming back to create another ad?
+      </p>
+      <p style="margin:0;color:{MUTED};font-size:13px;line-height:1.6;">
+        Click one answer below. It takes one tap, and it will help me decide what to improve next.
+      </p>
+    """
+
+    supporting_html = f"""
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;">
+        {''.join(option_rows)}
+      </table>
+      <div style="margin-top:22px;color:{MUTED};font-size:14px;line-height:1.65;">
+        Even one answer is useful. You can also leave an optional note after choosing.<br /><br />
+        Thanks,<br />
+        <strong style="color:{TEXT};">Matthew</strong><br />
+        Founder, ADGen
+      </div>
+    """
+
+    html = render_base_email(
+        preview_text="One quick question about your ADGen experience.",
+        eyebrow="A quick question",
+        heading="Your feedback would help shape what I improve next.",
+        body_html=body_html,
+        footer_note=(
+            "You are receiving this one-time feedback email because you created creative in your ADGen account."
+        ),
+        accent=PURPLE,
+        supporting_html=supporting_html,
+    )
+    return subject, html
+
+
 def render_account_disabled_email(
     *,
     first_name: str,

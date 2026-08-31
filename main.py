@@ -6176,6 +6176,248 @@ def save_generation_feedback(
     return {"ok": True, "feedback": feedback}
 
 
+
+# ---------------- Retention Feedback ----------------
+RETENTION_FEEDBACK_REASONS = {
+    "no_need": "Haven't needed another ad yet",
+    "results": "Results weren't what I needed",
+    "complexity": "Too complicated",
+    "missing_feature": "Couldn't find the feature I needed",
+    "pricing": "Plans/pricing didn't work for me",
+    "other": "Something else",
+}
+
+
+class RetentionFeedbackBody(BaseModel):
+    token: str = Field(min_length=32, max_length=160)
+    reason: Optional[str] = Field(default=None, max_length=40)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+def _retention_feedback_user_snapshot(db, uid: str) -> dict:
+    profile = db.collection("users").document(uid).get().to_dict() or {}
+    stripe_obj = profile.get("stripe") or {}
+
+    display_name = (
+        str(profile.get("fullName") or "").strip()
+        or " ".join(
+            str(value).strip()
+            for value in (profile.get("firstName"), profile.get("lastName"))
+            if value
+        ).strip()
+        or str(profile.get("displayName") or "").strip()
+    )
+
+    email = str(profile.get("email") or "").strip()
+    try:
+        auth_user = admin_auth.get_user(uid)
+        display_name = display_name or str(auth_user.display_name or "").strip()
+        email = email or str(auth_user.email or "").strip()
+    except Exception:
+        pass
+
+    tier_value, helper_status = get_tier_and_status(profile)
+    return {
+        "displayName": display_name or "ADGen user",
+        "email": email,
+        "tier": stripe_obj.get("tier") or profile.get("tier") or tier_value or "unknown",
+        "status": stripe_obj.get("status") or profile.get("subscriptionStatus") or helper_status or "inactive",
+    }
+
+
+@app.post("/feedback/retention")
+def save_retention_feedback(payload: RetentionFeedbackBody):
+    """
+    Record the answer selected from the one-time retention feedback email.
+
+    The email URL contains only a random opaque invite token. No authentication,
+    email address, or user ID is exposed in the link.
+    """
+    db = get_db()
+    token = str(payload.token or "").strip()
+    invite_ref = db.collection("retention_feedback_invites").document(token)
+    invite_snap = invite_ref.get()
+
+    if not invite_snap.exists:
+        raise HTTPException(status_code=404, detail="This feedback link is not valid.")
+
+    invite = invite_snap.to_dict() or {}
+    uid = str(invite.get("uid") or "").strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="This feedback link is incomplete.")
+
+    now = int(time.time())
+    expires_at = _safe_int(invite.get("expiresAt"), 0)
+    if expires_at and now > expires_at:
+        raise HTTPException(status_code=410, detail="This feedback link has expired.")
+
+    reason = str(payload.reason or "").strip().lower()
+    comment = str(payload.comment or "").strip()
+
+    feedback_ref = db.collection("retention_feedback").document(uid)
+    existing_snap = feedback_ref.get()
+    existing = existing_snap.to_dict() or {}
+
+    if reason and reason not in RETENTION_FEEDBACK_REASONS:
+        raise HTTPException(status_code=400, detail="Invalid feedback option.")
+
+    if not reason and not comment:
+        raise HTTPException(status_code=400, detail="Choose an option or leave a comment.")
+
+    if not reason:
+        reason = str(existing.get("reason") or "").strip().lower()
+        if not reason:
+            raise HTTPException(status_code=400, detail="Choose a feedback option first.")
+
+    user = _retention_feedback_user_snapshot(db, uid)
+    created_at = _safe_int(existing.get("createdAt"), now) if existing else now
+
+    record = {
+        "uid": uid,
+        "email": user.get("email") or invite.get("recipient") or "",
+        "displayName": user.get("displayName") or "ADGen user",
+        "tier": str(user.get("tier") or "unknown"),
+        "status": str(user.get("status") or "inactive"),
+        "feedbackType": "retention",
+        "source": "inactive_generation_email",
+        "campaign": "retention_feedback_7d",
+        "reason": reason,
+        "reasonLabel": RETENTION_FEEDBACK_REASONS[reason],
+        "comment": comment if payload.comment is not None else existing.get("comment"),
+        "createdAt": created_at,
+        "updatedAt": now,
+        "inviteCreatedAt": _safe_int(invite.get("createdAt"), 0) or None,
+    }
+
+    feedback_ref.set(record, merge=True)
+    invite_ref.set(
+        {
+            "status": "responded",
+            "selectedReason": reason,
+            "respondedAt": now,
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+
+    try:
+        track_event(
+            db,
+            uid,
+            "feedback.retention_submitted",
+            event_id=f"retention_feedback:{uid}",
+            metadata={
+                "reason": reason,
+                "hasComment": bool(record.get("comment")),
+                "campaign": "retention_feedback_7d",
+            },
+            source="email_engine",
+        )
+    except Exception as exc:
+        print("RETENTION FEEDBACK EVENT ERROR:", repr(exc), flush=True)
+
+    return {
+        "ok": True,
+        "reason": reason,
+        "reasonLabel": RETENTION_FEEDBACK_REASONS[reason],
+        "comment": record.get("comment") or "",
+    }
+
+
+@app.get("/admin/feedback")
+def admin_list_feedback(
+    authorization: str | None = Header(default=None),
+    reason: str = Query(default="all"),
+    q: str = Query(default=""),
+    days: int = Query(default=0, ge=0, le=3650),
+    limit: int = Query(default=250, ge=1, le=500),
+) -> dict[str, Any]:
+    """Return retention feedback responses and an aggregate reason breakdown."""
+    _require_admin_request(authorization)
+    db = get_db()
+
+    reason_norm = str(reason or "all").strip().lower()
+    q_norm = str(q or "").strip().lower()
+    if reason_norm != "all" and reason_norm not in RETENTION_FEEDBACK_REASONS:
+        raise HTTPException(status_code=400, detail="Invalid feedback reason.")
+
+    cutoff = int(time.time()) - days * 86400 if days else 0
+    rows = []
+
+    try:
+        query_ref = db.collection("retention_feedback").order_by(
+            "updatedAt", direction=gc_firestore.Query.DESCENDING
+        ).limit(500)
+        snapshots = list(query_ref.stream())
+    except Exception:
+        # Older/just-created collections can still be read safely without ordering.
+        snapshots = list(db.collection("retention_feedback").limit(500).stream())
+
+    for snap in snapshots:
+        data = snap.to_dict() or {}
+        updated_at = _safe_int(data.get("updatedAt"), 0)
+        if cutoff and updated_at < cutoff:
+            continue
+        if reason_norm != "all" and str(data.get("reason") or "").lower() != reason_norm:
+            continue
+        if q_norm:
+            haystack = " ".join(
+                str(value or "")
+                for value in (
+                    data.get("displayName"),
+                    data.get("email"),
+                    data.get("uid"),
+                    data.get("reasonLabel"),
+                    data.get("comment"),
+                    data.get("tier"),
+                )
+            ).lower()
+            if q_norm not in haystack:
+                continue
+        rows.append({"id": snap.id, **data})
+        if len(rows) >= limit:
+            break
+
+    # Summary intentionally uses all retention responses, independent of the
+    # current table filter, so the admin always sees the true distribution.
+    summary_counts = {key: 0 for key in RETENTION_FEEDBACK_REASONS}
+    total_responses = 0
+    comments = 0
+    try:
+        all_snaps = db.collection("retention_feedback").limit(1000).stream()
+        for snap in all_snaps:
+            data = snap.to_dict() or {}
+            response_reason = str(data.get("reason") or "").lower()
+            if response_reason in summary_counts:
+                summary_counts[response_reason] += 1
+                total_responses += 1
+            if str(data.get("comment") or "").strip():
+                comments += 1
+    except Exception:
+        pass
+
+    breakdown = [
+        {
+            "reason": key,
+            "label": label,
+            "count": summary_counts[key],
+            "percent": round((summary_counts[key] / total_responses) * 100) if total_responses else 0,
+        }
+        for key, label in RETENTION_FEEDBACK_REASONS.items()
+    ]
+
+    return {
+        "items": rows,
+        "count": len(rows),
+        "summary": {
+            "totalResponses": total_responses,
+            "withComments": comments,
+            "breakdown": breakdown,
+        },
+        "filters": {"reason": reason_norm, "q": q or "", "days": days},
+    }
+
+
 # ---------------- Admin Creative Manager ----------------
 def _admin_creative_user(db, uid: str, cache: dict[str, dict[str, Any]]) -> dict[str, Any]:
     if not uid:

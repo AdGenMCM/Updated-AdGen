@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import uuid
+from urllib.parse import urlencode
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -19,6 +21,7 @@ from .lifecycle_config import get_lifecycle_settings
 from .templates import (
     render_account_disabled_email,
     render_lifecycle_campaign_email,
+    render_retention_feedback_email,
 )
 
 SUCCESS = {"succeeded", "completed", "success"}
@@ -60,6 +63,60 @@ def _query_exists(collection: str, uid: str, *, succeeded: bool = False) -> bool
         if not succeeded or str(data.get("status") or "").lower() in SUCCESS:
             return True
     return False
+
+
+
+def _successful_generation_times(uid: str) -> list[int]:
+    """Return successful image/video generation timestamps for retention timing."""
+    timestamps: list[int] = []
+    db = get_db()
+    for collection in ("image_jobs", "video_jobs"):
+        query = db.collection(collection).where("uid", "==", uid).limit(500)
+        for snap in query.stream():
+            data = snap.to_dict() or {}
+            if str(data.get("status") or "").lower() not in SUCCESS:
+                continue
+            created_at = _unix(data.get("createdAt"))
+            if created_at:
+                timestamps.append(created_at)
+    return timestamps
+
+
+def _retention_feedback_submitted(uid: str) -> bool:
+    snap = get_db().collection("retention_feedback").document(uid).get()
+    if not snap.exists:
+        return False
+    data = snap.to_dict() or {}
+    return bool(data.get("reason"))
+
+
+def _retention_feedback_email_sent(uid: str) -> bool:
+    # Keep eligibility from repeatedly choosing a campaign whose idempotent
+    # delivery already succeeded.
+    query = get_db().collection(EMAIL_DELIVERIES_COLLECTION).where("uid", "==", uid)
+    for snap in query.stream():
+        data = snap.to_dict() or {}
+        if data.get("emailKey") != "lifecycle:retention_feedback_7d:once":
+            continue
+        if data.get("status") == "sent":
+            return True
+    return False
+
+
+def _create_retention_feedback_invite(uid: str, recipient: str) -> str:
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    now = int(time.time())
+    get_db().collection("retention_feedback_invites").document(token).set(
+        {
+            "uid": uid,
+            "recipient": recipient,
+            "campaign": "retention_feedback_7d",
+            "status": "active",
+            "createdAt": now,
+            "expiresAt": now + (90 * 86400),
+        }
+    )
+    return token
 
 
 def _brand_kit_exists(uid: str) -> bool:
@@ -263,11 +320,38 @@ def evaluate_user(uid: str, user_doc: dict, *, now: Optional[int] = None) -> lis
             period = str(image_state.get("periodKey") or "current")
             candidates.append(Candidate(upgrade_key, "upgrade", "Keep creating without interruption", "You're close to or at your current image allowance. Compare plans for more creative capacity and additional ADGen features.", "Compare plans", "/subscribe?upgrade=1", 130, f"{period}:{threshold}"))
 
+    # One-time retention research for users who have actually created.
+    # This is based on successful generation activity rather than sign-in activity,
+    # because a user who logs in but does not create is still valuable retention feedback.
+    generation_times = _successful_generation_times(uid)
+    if (
+        settings.campaigns.get("retention_feedback_7d", False)
+        and generation_times
+        and now - max(generation_times) >= 7 * 86400
+        and not _retention_feedback_submitted(uid)
+        and not _retention_feedback_email_sent(uid)
+    ):
+        candidates.append(
+            Candidate(
+                "retention_feedback_7d",
+                "feedback",
+                "What stopped you from creating another ad?",
+                "You recently created something with ADGen. One quick answer would help us understand what prevented another creative session.",
+                "Share feedback",
+                "/feedback/retention",
+                160,
+                "once",
+            )
+        )
+
     if settings.reengagement_enabled:
         last_seen = _last_sign_in(uid, created)
         inactive_days = max(0, int((now - last_seen) / 86400))
+        retention_pending = any(item.key == "retention_feedback_7d" for item in candidates)
         for days in (90, 45, 21, 7):
             key = f"inactive_{days}_days"
+            if days == 7 and retention_pending:
+                continue
             if inactive_days >= days and settings.campaigns.get(key, False):
                 candidates.append(Candidate(key, "reengagement", "Your ADGen workspace is ready when you are", "Return to your creative workspace and continue building campaign-ready images, videos, and copy with the features included in your plan.", "Return to ADGen", "/dashboard", 20 + days, "once"))
                 break
@@ -282,15 +366,27 @@ def send_candidate(uid: str, recipient: str, display_name: str, tier: str, candi
         if not allowed:
             return {"sent": False, "skipped": True, "reason": reason, "campaign": candidate.key}
     config = get_email_config()
-    subject, html = render_lifecycle_campaign_email(
-        campaign_key=candidate.key,
-        first_name=_first_name(display_name, recipient),
-        title=candidate.title,
-        body=candidate.body,
-        cta_label=candidate.cta_label,
-        cta_url=f"{config.app_url}{candidate.path}",
-        tier=tier,
-    )
+    invite_token = None
+    if candidate.key == "retention_feedback_7d" and not test_mode:
+        invite_token = _create_retention_feedback_invite(uid, recipient)
+        option_urls = {}
+        for reason in ("no_need", "results", "complexity", "missing_feature", "pricing", "other"):
+            query = urlencode({"token": invite_token, "reason": reason})
+            option_urls[reason] = f"{config.app_url}/feedback/retention?{query}"
+        subject, html = render_retention_feedback_email(
+            first_name=_first_name(display_name, recipient),
+            option_urls=option_urls,
+        )
+    else:
+        subject, html = render_lifecycle_campaign_email(
+            campaign_key=candidate.key,
+            first_name=_first_name(display_name, recipient),
+            title=candidate.title,
+            body=candidate.body,
+            cta_label=candidate.cta_label,
+            cta_url=f"{config.app_url}{candidate.path}",
+            tier=tier,
+        )
     email_key = f"lifecycle:{candidate.key}:{candidate.idempotency_suffix}"
     if test_mode:
         email_key = f"test:{email_key}:{now}"

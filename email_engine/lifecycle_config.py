@@ -53,6 +53,7 @@ def get_lifecycle_settings() -> LifecycleSettings:
         "trial_upgrade": True,
         "starter_upgrade": True,
         "pro_upgrade": True,
+        "retention_feedback_7d": True,
         "inactive_7_days": True,
         "inactive_21_days": True,
         "inactive_45_days": True,

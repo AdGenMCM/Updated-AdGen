@@ -52,6 +52,7 @@ import {
   Menu,
   CheckCheck,
   Images,
+  MessageSquareText,
 } from "lucide-react";
 
 import "../styles/dashboard-layout.css";
@@ -227,6 +228,11 @@ export default function DashboardLayout({ children }) {
                 to: "/admin/creative",
                 label: "Creative Manager",
                 icon: Images,
+              },
+              {
+                to: "/admin/feedback",
+                label: "Feedback",
+                icon: MessageSquareText,
               },
             ]
           : []),
