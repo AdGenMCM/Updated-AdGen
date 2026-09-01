@@ -3514,3 +3514,395 @@
     margin-bottom: 22px;
   }
 }
+
+
+/* ADGen commercial finishing V2 */
+.videoQuickFinishing,.videoQuickOverlayEditor{margin-top:18px;padding:18px;border:1px solid rgba(139,92,246,.24);border-radius:16px;background:rgba(124,58,237,.045)}
+.videoQuickFinishingHead{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}.videoQuickFinishingHead span{color:var(--ag-muted);font-size:.74rem}
+.videoQuickFinishingGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.videoQuickFinishingGrid label{display:grid;grid-template-columns:auto 1fr;gap:9px;padding:12px;border:1px solid var(--ag-border);border-radius:13px;background:rgba(255,255,255,.03)}.videoQuickFinishingGrid label span{display:grid;gap:3px}.videoQuickFinishingGrid small,.videoQuickOverlayRule{color:var(--ag-muted);font-size:.68rem;line-height:1.4}
+.videoQuickOverlayInputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.videoQuickOverlayInputs label{display:grid;gap:6px}.videoQuickOverlayInputs label>span{font-size:.72rem;font-weight:850}.videoQuickOverlayInputs input{width:100%;box-sizing:border-box}.videoQuickOverlayInputs small{text-align:right;color:var(--ag-muted);font-size:.66rem}.videoQuickOverlayRule{display:block;margin-top:10px}
+@media(max-width:900px){.videoQuickFinishingGrid,.videoQuickOverlayInputs{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   QUICK CLIP — finishing / enhancement layout polish
+   2026-08-31
+========================================================= */
+
+/* Make the option area feel like one cohesive control surface. */
+.videoAds .videoEnhancementGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 4px;
+  margin-bottom: 20px;
+}
+
+/* All enhancement cards share the same visual height/rhythm. */
+.videoAds .videoEnhancementGrid > .videoEnhancementCard {
+  min-height: 104px;
+  height: 100%;
+  padding: 17px 18px;
+  border-radius: 17px;
+  box-sizing: border-box;
+  align-self: stretch;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+}
+
+/* Give selected finishing cards the same emphasis as the rest of ADGen. */
+.videoAds .videoEnhancementGrid > .videoEnhancementCard.enabled {
+  border-color: rgba(139, 92, 246, 0.55);
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.13), rgba(79, 70, 229, 0.045)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+/* Keep every toggle aligned cleanly at the top-left. */
+.videoAds .videoEnhancementCard .videoToggle {
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.videoAds .videoEnhancementCard .videoToggle > input {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 2px 0 0;
+}
+
+.videoAds .videoEnhancementCard .videoToggleCopy {
+  min-width: 0;
+  width: 100%;
+  gap: 5px !important;
+}
+
+.videoAds .videoEnhancementCard .videoToggleTitle {
+  width: 100% !important;
+  min-width: 0;
+  white-space: normal !important;
+  line-height: 1.25;
+  font-size: .9rem;
+}
+
+.videoAds .videoEnhancementCard .videoToggle small {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  line-height: 1.42;
+}
+
+/* PI should not become a giant vertical card in this compact control grid. */
+.videoAds .videoEnhancementGrid .videoIntelligenceCard {
+  min-height: 104px;
+  height: auto;
+  gap: 10px !important;
+}
+
+.videoAds .videoEnhancementGrid .videoIntelligenceCard > .pi-preview {
+  margin-top: 4px;
+}
+
+.videoAds .videoEnhancementGrid .videoIntelligenceCard .pi-preview button,
+.videoAds .videoEnhancementGrid .videoIntelligenceCard .pi-preview summary {
+  min-height: 36px;
+}
+
+/* Brand Kit and PI stay visually aligned with the finishing controls. */
+.videoAds .videoEnhancementGrid > .videoEnhancementCard:not(.videoIntelligenceCard) {
+  align-self: stretch !important;
+}
+
+/* Overlay editor becomes a compact sub-panel directly connected to Text Overlays. */
+.videoQuickOverlayEditor {
+  margin: 4px 0 24px;
+  padding: 18px 20px;
+  border: 1px solid rgba(139, 92, 246, 0.34);
+  border-radius: 17px;
+  background:
+    linear-gradient(180deg, rgba(124,58,237,.055), rgba(124,58,237,.025)),
+    rgba(11, 16, 30, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
+}
+
+.videoQuickOverlayEditor .videoQuickFinishingHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.videoQuickOverlayEditor .videoQuickFinishingHead strong {
+  color: var(--ag-text);
+  font-size: .92rem;
+  letter-spacing: -.01em;
+}
+
+.videoQuickOverlayEditor .videoQuickFinishingHead span {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  white-space: nowrap;
+}
+
+/* Only render the number of message inputs the selected duration allows,
+   and let them fill the available width instead of leaving empty thirds. */
+.videoQuickOverlayEditor .videoQuickOverlayInputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 0;
+}
+
+.videoQuickOverlayEditor .videoQuickOverlayInputs > label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.videoQuickOverlayEditor .videoQuickOverlayInputs > label > span {
+  color: var(--ag-text-soft);
+  font-size: .73rem;
+  font-weight: 900;
+}
+
+.videoQuickOverlayEditor .videoQuickOverlayInputs input {
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.045);
+}
+
+.videoQuickOverlayEditor .videoQuickOverlayInputs small {
+  justify-self: end;
+  margin-top: -2px;
+  color: var(--ag-muted);
+  font-size: .66rem;
+}
+
+/* 10-second mode can show 3 messages without the third looking orphaned. */
+.videoQuickOverlayEditor .videoQuickOverlayInputs > label:nth-child(3):last-child {
+  grid-column: 1 / -1;
+}
+
+/* Clearer disabled-state treatment. */
+.videoAds .videoEnhancementCard.videoEnhancementDisabled,
+.videoAds .videoEnhancementCard:has(input:disabled) {
+  opacity: .56;
+  background: rgba(255,255,255,.022);
+}
+
+.videoAds .videoEnhancementCard:has(input:disabled) .videoToggleTitle {
+  color: var(--ag-text-soft);
+}
+
+/* Keep the controls visually close to the Voice / Duration / Format block. */
+.videoAds .videoSettingsGrid + .videoEnhancementGrid,
+.videoAds .videoEnhancementGrid {
+  margin-top: 18px;
+}
+
+/* Desktop: 3 + 2 arrangement, with the second row centered visually. */
+@media (min-width: 1101px) {
+  .videoAds .videoEnhancementGrid > .videoEnhancementCard:nth-child(4) {
+    grid-column: 1 / 2;
+  }
+
+  .videoAds .videoEnhancementGrid > .videoEnhancementCard:nth-child(5) {
+    grid-column: 2 / 3;
+  }
+}
+
+/* Tablet: two balanced columns. */
+@media (max-width: 1100px) {
+  .videoAds .videoEnhancementGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile: single column; editor header and message fields stack naturally. */
+@media (max-width: 700px) {
+  .videoAds .videoEnhancementGrid,
+  .videoQuickOverlayEditor .videoQuickOverlayInputs {
+    grid-template-columns: 1fr;
+  }
+
+  .videoQuickOverlayEditor .videoQuickOverlayInputs > label:nth-child(3):last-child {
+    grid-column: auto;
+  }
+
+  .videoQuickOverlayEditor .videoQuickFinishingHead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .videoQuickOverlayEditor .videoQuickFinishingHead span {
+    white-space: normal;
+  }
+}
+
+
+/* =========================================================
+   Unified Quick Clip — Creative + Optional Reference Image
+   ========================================================= */
+
+.videoAds .videoCreativeScrollTarget {
+  scroll-margin-top: 112px;
+}
+
+.videoAds .videoQuickCreativeIdentity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.videoAds .videoQuickCreativeIdentity .field {
+  min-width: 0;
+}
+
+.videoAds .videoCreativeScrollTarget .videoSectionHeading.videoModeHeading {
+  margin-top: 34px;
+  margin-bottom: 20px;
+  padding-top: 28px;
+  border-top: 1px solid var(--ag-border);
+}
+
+.videoAds .videoCreativeScrollTarget .videoSectionHeading.videoModeHeading h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.015em;
+}
+
+.videoAds .videoCreativeScrollTarget .videoSectionHeading.videoModeHeading p {
+  max-width: 760px;
+  margin-top: 8px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.videoAds .videoCreativeScrollTarget .dropzone {
+  margin: 0 0 22px;
+  padding: 26px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.videoAds .videoCreativeScrollTarget .dropzone:hover {
+  border-color: rgba(139, 92, 246, 0.42);
+  background: rgba(124, 58, 237, 0.055);
+}
+
+.videoAds .videoCreativeScrollTarget .dropzone.dragOver {
+  border-color: rgba(139, 92, 246, 0.72);
+  background: rgba(124, 58, 237, 0.11);
+  transform: translateY(-1px);
+}
+
+.videoAds .videoCreativeScrollTarget .dropzoneInner {
+  display: grid;
+  gap: 7px;
+  min-height: 72px;
+  align-content: center;
+  text-align: center;
+}
+
+.videoAds .videoCreativeScrollTarget .previewWrap {
+  min-width: 0;
+}
+
+.videoAds .videoCreativeScrollTarget .previewMeta {
+  min-width: 0;
+  flex: 1;
+}
+
+.videoAds .videoCreativeScrollTarget .previewName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoAds .videoCreativeScrollTarget .uploadTip {
+  margin: 0 0 22px;
+}
+
+.videoAds .videoCreativeScrollTarget .uploadTip strong {
+  color: #ddd6fe;
+}
+
+.videoAds .videoCreativeScrollTarget .videoQuickOptional {
+  margin-left: 4px;
+}
+
+.videoAds .videoQuickFinalAction {
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.videoAds .videoQuickFinalAction .primary {
+  margin-top: 0;
+  min-height: 54px;
+  font-size: 1.02rem;
+}
+
+.videoAds .videoQuickFinalAction .hint {
+  margin-top: 9px !important;
+  text-align: center;
+}
+
+/* Keep the Creative -> Settings transition aligned with the fixed app header. */
+.videoAds .video-settings-scroll-target {
+  scroll-margin-top: 112px;
+}
+
+@media (max-width: 900px) {
+  .videoAds .videoQuickCreativeIdentity {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .videoAds .videoCreativeScrollTarget .dropzone {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 700px) {
+  .videoAds .videoCreativeScrollTarget {
+    scroll-margin-top: 92px;
+  }
+
+  .videoAds .videoQuickCreativeIdentity {
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .videoAds .videoCreativeScrollTarget .videoSectionHeading.videoModeHeading {
+    margin-top: 28px;
+    padding-top: 24px;
+  }
+
+  .videoAds .videoCreativeScrollTarget .dropzone {
+    padding: 20px;
+  }
+
+  .videoAds .videoCreativeScrollTarget .previewImg {
+    width: 92px;
+    height: 92px;
+  }
+
+  .videoAds .videoQuickFinalAction {
+    margin-top: 24px;
+    padding-top: 22px;
+  }
+}

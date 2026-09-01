@@ -17,6 +17,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
+from google.cloud import firestore
 
 from auth_helpers import get_db, require_user
 from admin_guard import is_admin
@@ -28,6 +29,8 @@ from video_safety import (
     require_no_active_video_job,
     enforce_user_submission_window,
     rollback_user_submission_window,
+    moderate_generated_display_text,
+    moderate_user_display_text,
 )
 from storage_utils import upload_bytes_to_firebase_storage_with_metadata
 from storage_tracking import ensure_storage_available, register_storage_asset
@@ -36,6 +39,21 @@ from performance_intelligence.service import generation_profile as get_intellige
 from video_jobs import compile_video_brand_direction, compact_video_intelligence
 
 router = APIRouter(prefix="/video-v2", tags=["video-v2"])
+
+# Keep strong references to post-processing tasks. Firestore remains the
+# canonical status/progress state read by the frontend.
+_FULL_FINISH_TASKS: Dict[str, asyncio.Task] = {}
+_QUICK_FINISH_TASKS: Dict[str, asyncio.Task] = {}
+
+# A claim prevents two rapid polls or two workers from starting the same
+# post-processing pipeline. If a worker dies unexpectedly, the claim becomes
+# reclaimable after this TTL.
+_FINISH_CLAIM_TTL_SECONDS = 15 * 60
+
+# FFmpeg should never be able to hold a generation open indefinitely.
+# These limits are intentionally generous for short ad clips.
+_FFMPEG_AUDIO_TIMEOUT_SECONDS = 45
+_FFMPEG_FINISH_TIMEOUT_SECONDS = 60
 
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 OPENAI_TEXT_MODEL = (os.getenv("OPENAI_TEXT_MODEL") or "gpt-5.5").strip()
@@ -47,12 +65,16 @@ FAL_KLING_T2V = (os.getenv("FAL_KLING_T2V_MODEL") or "fal-ai/kling-video/v3/pro/
 FULL_AD_CREDITS = {10: 3, 15: 4}
 FULL_LAYOUTS = {10: [3, 3, 4], 15: [4, 4, 4, 3]}
 QUICK_CREDITS = {6: 1, 10: 2}
+OVERLAY_MAX_CHARS = 42
+QUICK_OVERLAY_LIMITS = {6: 2, 10: 3}
 NEGATIVE_PROMPT = (
     "extra fingers, malformed hands, fused fingers, missing fingers, distorted hands, "
     "deformed face, warped mouth, duplicate limbs, exaggerated facial expressions, excessive gestures, "
     "unnatural head movement, head bobbing, jitter, flicker, blur, low quality, "
-    "unreadable product label, altered logo, misspelled brand name, invented label text, pseudo-text, "
-    "redesigned packaging, changed bottle geometry, substituted product, warped typography"
+    "unreadable product label, altered logo, misspelled brand name, misspelled product name, invented label text, pseudo-text, "
+    "gibberish text, random letters, fake ingredients, extra packaging copy, translated brand text, inconsistent spelling between frames, "
+    "incorrect accents, changed capitalization, changing letters, unstable typography, letter morphing, text flicker, text shimmer, "
+    "redesigned packaging, changed bottle geometry, substituted product, warped typography, label morphing, label redraw"
 )
 
 # Voice names remain stable in the UI. Character Dialogue is generated natively by
@@ -81,7 +103,7 @@ RATIO_TO_KLING = {
 }
 
 CAMPAIGN_STRUCTURES = {
-    "product": ["Hook", "Product", "Demo", "CTA"],
+    "product": ["Macro Reveal", "Product Detail", "Interaction / Benefit", "Hero / CTA"],
     "service": ["Hook", "Problem", "Service", "CTA"],
     "software": ["Hook", "Problem", "Interface", "CTA"],
     "real_estate": ["Hook", "Property", "Feature", "CTA"],
@@ -105,6 +127,7 @@ class StoryboardScene(BaseModel):
     performanceMode: Literal["speaking", "silent", "no_person"] = "no_person"
     performanceBeat: Optional[str] = Field(default=None, max_length=420)
     caption: Optional[str] = Field(default=None, max_length=120)
+    overlayText: Optional[str] = Field(default=None, max_length=OVERLAY_MAX_CHARS)
 
 
 class Storyboard(BaseModel):
@@ -140,6 +163,7 @@ class FullAdBrief(BaseModel):
     characterGender: Literal["female", "male"] = "female"
     musicAndEffects: bool = True
     captions: bool = True
+    textOverlays: bool = False
     endCard: bool = True
 
 
@@ -175,6 +199,7 @@ class AudioConfig(BaseModel):
 
 class StartImageVideoRequest(BaseModel):
     companyName: Optional[str] = Field(default=None, max_length=120)
+    productName: Optional[str] = Field(default=None, max_length=120)
     promptImageUrl: str
     duration: Literal[6, 10]
     ratio: str = "720:1280"
@@ -190,6 +215,9 @@ class StartImageVideoRequest(BaseModel):
     winnerProfile: Optional[Dict[str, Any]] = None
     winnersApply: Optional[List[str]] = None
     winnersInfluence: Optional[float] = 0.5
+    textOverlays: bool = False
+    overlayMessages: List[str] = Field(default_factory=list, max_length=3)
+    ctaFinish: bool = True
 
 class StartPromptVideoRequest(BaseModel):
     companyName: Optional[str] = Field(default=None, max_length=120)
@@ -222,6 +250,9 @@ class StartPromptVideoRequest(BaseModel):
     winnerProfile: Optional[Dict[str, Any]] = None
     winnersApply: Optional[List[str]] = None
     winnersInfluence: Optional[float] = 0.5
+    textOverlays: bool = False
+    overlayMessages: List[str] = Field(default_factory=list, max_length=3)
+    ctaFinish: bool = True
 
 class StartVideoResponse(BaseModel):
     jobId: str
@@ -242,6 +273,142 @@ class VideoStatusResponse(BaseModel):
 class TTSPreviewRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
     presetVoice: Optional[str] = "Leslie"
+
+
+def _timing_log(kind: str, job_id: str, stage: str, started_at: float) -> None:
+    elapsed = max(0.0, time.perf_counter() - started_at)
+    print(
+        f"[Video V2 Timing] {kind} {job_id} · {stage}: {elapsed:.2f}s",
+        flush=True,
+    )
+
+
+def _claim_finish_job(
+    ref,
+    *,
+    stage_field: str,
+    terminal_statuses: set[str],
+) -> Optional[str]:
+    claim_id = uuid.uuid4().hex
+    now = int(time.time())
+    transaction = ref._client.transaction()
+
+    @firestore.transactional
+    def _claim(transaction):
+        snap = ref.get(transaction=transaction)
+        if not snap.exists:
+            return None
+
+        job = snap.to_dict() or {}
+        status = str(job.get("status") or "")
+        if status in terminal_statuses or job.get("finalVideoUrl"):
+            return None
+
+        existing_claim = str(job.get("finishingClaimId") or "").strip()
+        claimed_at = int(job.get("finishingClaimedAt") or 0)
+        claim_is_fresh = (
+            existing_claim
+            and claimed_at > 0
+            and (now - claimed_at) < _FINISH_CLAIM_TTL_SECONDS
+        )
+        if claim_is_fresh:
+            return None
+
+        transaction.update(
+            ref,
+            {
+                "finishingClaimId": claim_id,
+                "finishingClaimedAt": now,
+                "finishingWorkerStage": str(job.get(stage_field) or ""),
+                "updatedAt": now,
+            },
+        )
+        return claim_id
+
+    return _claim(transaction)
+
+
+def _release_finish_claim(ref, claim_id: Optional[str]) -> None:
+    if not claim_id:
+        return
+
+    transaction = ref._client.transaction()
+
+    @firestore.transactional
+    def _release(transaction):
+        snap = ref.get(transaction=transaction)
+        if not snap.exists:
+            return
+        job = snap.to_dict() or {}
+        if str(job.get("finishingClaimId") or "") != str(claim_id):
+            return
+        transaction.update(
+            ref,
+            {
+                "finishingClaimId": firestore.DELETE_FIELD,
+                "finishingClaimedAt": firestore.DELETE_FIELD,
+                "finishingWorkerStage": firestore.DELETE_FIELD,
+                "updatedAt": int(time.time()),
+            },
+        )
+
+    try:
+        _release(transaction)
+    except Exception as exc:
+        print("[Video V2 Finish Claim Release Warning]", repr(exc), flush=True)
+
+
+async def _cancel_video_v2_finish_tasks() -> None:
+    tasks = [
+        task
+        for task in [*_FULL_FINISH_TASKS.values(), *_QUICK_FINISH_TASKS.values()]
+        if task and not task.done()
+    ]
+    if not tasks:
+        return
+
+    print(
+        f"[Video V2 Shutdown] Canceling {len(tasks)} active finishing task(s).",
+        flush=True,
+    )
+    for task in tasks:
+        task.cancel()
+
+    await asyncio.gather(*tasks, return_exceptions=True)
+    _FULL_FINISH_TASKS.clear()
+    _QUICK_FINISH_TASKS.clear()
+
+
+@router.on_event("shutdown")
+async def _video_v2_shutdown() -> None:
+    # Do not wait for long music/FFmpeg/upload work during code reloads or deploys.
+    # The Firestore claim is released by each canceled runner, and the next
+    # status poll can safely resume finishing from the provider-completed job.
+    await _cancel_video_v2_finish_tasks()
+
+
+def _run_subprocess(
+    cmd: List[str],
+    *,
+    timeout_seconds: int,
+    label: str,
+) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=max(5, int(timeout_seconds)),
+        )
+    except subprocess.TimeoutExpired as exc:
+        print(
+            f"[Video V2 {label} Timeout] exceeded {timeout_seconds}s",
+            flush=True,
+        )
+        raise RuntimeError(
+            f"{label} timed out after {timeout_seconds} seconds."
+        ) from exc
 
 
 def _clean(text: Any, limit: int = 2500) -> str:
@@ -302,7 +469,7 @@ def _brand_and_intel(db, uid:str, user_doc:Dict[str,Any], *, use_brand:bool, bra
         try: brand=compile_video_brand_direction(resolve_brand_kit(db,uid,brand_id,user_doc) or {})
         except Exception as exc: print('[Video V2 Brand Kit]',repr(exc),flush=True)
     if use_intel and (admin or tier in {"pro_monthly","business_monthly"}):
-        try: intel=compact_video_intelligence(get_intelligence_generation_profile(uid) or {}, preserve_source_image=preserve_image, max_chars=650)
+        try: intel=compact_video_intelligence(get_intelligence_generation_profile(uid, mode='video') or {}, preserve_source_image=preserve_image, max_chars=650)
         except Exception as exc: print('[Video V2 PI]',repr(exc),flush=True)
     return _clean(brand,700), _clean(intel,650)
 
@@ -415,6 +582,26 @@ async def _generate_music_bed(brief: Dict[str, Any], storyboard: Dict[str, Any])
     raise RuntimeError('Music generation timed out.')
 
 
+def _is_transient_music_error(exc: Exception) -> bool:
+    message=str(exc or '').lower()
+    return any(token in message for token in (
+        '(502)', '(503)', '(504)', ' 502', ' 503', ' 504',
+        'downstream service unavailable', 'bad gateway',
+        'service unavailable', 'gateway timeout', 'temporarily unavailable',
+    ))
+
+
+async def _generate_music_bed_with_retry(brief: Dict[str, Any], storyboard: Dict[str, Any]) -> bytes:
+    try:
+        return await _generate_music_bed(brief, storyboard)
+    except Exception as exc:
+        if not _is_transient_music_error(exc):
+            raise
+        print(f'[Video V2 Music Retry] Temporary music-service error; retrying once in 4 seconds: {exc!r}', flush=True)
+        await asyncio.sleep(4.0)
+        return await _generate_music_bed(brief, storyboard)
+
+
 def _mix_music_bed(video_bytes: bytes, music_bytes: bytes, *, duration: int) -> bytes:
     # 0.08 linear gain is roughly -22 dB: deliberately background-level.
     with tempfile.TemporaryDirectory(prefix='adgen-v2-music-') as td:
@@ -439,7 +626,11 @@ def _mix_music_bed(video_bytes: bytes, music_bytes: bytes, *, duration: int) -> 
             '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
             '-shortest', '-movflags', '+faststart', str(output),
         ]
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        p = _run_subprocess(
+            cmd,
+            timeout_seconds=_FFMPEG_AUDIO_TIMEOUT_SECONDS,
+            label="Music Mix",
+        )
         if p.returncode != 0:
             raise RuntimeError('Music mix failed: ' + p.stderr[-900:])
         return output.read_bytes()
@@ -454,8 +645,13 @@ def _mix_voiceover(video_bytes:bytes, narration:bytes, *, keep_original_audio:bo
             cmd=['ffmpeg','-y','-i',str(v),'-i',str(a),'-filter_complex',filt,'-map','0:v:0','-map','[a]','-c:v','copy','-c:a','aac','-b:a','160k','-shortest',str(o)]
         else:
             cmd=['ffmpeg','-y','-i',str(v),'-i',str(a),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','160k','-shortest',str(o)]
-        p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-        if p.returncode!=0: raise RuntimeError('Voiceover mix failed: '+p.stderr[-700:])
+        p=_run_subprocess(
+            cmd,
+            timeout_seconds=_FFMPEG_AUDIO_TIMEOUT_SECONDS,
+            label="Voiceover Mix",
+        )
+        if p.returncode!=0:
+            raise RuntimeError('Voiceover mix failed: '+p.stderr[-700:])
         return o.read_bytes()
 
 
@@ -487,47 +683,258 @@ def _wrap_text(draw:ImageDraw.ImageDraw,text:str,font,max_width:int)->List[str]:
 
 def _video_size(video_path:Path)->tuple[int,int]:
     cmd=['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=width,height','-of','csv=s=x:p=0',str(video_path)]
-    p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        p=_run_subprocess(
+            cmd,
+            timeout_seconds=10,
+            label="Video Probe",
+        )
+    except Exception:
+        return (720,1280)
     if p.returncode!=0 or 'x' not in p.stdout: return (720,1280)
     try:
         w,h=p.stdout.strip().split('x',1); return max(2,int(w)),max(2,int(h))
     except Exception: return (720,1280)
 
 
-def _overlay_png(width:int,height:int,text:str,*,cta:bool=False,brand:Optional[str]=None)->bytes:
-    image=Image.new('RGBA',(width,height),(0,0,0,0)); draw=ImageDraw.Draw(image)
-    font=_font(max(22,int(width*0.045 if not cta else width*0.052)))
-    small=_font(max(16,int(width*0.025)))
+def _overlay_png(
+    width:int,
+    height:int,
+    text:str,
+    *,
+    cta:bool=False,
+    brand:Optional[str]=None,
+    placement:str='center',
+)->bytes:
+    """
+    Clean paid-social text treatment.
+
+    Standard messages:
+    - centered horizontally
+    - centered vertically
+    - responsive font size
+    - no heavy opaque background box
+    - subtle shadow/stroke for readability
+    - max width keeps text from dominating the frame
+
+    CTA:
+    - separate compact end-frame treatment
+    - lower-third placement
+    """
+    image=Image.new('RGBA',(width,height),(0,0,0,0))
+    draw=ImageDraw.Draw(image)
+
     safe=_clean(text,180)
-    max_width=int(width*0.82)
+    if not safe:
+        out=io.BytesIO()
+        image.save(out,format='PNG')
+        return out.getvalue()
+
+    margin_x=max(28,int(width*0.075))
+    safe_top=max(34,int(height*0.075))
+    safe_bottom=max(38,int(height*0.09))
+
+    if cta:
+        font_size=max(24,min(54,int(width*0.052)))
+        font=_font(font_size)
+        brand_font=_font(max(15,min(28,int(width*0.024))))
+        max_width=int(width*0.74)
+    else:
+        # Social-ad overlay sizing shared by Quick Clip and Full Video.
+        # At 720x1280 this lands around 64px: intentionally prominent on
+        # mobile, while the hard cap prevents the message from dominating.
+        short_edge=min(width,height)
+        font_size=max(44,min(72,int(short_edge*0.09)))
+        font=_font(font_size)
+        brand_font=None
+
+        # Prefer a compact two-line block over shrinking copy to one tiny line.
+        # This keeps the message readable while leaving most of the frame clear.
+        max_width=int(width*0.70)
+
     lines=_wrap_text(draw,safe,font,max_width)
-    line_h=max(28,int(font.size*1.25) if hasattr(font,'size') else 34)
-    block_h=line_h*len(lines)+34
-    y=int(height*0.78)-block_h//2 if not cta else int(height*0.72)-block_h//2
-    x=int(width*0.09)
-    box=(x-18,y-16,width-x+18,y+block_h)
-    draw.rounded_rectangle(box,radius=18,fill=(5,10,22,185))
-    for i,line in enumerate(lines): draw.text((x,y+i*line_h),line,font=font,fill=(255,255,255,255))
-    if cta and brand:
-        draw.text((x,y-34),_clean(brand,80),font=small,fill=(220,214,254,255))
-    out=io.BytesIO(); image.save(out,format='PNG'); return out.getvalue()
+
+    # Normal messages are intentionally limited to two centered lines.
+    if not cta and len(lines) > 2:
+        lines=lines[:2]
+
+    spacing=max(4,int(font_size*0.12))
+    rendered="\n".join(lines)
+    bbox=draw.multiline_textbbox(
+        (0,0),
+        rendered,
+        font=font,
+        spacing=spacing,
+        align='center',
+        stroke_width=max(1,int(width*.0015)),
+    )
+    text_w=max(1,bbox[2]-bbox[0])
+    text_h=max(1,bbox[3]-bbox[1])
+
+    if cta:
+        # Compact lower-third end-frame CTA.
+        x=width//2
+        y=min(
+            int(height*0.76),
+            height-safe_bottom-(text_h//2)-22,
+        )
+
+        pad_x=max(20,int(width*0.03))
+        pad_y=max(12,int(height*0.012))
+        card_w=min(width-(2*margin_x),text_w+(pad_x*2))
+        card_h=text_h+(pad_y*2)
+
+        card=(
+            int(x-card_w/2),
+            int(y-card_h/2),
+            int(x+card_w/2),
+            int(y+card_h/2),
+        )
+
+        draw.rounded_rectangle(
+            card,
+            radius=max(14,int(width*.022)),
+            fill=(250,250,252,232),
+        )
+
+        if brand:
+            brand_text=_clean(brand,80)
+            draw.text(
+                (x,y-(card_h//2)-max(24,int(height*.025))),
+                brand_text,
+                font=brand_font,
+                anchor='mm',
+                align='center',
+                fill=(255,255,255,238),
+                stroke_width=max(1,int(width*.002)),
+                stroke_fill=(0,0,0,105),
+            )
+
+        draw.multiline_text(
+            (x,y),
+            rendered,
+            font=font,
+            anchor='mm',
+            align='center',
+            spacing=spacing,
+            fill=(16,18,24,255),
+        )
+    else:
+        # True center-center placement.
+        x=width//2
+        y=height//2
+
+        # Keep the block inside safe zones even for unusual aspect ratios.
+        y=max(safe_top+(text_h//2),y)
+        y=min(height-safe_bottom-(text_h//2),y)
+
+        shadow=max(3,int(short_edge*.005))
+        draw.multiline_text(
+            (x+shadow,y+shadow),
+            rendered,
+            font=font,
+            anchor='mm',
+            align='center',
+            spacing=spacing,
+            fill=(0,0,0,150),
+        )
+        draw.multiline_text(
+            (x,y),
+            rendered,
+            font=font,
+            anchor='mm',
+            align='center',
+            spacing=spacing,
+            fill=(255,255,255,255),
+            stroke_width=max(2,int(short_edge*.0025)),
+            stroke_fill=(0,0,0,115),
+        )
+
+    out=io.BytesIO()
+    image.save(out,format='PNG')
+    return out.getvalue()
 
 
-def _apply_finishing(video_bytes:bytes, *, storyboard:Dict[str,Any], captions:bool, end_card:bool, cta:Optional[str], brand:Optional[str], duration:int)->bytes:
-    if not captions and not end_card: return video_bytes
+def _quick_overlay_timings(duration:float,count:int,has_cta:bool)->List[tuple[float,float]]:
+    count=max(0,int(count)); duration=float(duration)
+    if not count: return []
+    cta_start=max(0.0,duration-(1.8 if duration<=6.2 else 2.0)) if has_cta else duration
+    start=.45 if duration<=6.2 else .65
+    available=max(.2,cta_start-start)
+    gap=.16 if duration<=6.2 else .24
+    span=max(1.15,(available-gap*(count-1))/count)
+    out=[]; cursor=start
+    for _ in range(count):
+        stop=min(cta_start-.08,cursor+span)
+        if stop-cursor>=1.0: out.append((cursor,stop))
+        cursor=stop+gap
+    return out
+
+
+def _apply_finishing(video_bytes:bytes, *, storyboard:Dict[str,Any], captions:bool, end_card:bool, cta:Optional[str], brand:Optional[str], duration:int, text_overlays:bool=False, overlay_messages:Optional[List[str]]=None)->bytes:
+    if not captions and not end_card and not text_overlays: return video_bytes
     with tempfile.TemporaryDirectory(prefix='adgen-v2-finish-') as td:
-        td=Path(td); source=td/'source.mp4'; source.write_bytes(video_bytes)
-        width,height=_video_size(source)
+        td=Path(td); source=td/'source.mp4'; source.write_bytes(video_bytes); width,height=_video_size(source)
         overlays=[]; timing=[]; cursor=0.0
         if captions:
-            for scene in (storyboard or {}).get('scenes') or []:
+            for scene in storyboard.get('scenes') or []:
                 seconds=float(scene.get('duration') or 0); start=cursor; end=max(start,cursor+seconds); cursor=end
-                text=_clean(scene.get('caption') or scene.get('dialogue') or scene.get('voiceover'),120)
+                text=_clean(scene.get('dialogue') or scene.get('voiceover') or scene.get('caption'),120)
                 if not text: continue
                 path=td/f'caption_{len(overlays)}.png'; path.write_bytes(_overlay_png(width,height,text))
                 overlays.append(path); timing.append((start,end))
+        if text_overlays and storyboard.get('scenes'):
+            cursor=0.0
+            for idx,scene in enumerate(storyboard.get('scenes') or []):
+                seconds=float(scene.get('duration') or 0); scene_start=cursor; scene_end=cursor+seconds; cursor=scene_end
+                text=_sanitize_overlay_text(scene.get('overlayText'))
+                if not text: continue
+                visible=min(2.2,max(1.2,seconds-.6)); start=scene_start+max(.25,(seconds-visible)/2); end=min(scene_end-.15,start+visible)
+                if end-start<1.0: continue
+                path=td/f'overlay_{len(overlays)}.png'
+                path.write_bytes(
+                    _overlay_png(
+                        width,
+                        height,
+                        text,
+                        placement='center',
+                    )
+                )
+                overlays.append(path)
+                timing.append((start,end))
+        quick=_sanitize_overlay_messages(overlay_messages,duration)
+        if text_overlays and quick and not storyboard.get('scenes'):
+            for (start,end),text in zip(
+                _quick_overlay_timings(
+                    duration,
+                    len(quick),
+                    bool(end_card and cta),
+                ),
+                quick,
+            ):
+                path=td/f'overlay_{len(overlays)}.png'
+                path.write_bytes(
+                    _overlay_png(
+                        width,
+                        height,
+                        text,
+                        placement='center',
+                    )
+                )
+                overlays.append(path)
+                timing.append((start,end))
         if end_card and _clean(cta,180):
-            path=td/f'cta_{len(overlays)}.png'; path.write_bytes(_overlay_png(width,height,_clean(cta,180),cta=True,brand=brand))
+            path=td/f'cta_{len(overlays)}.png'
+            path.write_bytes(
+                _overlay_png(
+                    width,
+                    height,
+                    _clean(cta,180),
+                    cta=True,
+                    brand=brand,
+                    placement='lower_left',
+                )
+            )
             overlays.append(path); timing.append((max(0.0,float(duration)-1.8),float(duration)))
         if not overlays: return video_bytes
         cmd=['ffmpeg','-y','-i',str(source)]
@@ -536,13 +943,47 @@ def _apply_finishing(video_bytes:bytes, *, storyboard:Dict[str,Any], captions:bo
         for i,(start,end) in enumerate(timing,1):
             out=f'[v{i}]'; filters.append(f"{prev}[{i}:v]overlay=0:0:enable='between(t,{start:.3f},{end:.3f})'{out}"); prev=out
         output=td/'finished.mp4'
-        cmd += ['-filter_complex',';'.join(filters),'-map',prev,'-map','0:a?','-c:v','libx264','-preset','veryfast','-crf','18','-c:a','copy','-movflags','+faststart',str(output)]
-        p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+
+        # IMPORTANT: every PNG input above uses `-loop 1`, which is an infinite
+        # stream. Without an explicit output duration/shortest rule FFmpeg can
+        # continue encoding forever after the source video ends. Bound the output
+        # to the requested clip duration and stop when the real source finishes.
+        output_duration=max(0.5,float(duration))
+        cmd += [
+            '-filter_complex',';'.join(filters),
+            '-map',prev,
+            '-map','0:a?',
+            '-t',f'{output_duration:.3f}',
+            '-shortest',
+            '-c:v','libx264',
+            '-preset','veryfast',
+            '-crf','18',
+            '-c:a','copy',
+            '-movflags','+faststart',
+            str(output),
+        ]
+
+        try:
+            p=_run_subprocess(
+                cmd,
+                timeout_seconds=_FFMPEG_FINISH_TIMEOUT_SECONDS,
+                label="Text / CTA Finishing",
+            )
+        except Exception as exc:
+            # Finishing is optional polish. Never strand or discard a valid Kling
+            # render because an overlay/CTA render times out.
+            print('[Video V2 Finishing Warning]',repr(exc),flush=True)
+            return video_bytes
+
         if p.returncode!=0:
             print('[Video V2 Finishing Warning]',p.stderr[-1200:],flush=True)
             return video_bytes
-        return output.read_bytes()
 
+        if not output.exists() or output.stat().st_size <= 0:
+            print('[Video V2 Finishing Warning] no output file produced',flush=True)
+            return video_bytes
+
+        return output.read_bytes()
 
 def _save_video(db,uid:str,tier:str,data:bytes,*,folder:str)->Dict[str,Any]:
     ensure_storage_available(db,uid,tier,len(data))
@@ -626,6 +1067,21 @@ def _shot_prompt(scene:StoryboardScene, brief:FullAdBrief, storyboard:Storyboard
     if brief.musicAndEffects and brief.voiceMode!='voiceover': parts.append('Include realistic scene ambience and restrained commercial sound design; no unrelated vocals.')
     if brand: parts.append(brand)
     if intel: parts.append(intel)
+
+    # Full Video uses the FullAdBrief passed into this function. The previous
+    # revision accidentally referenced `req` here even though this scope has
+    # `brief`, which produced three Pylance undefined-variable warnings.
+    has_reference=bool(brief.referenceImageUrl)
+    parts.append(
+        _exact_label_lock(
+            company_name=brief.companyName,
+            product_name=brief.subjectName,
+            has_reference_image=has_reference,
+        )
+    )
+    if has_reference:
+        parts.append(_reference_image_motion_policy())
+    parts.append(_product_text_safe_motion())
     if brief.creativeDirection: parts.append('Additional direction: '+_clean(brief.creativeDirection,600))
     parts.append('Photorealistic commercial quality. Natural anatomy and hands. Restrained expressions and gestures. Smooth intentional camera movement. No jitter or visual morphing.')
     return _clean(' '.join(p for p in parts if p),2450)
@@ -651,9 +1107,7 @@ def _product_identity_lock(req: StartFullAdRequest, scene: StoryboardScene) -> s
         return ''
     if _is_product_fidelity_scene(scene, req):
         return (
-            'REFERENCE PRODUCT IS AUTHORITATIVE: preserve exact brand/logo spelling, visible label text, '
-            'typography layout, packaging graphics, colors, proportions, bottle/container shape and cap/dropper. '
-            'Do not invent, rewrite, misspell, pseudo-render or redesign any packaging text.'
+            'REFERENCE PRODUCT IS AUTHORITATIVE: preserve the uploaded product exactly in every frame. Preserve exact brand/logo spelling, all visible label words and numbers, capitalization, punctuation, accent marks, typography hierarchy, line breaks, spacing, label layout, packaging graphics, colors, proportions, bottle/container shape and cap/dropper. Preserve the source label itself rather than regenerating it from memory. Do not invent, rewrite, misspell, translate, pseudo-render, simplify, replace or redesign any packaging text. Letter shapes and spelling must remain stable frame-to-frame.'
         )
     return (
         'Preserve the referenced product identity exactly: logo/brand spelling, packaging, colors, proportions and label layout.'
@@ -666,8 +1120,8 @@ def _provider_safe_shot_prompt(scene: StoryboardScene, req: StartFullAdRequest, 
 
     Priority:
     1. Exact dialogue + speaking action
-    2. Authoritative product/reference identity for product-detail shots
-    3. Core visual action / product interaction
+    2. Core visual action / requested camera and product interaction
+    3. Authoritative product/reference identity during that motion
     4. Brand Kit
     5. Performance Intelligence
     6. Continuity / non-speaking guardrails
@@ -681,14 +1135,40 @@ def _provider_safe_shot_prompt(scene: StoryboardScene, req: StartFullAdRequest, 
         if action:
             chunks.append('While speaking: ' + action)
 
-    identity_lock = _product_identity_lock(req, scene)
-    if identity_lock:
-        chunks.append(_clean(identity_lock, 180 if _is_product_fidelity_scene(scene, req) else 120))
-
-    visual_budget = 210 if _is_product_fidelity_scene(scene, req) else 235
+    # Requested scene action/motion comes before preservation text so the
+    # provider's 512-character limit cannot turn a reference image into a
+    # near-static shot. Identity is preserved during the requested motion.
+    visual_budget = 220 if _is_product_fidelity_scene(scene, req) else 235
     visual = _clean(scene.visualPrompt, visual_budget)
     if visual:
         chunks.append(visual)
+
+    if req.referenceImageUrl:
+        chunks.append(_clean(_reference_image_motion_policy(), 115))
+
+    identity_lock = _product_identity_lock(req, scene)
+    if identity_lock:
+        chunks.append(
+            _clean(
+                identity_lock,
+                115 if _is_product_fidelity_scene(scene, req) else 90,
+            )
+        )
+
+    exact_label_lock=_exact_label_lock(
+        company_name=req.companyName,
+        product_name=req.subjectName,
+        has_reference_image=bool(req.referenceImageUrl),
+    )
+    if exact_label_lock:
+        chunks.append(
+            _clean(
+                exact_label_lock,
+                115 if _is_product_fidelity_scene(scene, req) else 90,
+            )
+        )
+
+    chunks.append(_clean(_product_text_safe_motion(),90))
 
     if brand:
         chunks.append('Brand direction: ' + _clean(brand, 52))
@@ -734,6 +1214,9 @@ def _full_payload(req:StartFullAdRequest, brand:str, intel:str)->tuple[str,Dict[
     generate_audio = req.voiceMode=='character_dialogue' or (req.voiceMode=='none' and req.musicAndEffects) or (req.voiceMode=='voiceover' and req.musicAndEffects)
     common={'multi_prompt':multi,'duration':str(req.duration),'generate_audio':bool(generate_audio),'shot_type':'customize','negative_prompt':NEGATIVE_PROMPT,'cfg_scale':0.5}
     if req.referenceImageUrl:
+        # Reference image is the authority for packaging and printed product text.
+        # The per-scene compiler already carries the fidelity rule; keeping this as
+        # I2V is critical for exact label preservation.
         common['start_image_url']=req.referenceImageUrl
         return FAL_KLING_I2V,common
     common['aspect_ratio']=_kling_ratio(req.ratio)
@@ -894,6 +1377,24 @@ def _anchor_supplied_dialogue_to_action_scene(
     return scenes
 
 
+def _sanitize_overlay_text(value: Any) -> str:
+    text=_clean(value,OVERLAY_MAX_CHARS)
+    words=text.split()
+    if len(words)>6:
+        text=' '.join(words[:6])
+    return text[:OVERLAY_MAX_CHARS].rstrip(' ,;:-')
+
+
+def _sanitize_overlay_messages(values: Any, duration: int) -> List[str]:
+    limit=QUICK_OVERLAY_LIMITS.get(int(duration),2)
+    out=[]
+    for value in list(values or [])[:limit]:
+        clean=_sanitize_overlay_text(value)
+        if clean and clean not in out:
+            out.append(clean)
+    return out
+
+
 def _build_storyboard_prompt(req:StoryboardRequest,brand:str,intel:str)->str:
     durations=_layout(req.duration); roles=_campaign_roles(req.campaignType,len(durations))
     voice={
@@ -931,9 +1432,10 @@ If the user's creative direction says dialogue happens during a specific physica
 Keep the same recurring person, wardrobe, environment and product identity where continuity calls for it.
 Use restrained natural expressions, realistic hands/fingers, physically believable movement and commercial cinematography.
 Do not put captions or CTA text into generated frames; ADGen handles UI/finishing separately.
+If Text Overlays are enabled and Voice Mode is No Voice, suggest at most one optional overlay per scene. Each overlay must be 2-6 words and no more than 42 characters. Use overlays selectively for hook, benefit, proof, or offer messaging; do not repeat the final CTA and do not invent claims, statistics, percentages, ingredients, awards, guarantees, or discounts. If overlays are disabled or a voice mode is selected, overlayText must be null. Advertising overlays are finishing text only and must never be written into the generated scene or used to replace product-label text.
 
 Return ONLY JSON:
-{{"conceptTitle":"...","conceptSummary":"...","continuity":"...","voiceoverScript":"... or null","scenes":[{{"id":"scene_1","title":"...","purpose":"...","duration":{durations[0]},"visualPrompt":"...","voiceover":"... or null","dialogue":"... or null","actionWhileSpeaking":"... or null","performanceMode":"speaking|silent|no_person","performanceBeat":"... or null","caption":"... or null"}}]}}
+{{"conceptTitle":"...","conceptSummary":"...","continuity":"...","voiceoverScript":"... or null","scenes":[{{"id":"scene_1","title":"...","purpose":"...","duration":{durations[0]},"visualPrompt":"...","voiceover":"... or null","dialogue":"... or null","actionWhileSpeaking":"... or null","performanceMode":"speaking|silent|no_person","performanceBeat":"... or null","caption":"... or null","overlayText":"... or null"}}]}}
 """.strip()
 
 
@@ -979,6 +1481,25 @@ async def create_storyboard(req:StoryboardRequest,authorization:str|None=Header(
     try:
         response=await asyncio.to_thread(lambda: client.chat.completions.create(model=OPENAI_TEXT_MODEL,messages=[{'role':'system','content':'Return valid JSON only.'},{'role':'user','content':storyboard_prompt}]))
         data=_json_from_text(response.choices[0].message.content or '{}')
+        generated_display_text=[
+            data.get('conceptTitle'),
+            data.get('voiceoverScript'),
+        ]
+        for scene in (data.get('scenes') or []):
+            if isinstance(scene,dict):
+                generated_display_text.extend([
+                    scene.get('caption'),
+                    scene.get('dialogue'),
+                    scene.get('voiceover'),
+                    scene.get('overlayText'),
+                ])
+        await moderate_generated_display_text(
+            db,
+            uid,
+            text_parts=generated_display_text,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         print('[Video V2 Storyboard Error]',repr(exc),flush=True); raise HTTPException(status_code=502,detail='ADGen could not build the storyboard. Please try again.')
     durations=_layout(req.duration); scenes=data.get('scenes') or []
@@ -987,6 +1508,7 @@ async def create_storyboard(req:StoryboardRequest,authorization:str|None=Header(
     for i,(scene,seconds) in enumerate(zip(scenes,durations)):
         scene['id']=f'scene_{i+1}'; scene['duration']=seconds; scene['purpose']=roles[i]
         scene['visualPrompt']=_clean(scene.get('visualPrompt'),1200)
+        scene['overlayText']=(_sanitize_overlay_text(scene.get('overlayText')) or None) if (req.voiceMode=='none' and req.textOverlays) else None
         scene['performanceBeat']=_clean(scene.get('performanceBeat'),420) or None
         if req.voiceMode=='character_dialogue':
             dialogue=_clamp_scene_speech(_clean(scene.get('dialogue'),140),seconds,'character_dialogue')
@@ -1078,6 +1600,11 @@ async def create_storyboard(req:StoryboardRequest,authorization:str|None=Header(
 
 @router.post('/start',response_model=StartFullAdResponse)
 async def start_full(req:StartFullAdRequest,authorization:str|None=Header(default=None)):
+    req.textOverlays = bool(req.textOverlays and req.voiceMode == 'none')
+    req.captions = bool(req.captions and req.voiceMode != 'none')
+    for scene in req.storyboard.scenes:
+        scene.overlayText = (_sanitize_overlay_text(scene.overlayText) or None) if req.textOverlays else None
+
     # Enforce timing-aware speech limits again server-side before generation.
     for scene in req.storyboard.scenes:
         if req.voiceMode == 'voiceover':
@@ -1111,8 +1638,28 @@ async def start_full(req:StartFullAdRequest,authorization:str|None=Header(defaul
         ]
         + [s.visualPrompt for s in req.storyboard.scenes]
         + [s.dialogue for s in req.storyboard.scenes if s.dialogue]
-        + [s.voiceover for s in req.storyboard.scenes if s.voiceover],
+        + [s.voiceover for s in req.storyboard.scenes if s.voiceover]
+        + [s.overlayText for s in req.storyboard.scenes if s.overlayText],
         image_url=req.referenceImageUrl,
+    )
+    await moderate_user_display_text(
+        db,
+        uid,
+        text_parts=[
+            req.callToAction,
+            req.storyboard.conceptTitle,
+            req.storyboard.voiceoverScript,
+            *[
+                value
+                for scene in req.storyboard.scenes
+                for value in (
+                    scene.caption,
+                    scene.dialogue,
+                    scene.voiceover,
+                    scene.overlayText,
+                )
+            ],
+        ],
     )
 
     if not admin:
@@ -1217,42 +1764,132 @@ async def start_full(req:StartFullAdRequest,authorization:str|None=Header(defaul
 
 
 async def _finish_full(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
-    result=await _fal_result(str(job.get('falResponseUrl'))); video_url=_extract_video_url(result)
-    ref.update({'phase':'processing_video','progressPercent':74,'progressMessage':'Processing the completed video.','klingOutputUrl':video_url,'updatedAt':int(time.time())})
-    data=await _download(video_url); final=data
+    total_started=time.perf_counter()
+    stage_started=time.perf_counter()
+    result=await _fal_result(str(job.get('falResponseUrl')))
+    video_url=_extract_video_url(result)
+    _timing_log('full',job_id,'provider result fetch',stage_started)
+
+    ref.update({
+        'phase':'processing_video',
+        'progressPercent':74,
+        'progressMessage':'Processing the completed video.',
+        'klingOutputUrl':video_url,
+        'updatedAt':int(time.time()),
+    })
+
+    stage_started=time.perf_counter()
+    data=await _download(video_url)
+    final=data
+    _timing_log('full',job_id,'video download',stage_started)
     brief=job.get('brief') or {}; voice_mode=str(brief.get('voiceMode') or 'none')
     if voice_mode=='voiceover':
         script=_clean((job.get('storyboard') or {}).get('voiceoverScript'),2400)
         if script:
             ref.update({'phase':'adding_voiceover','progressPercent':80,'progressMessage':'Adding the selected AI narration.','updatedAt':int(time.time())})
+            stage_started=time.perf_counter()
             narration=await asyncio.to_thread(_openai_tts_bytes,script,str(brief.get('presetVoice') or 'Leslie'))
             final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=bool(brief.get('musicAndEffects')))
+            _timing_log('full',job_id,'voiceover generation + mix',stage_started)
     if bool(brief.get('musicAndEffects')):
         ref.update({'phase':'adding_music','progressPercent':84,'progressMessage':'Creating and mixing subtle campaign-matched background music.','updatedAt':int(time.time())})
         try:
-            music=await _generate_music_bed(brief,job.get('storyboard') or {})
+            stage_started=time.perf_counter()
+            music=await _generate_music_bed_with_retry(brief,job.get('storyboard') or {})
             final=await asyncio.to_thread(_mix_music_bed,final,music,duration=int(job.get('duration') or 10))
+            _timing_log('full',job_id,'music generation + mix',stage_started)
         except Exception as exc:
             print('[Video V2 Music Warning]',repr(exc),flush=True)
             ref.update({'musicWarning':str(exc)[:800],'updatedAt':int(time.time())})
-    if bool(brief.get('captions')) or bool(brief.get('endCard')):
-        ref.update({'phase':'finalizing','progressPercent':89,'progressMessage':'Applying selected captions and CTA finishing.','updatedAt':int(time.time())})
+    if bool(brief.get('captions')) or bool(brief.get('textOverlays')) or bool(brief.get('endCard')):
+        ref.update({'phase':'finalizing','progressPercent':89,'progressMessage':'Applying selected text and CTA finishing.','updatedAt':int(time.time())})
+        stage_started=time.perf_counter()
+        before_finishing=final
         final=await asyncio.to_thread(
             _apply_finishing,
             final,
             storyboard=job.get('storyboard') or {},
-            captions=bool(brief.get('captions')),
+            captions=bool(brief.get('captions')) and voice_mode!='none',
+            text_overlays=bool(brief.get('textOverlays')) and voice_mode=='none',
             end_card=bool(brief.get('endCard')),
             cta=brief.get('callToAction'),
             brand=brief.get('companyName') or job.get('productName'),
             duration=int(job.get('duration') or 10),
         )
+        if final is before_finishing or final == before_finishing:
+            ref.update({
+                'finishingWarning':'Selected text/CTA finishing could not be applied. The base video was preserved.',
+                'updatedAt':int(time.time()),
+            })
+        _timing_log('full',job_id,'text / CTA finishing',stage_started)
     ref.update({'phase':'uploading_video','progressPercent':93,'progressMessage':'Uploading your finished ad.','updatedAt':int(time.time())})
     user_doc=db.collection('users').document(str(job.get('uid'))).get().to_dict() or {}; tier,_=get_tier_and_status(user_doc)
+    stage_started=time.perf_counter()
     stored=await asyncio.to_thread(_save_video,db,str(job.get('uid')),tier,final,folder='generated_video_ads_v2')
+    _timing_log('full',job_id,'upload',stage_started)
     ref.update({'phase':'saving_library','progressPercent':98,'progressMessage':'Saving your Full Video Ad to the Library.','updatedAt':int(time.time())})
     ref.update({'status':'succeeded','phase':'succeeded','progressPercent':100,'progressMessage':'Your Full Video Ad is ready.','finalVideoUrl':stored['url'],'finalStoragePath':stored.get('storagePath'),'fileSizeBytes':stored.get('fileSizeBytes'),'updatedAt':int(time.time())})
-    latest=ref.get().to_dict() or {}; _mirror_full(db,job_id,latest); return latest
+    latest=ref.get().to_dict() or {}
+    _mirror_full(db,job_id,latest)
+    _timing_log('full',job_id,'total post-processing',total_started)
+    return latest
+
+
+async def _run_finish_full_background(job_id:str)->None:
+    started=time.perf_counter()
+    db=get_db()
+    ref=db.collection('video_v2_jobs').document(job_id)
+    claim_id: Optional[str] = None
+    try:
+        claim_id=_claim_finish_job(
+            ref,
+            stage_field='phase',
+            terminal_statuses={'succeeded','failed','canceled'},
+        )
+        if not claim_id:
+            return
+
+        job=ref.get().to_dict() or {}
+        if not job or job.get('status') in {'succeeded','failed','canceled'}:
+            return
+
+        await _finish_full(job_id,job,ref,db)
+
+    except asyncio.CancelledError:
+        print(
+            '[Video V2 Full Background Finish Canceled]',
+            job_id,
+            flush=True,
+        )
+        raise
+
+    except Exception as exc:
+        print('[Video V2 Full Background Finish Error]',job_id,repr(exc),flush=True)
+        latest=ref.get().to_dict() or {}
+        refunded=_refund_once(db,ref,latest,'post_processing_failed')
+        ref.update({
+            'status':'failed',
+            'phase':'failed',
+            'progressPercent':100,
+            'progressMessage':'Video finishing failed.',
+            'error':'ADGen could not finish this video.'
+                    + (' Your credits were returned.' if refunded else ''),
+            'lastPostProcessingError':str(exc)[:1200],
+            'updatedAt':int(time.time()),
+        })
+
+    finally:
+        _release_finish_claim(ref,claim_id)
+        _timing_log('full',job_id,'background task lifetime',started)
+        _FULL_FINISH_TASKS.pop(job_id,None)
+
+
+def _schedule_full_finish(job_id:str)->None:
+    existing=_FULL_FINISH_TASKS.get(job_id)
+    if existing and not existing.done():
+        return
+    task=asyncio.create_task(_run_finish_full_background(job_id))
+    _FULL_FINISH_TASKS[job_id]=task
 
 
 @router.get('/status/{job_id}',response_model=FullAdStatusResponse)
@@ -1263,7 +1900,24 @@ async def full_status(job_id:str,authorization:str|None=Header(default=None)):
     if job.get('status') in {'succeeded','failed','canceled'}:
         return FullAdStatusResponse(jobId=job_id,status=job.get('status'),phase=job.get('phase') or job.get('status'),progressPercent=int(job.get('progressPercent') or 100),progressMessage=str(job.get('progressMessage') or ''),finalVideoUrl=job.get('finalVideoUrl'),scenes=job.get('scenes') or [],error=job.get('error'))
     try:
-        status=await _fal_status(str(job.get('falStatusUrl'))); provider=str(status.get('status') or '').upper()
+        now=int(time.time())
+        last_provider_check=int(job.get('lastProviderStatusCheckAt') or 0)
+        cached_provider=str(job.get('providerStatus') or '').upper()
+
+        if cached_provider == 'COMPLETED' and not job.get('finalVideoUrl'):
+            provider='COMPLETED'
+            status={'status':'COMPLETED'}
+        elif last_provider_check and (now-last_provider_check)<2:
+            provider=cached_provider or 'IN_PROGRESS'
+            status={'status':provider}
+        else:
+            status=await _fal_status(str(job.get('falStatusUrl')))
+            provider=str(status.get('status') or '').upper()
+            ref.update({
+                'providerStatus':provider,
+                'lastProviderStatusCheckAt':now,
+                'updatedAt':now,
+            })
         if provider=='IN_QUEUE':
             pos=status.get('queue_position'); ref.update({'phase':'rendering_video','progressPercent':20,'progressMessage':f'Your video is queued{f" · position {pos}" if pos is not None else ""}.','providerStatus':provider,'updatedAt':int(time.time())})
         elif provider=='IN_PROGRESS':
@@ -1275,7 +1929,19 @@ async def full_status(job_id:str,authorization:str|None=Header(default=None)):
                 ref.update({'status':'failed','phase':'failed','progressPercent':100,'progressMessage':'Video generation failed.','error':'ADGen could not complete this generation.'+(' Your credits were returned.' if refunded else ''),'providerError':str(status.get('error'))[:800],'updatedAt':int(time.time())})
             else:
                 job=ref.get().to_dict() or job
-                if not job.get('finalVideoUrl'): await _finish_full(job_id,job,ref,db)
+                if not job.get('finalVideoUrl'):
+                    # Return the real next phase immediately; expensive finishing
+                    # continues outside this HTTP status request.
+                    if str(job.get('phase') or '') == 'rendering_video':
+                        ref.update({
+                            'phase':'processing_video',
+                            'progressPercent':74,
+                            'progressMessage':'Kling render complete. Processing the finished video.',
+                            'providerStatus':provider,
+                            'finishingStartedAt':int(time.time()),
+                            'updatedAt':int(time.time()),
+                        })
+                    _schedule_full_finish(job_id)
     except Exception as exc:
         message=str(exc)
         print('[Video V2 video generation Status Error]',repr(exc),flush=True)
@@ -1308,11 +1974,104 @@ def _quick_brand_intel(db,uid,user_doc,req,admin,tier,preserve):
     return _brand_and_intel(db,uid,user_doc,use_brand=bool(req.useBrandKit),brand_id=req.brandKitId,use_intel=bool(req.usePerformanceIntelligence),admin=admin,tier=tier,preserve_image=preserve)
 
 
+
+def _reference_image_motion_policy() -> str:
+    """
+    Shared reference-image behavior for Quick Clip and Full Video Ad.
+
+    The uploaded image locks subject/product identity, not the original
+    composition. The user's requested shot evolution remains the first creative
+    instruction: camera movement, reframing, close-ups, environmental motion,
+    product interaction and scene progression are expected when requested.
+    """
+    return (
+        "REFERENCE IMAGE POLICY: use the supplied image as the authoritative "
+        "identity source, not as a frozen composition. Follow the requested "
+        "camera movement, reframing, close-up, parallax, environmental motion, "
+        "product interaction and scene evolution. The shot should visibly "
+        "progress rather than look like a lightly animated still. Preserve the "
+        "same product/subject, logo, packaging geometry, colors and readable "
+        "printed text throughout that motion. You may change framing, camera "
+        "distance, angle, depth of field, background motion and physically "
+        "believable subject interaction when requested, but never redesign, "
+        "substitute or respell the referenced product."
+    )
+
+
+def _exact_label_lock(
+    *,
+    company_name: Optional[str],
+    product_name: Optional[str],
+    has_reference_image: bool,
+) -> str:
+    company=_clean(company_name,120)
+    product=_clean(product_name,120)
+
+    exact=[]
+    if company:
+        exact.append(f'brand/company text exactly "{company}"')
+    if product:
+        exact.append(f'product-name text exactly "{product}"')
+
+    exact_line=", ".join(exact)
+
+    if has_reference_image:
+        return _clean(
+            "STRICT PRODUCT IDENTITY LOCK: the supplied reference image is the "
+            "authoritative source for the physical product and every visible "
+            "packaging detail. Preserve the actual printed label from the source "
+            "rather than recreating it from memory. Preserve exact spelling, "
+            "accent marks, punctuation, capitalization, line breaks, typography "
+            "hierarchy, logo geometry, label layout, colors, packaging graphics, "
+            "container shape, cap/dropper, proportions and distinctive details. "
+            + (f"Where readable, preserve {exact_line}. " if exact_line else "")
+            + "Never invent, replace, rewrite, translate, abbreviate, simplify, "
+              "pseudo-render or regenerate label wording. Never add fake ingredients, "
+              "numbers, badges, claims or secondary packaging text. Keep the printed "
+              "surface rigid, sharp and temporally stable whenever readable, even "
+              "while the camera reframes or the product moves naturally. Across every "
+              "frame, spelling and letter shapes must remain unchanged.",
+            980,
+        )
+
+    return _clean(
+        "STRICT GENERATED PRODUCT TEXT RULE: if readable text appears on the "
+        "generated package, "
+        + (f"the only permitted branded wording is {exact_line}. " if exact_line else "")
+        + "Use the exact supplied spelling, capitalization, punctuation and accent "
+          "marks. Never invent ingredients, quantities, slogans, awards, badges, "
+          "claims, numbers, secondary copy or pseudo-text. Prefer a minimal clean "
+          "package with only the supplied brand/product wording rather than creating "
+          "unreliable small print. Keep visible wording stable and identical across "
+          "frames. Never morph, shimmer, substitute or respell letters. If exact "
+          "readable wording cannot be maintained, reduce nonessential package copy "
+          "instead of displaying incorrect text.",
+        980,
+    )
+
+
+def _product_text_safe_motion() -> str:
+    return (
+        "PRODUCT TEXT MOTION RULE: execute the requested commercial motion while "
+        "keeping readable printed surfaces stable. Camera pushes, arcs, reframing, "
+        "close-ups, parallax, environmental motion and natural hand/product "
+        "interaction are allowed and encouraged when requested. Avoid only motion "
+        "that destroys readability: extreme perspective, heavy blur across the "
+        "label, focus pumping, label warping, texture redrawing or transformations "
+        "that change letter shapes. Treat packaging as a rigid physical object and "
+        "keep its printed text temporally consistent."
+    )
+
+
 def _quick_prompt(req:Any,base_prompt:str,brand:str,intel:str)->str:
     audio=req.audio; mode=audio.voiceMode
     parts=[base_prompt]
+    if getattr(req, "promptImageUrl", None):
+        parts.append(_reference_image_motion_policy())
     if getattr(req, "companyName", None):
         parts.append("Company / brand: " + _clean(req.companyName, 120) + ".")
+    if getattr(req, "productName", None):
+        parts.append('Advertised product / service: "' + _clean(req.productName, 120) + '". Preserve this exact spelling.')
     if brand: parts.append(brand)
     if intel: parts.append(intel)
     if mode=='character_dialogue':
@@ -1327,12 +2086,19 @@ def _quick_prompt(req:Any,base_prompt:str,brand:str,intel:str)->str:
         parts.append('No spoken dialogue. Visible people remain naturally nonverbal with relaxed mouths and no speech-like gestures.')
     if not audio.musicAndEffects and mode!='character_dialogue': parts.append('Do not create vocals or spoken audio.')
     parts.append(
-        'Continuous meaningful motion; never freeze the supplied reference into a static still. '
-        'When a product reference is present, treat it as authoritative: preserve exact brand/logo spelling, visible label text, '
-        'typography layout, packaging graphics, colors, proportions, container shape and distinctive product details. '
-        'Do not invent, rewrite, misspell or pseudo-render packaging text. '
-        'Natural anatomy, realistic fingers, smooth commercial cinematography, no jitter.'
+        'Continuous meaningful motion and clear commercial shot progression. '
+        'When no reference exists, keep packaging copy minimal and use only the '
+        'exact supplied company/product wording. Natural anatomy, realistic '
+        'fingers, smooth commercial cinematography, no jitter.'
     )
+    parts.append(
+        _exact_label_lock(
+            company_name=getattr(req, "companyName", None),
+            product_name=getattr(req, "productName", None),
+            has_reference_image=bool(getattr(req, "promptImageUrl", None)),
+        )
+    )
+    parts.append(_product_text_safe_motion())
     return _clean(' '.join(parts),2450)
 
 
@@ -1340,6 +2106,12 @@ def _quick_prompt_base(req:StartPromptVideoRequest)->str:
     parts=[f'Create a polished {req.duration}-second advertisement for {req.productName}.']
     if req.companyName:
         parts.append(f'Company / brand: {_clean(req.companyName, 120)}.')
+    parts.append(
+        f'EXACT BRAND SPELLING: "{_clean(req.companyName,120)}".'
+        if req.companyName else
+        'Do not invent a brand name.'
+    )
+    parts.append(f'EXACT PRODUCT SPELLING: "{_clean(req.productName,120)}".')
     parts.append(req.description)
     if req.audience: parts.append('Audience: '+req.audience+'.')
     if req.offer: parts.append('Offer: '+req.offer+'.')
@@ -1372,6 +2144,14 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
             getattr(req.audio,'characterAction',None),
         ],
         image_url=image_url,
+    )
+    await moderate_user_display_text(
+        db,
+        uid,
+        text_parts=[
+            *list(getattr(req,'overlayMessages',None) or []),
+            getattr(req,'callToAction',None),
+        ],
     )
 
     if not admin:
@@ -1439,6 +2219,10 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         'audio':req.audio.model_dump(),
         'voiceover':req.voiceover.model_dump(),
         'voiceoverScript':_clean(req.voiceoverScript,1200) or None,
+        'textOverlays':bool(req.textOverlays and req.audio.voiceMode=='none'),
+        'overlayMessages':_sanitize_overlay_messages(req.overlayMessages,req.duration),
+        'ctaFinish':bool(req.ctaFinish),
+        'callToAction':_clean(getattr(req,'callToAction',None),160) or None,
         'progressStage':'building_prompt',
         'progressPercent':10,
         'progressMessage':'Building creative direction.',
@@ -1496,23 +2280,131 @@ async def quick_start_prompt(req:StartPromptVideoRequest,authorization:str|None=
 
 
 async def _finish_quick(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
-    result=await _fal_result(str(job.get('falResponseUrl'))); video_url=_extract_video_url(result); ref.update({'progressStage':'processing_video','progressPercent':74,'progressMessage':'Processing the completed video.','klingOutputUrl':video_url,'updatedAt':int(time.time())}); data=await _download(video_url); final=data
+    total_started=time.perf_counter()
+    stage_started=time.perf_counter()
+    result=await _fal_result(str(job.get('falResponseUrl')))
+    video_url=_extract_video_url(result)
+    _timing_log('quick',job_id,'provider result fetch',stage_started)
+
+    ref.update({
+        'progressStage':'processing_video',
+        'progressPercent':74,
+        'progressMessage':'Processing the completed video.',
+        'klingOutputUrl':video_url,
+        'updatedAt':int(time.time()),
+    })
+
+    stage_started=time.perf_counter()
+    data=await _download(video_url)
+    final=data
+    _timing_log('quick',job_id,'video download',stage_started)
     audio=job.get('audio') or {}; voice_mode=str(audio.get('voiceMode') or 'none')
     if voice_mode=='voiceover' and job.get('voiceoverScript'):
         ref.update({'progressStage':'adding_voiceover','progressPercent':82,'progressMessage':'Adding the selected AI narration.','updatedAt':int(time.time())})
+        stage_started=time.perf_counter()
         narration=await asyncio.to_thread(_openai_tts_bytes,str(job.get('voiceoverScript')),str((job.get('voiceover') or {}).get('presetVoice') or 'Leslie'))
         final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=True)
+        _timing_log('quick',job_id,'voiceover generation + mix',stage_started)
     if bool(audio.get('musicAndEffects')):
         ref.update({'progressStage':'adding_music','progressPercent':88,'progressMessage':'Adding subtle campaign-matched background music.','updatedAt':int(time.time())})
         quick_brief={'campaignType':'quick clip','subjectName':job.get('companyName'),'description':job.get('companyName'),'visualStyle':'commercial','tone':'campaign-matched'}
         try:
-            music=await _generate_music_bed(quick_brief,{})
+            stage_started=time.perf_counter()
+            music=await _generate_music_bed_with_retry(quick_brief,{})
             final=await asyncio.to_thread(_mix_music_bed,final,music,duration=int(job.get('duration') or 6))
+            _timing_log('quick',job_id,'music generation + mix',stage_started)
         except Exception as exc:
             print('[Video V2 Quick Music Warning]',repr(exc),flush=True)
             ref.update({'musicWarning':str(exc)[:800],'updatedAt':int(time.time())})
-    ref.update({'progressStage':'uploading_video','progressPercent':94,'progressMessage':'Uploading your finished video.','updatedAt':int(time.time())}); user_doc=db.collection('users').document(str(job.get('uid'))).get().to_dict() or {}; tier,_=get_tier_and_status(user_doc); stored=await asyncio.to_thread(_save_video,db,str(job.get('uid')),tier,final,folder='generated_video_ads')
-    ref.update({'progressStage':'saving_library','progressPercent':98,'progressMessage':'Saving your video to the Library.','updatedAt':int(time.time())}); ref.update({'status':'succeeded','progressStage':'succeeded','progressPercent':100,'progressMessage':'Your Quick Clip is ready.','finalVideoUrl':stored['url'],'storagePath':stored.get('storagePath'),'fileSizeBytes':stored.get('fileSizeBytes'),'updatedAt':int(time.time())}); return ref.get().to_dict() or job
+    if bool(job.get('textOverlays')) or bool(job.get('ctaFinish')):
+        ref.update({'progressStage':'finalizing','progressPercent':91,'progressMessage':'Applying selected text and CTA finishing.','updatedAt':int(time.time())})
+        stage_started=time.perf_counter()
+        before_finishing=final
+        final=await asyncio.to_thread(
+            _apply_finishing,
+            final,
+            storyboard={},
+            captions=False,
+            text_overlays=bool(job.get('textOverlays')) and voice_mode=='none',
+            overlay_messages=job.get('overlayMessages') or [],
+            end_card=bool(job.get('ctaFinish')),
+            cta=job.get('callToAction'),
+            brand=job.get('companyName'),
+            duration=int(job.get('duration') or 6),
+        )
+        if final is before_finishing or final == before_finishing:
+            ref.update({
+                'finishingWarning':'Selected text/CTA finishing could not be applied. The base video was preserved.',
+                'updatedAt':int(time.time()),
+            })
+        _timing_log('quick',job_id,'text / CTA finishing',stage_started)
+    ref.update({'progressStage':'uploading_video','progressPercent':94,'progressMessage':'Uploading your finished video.','updatedAt':int(time.time())})
+    user_doc=db.collection('users').document(str(job.get('uid'))).get().to_dict() or {}
+    tier,_=get_tier_and_status(user_doc)
+    stage_started=time.perf_counter()
+    stored=await asyncio.to_thread(_save_video,db,str(job.get('uid')),tier,final,folder='generated_video_ads')
+    _timing_log('quick',job_id,'upload',stage_started)
+    ref.update({'progressStage':'saving_library','progressPercent':98,'progressMessage':'Saving your video to the Library.','updatedAt':int(time.time())})
+    ref.update({'status':'succeeded','progressStage':'succeeded','progressPercent':100,'progressMessage':'Your Quick Clip is ready.','finalVideoUrl':stored['url'],'storagePath':stored.get('storagePath'),'fileSizeBytes':stored.get('fileSizeBytes'),'updatedAt':int(time.time())})
+    _timing_log('quick',job_id,'total post-processing',total_started)
+    return ref.get().to_dict() or job
+
+
+async def _run_finish_quick_background(job_id:str)->None:
+    started=time.perf_counter()
+    db=get_db()
+    ref=db.collection('video_jobs').document(job_id)
+    claim_id: Optional[str] = None
+    try:
+        claim_id=_claim_finish_job(
+            ref,
+            stage_field='progressStage',
+            terminal_statuses={'succeeded','failed'},
+        )
+        if not claim_id:
+            return
+
+        job=ref.get().to_dict() or {}
+        if not job or job.get('status') in {'succeeded','failed'}:
+            return
+
+        await _finish_quick(job_id,job,ref,db)
+
+    except asyncio.CancelledError:
+        print(
+            '[Video V2 Quick Background Finish Canceled]',
+            job_id,
+            flush=True,
+        )
+        raise
+
+    except Exception as exc:
+        print('[Video V2 Quick Background Finish Error]',job_id,repr(exc),flush=True)
+        latest=ref.get().to_dict() or {}
+        refunded=_refund_once(db,ref,latest,'post_processing_failed')
+        ref.update({
+            'status':'failed',
+            'progressStage':'failed',
+            'progressPercent':100,
+            'progressMessage':'Video finishing failed.',
+            'error':'ADGen could not finish this video.'
+                    + (' Your credits were returned.' if refunded else ''),
+            'lastPostProcessingError':str(exc)[:1200],
+            'updatedAt':int(time.time()),
+        })
+
+    finally:
+        _release_finish_claim(ref,claim_id)
+        _timing_log('quick',job_id,'background task lifetime',started)
+        _QUICK_FINISH_TASKS.pop(job_id,None)
+
+
+def _schedule_quick_finish(job_id:str)->None:
+    existing=_QUICK_FINISH_TASKS.get(job_id)
+    if existing and not existing.done():
+        return
+    task=asyncio.create_task(_run_finish_quick_background(job_id))
+    _QUICK_FINISH_TASKS[job_id]=task
 
 
 @router.get('/quick/status/{job_id}',response_model=VideoStatusResponse)
@@ -1522,7 +2414,24 @@ async def quick_status(job_id:str,authorization:str|None=Header(default=None)):
     if not admin and job.get('uid')!=uid: raise HTTPException(status_code=403,detail='Forbidden.')
     if job.get('status') in {'succeeded','failed'}: return VideoStatusResponse(jobId=job_id,status=job.get('status'),finalVideoUrl=job.get('finalVideoUrl'),error=job.get('error'),progressStage=job.get('progressStage'),progressMessage=job.get('progressMessage'),progressPercent=job.get('progressPercent'))
     try:
-        st=await _fal_status(str(job.get('falStatusUrl'))); provider=str(st.get('status') or '').upper()
+        now=int(time.time())
+        last_provider_check=int(job.get('lastProviderStatusCheckAt') or 0)
+        cached_provider=str(job.get('providerStatus') or '').upper()
+
+        if cached_provider == 'COMPLETED' and not job.get('finalVideoUrl'):
+            provider='COMPLETED'
+            st={'status':'COMPLETED'}
+        elif last_provider_check and (now-last_provider_check)<2:
+            provider=cached_provider or 'IN_PROGRESS'
+            st={'status':provider}
+        else:
+            st=await _fal_status(str(job.get('falStatusUrl')))
+            provider=str(st.get('status') or '').upper()
+            ref.update({
+                'providerStatus':provider,
+                'lastProviderStatusCheckAt':now,
+                'updatedAt':now,
+            })
         if provider=='IN_QUEUE': ref.update({'progressStage':'rendering_video','progressPercent':20,'progressMessage':'Your video is queued for rendering.','providerStatus':provider,'updatedAt':int(time.time())})
         elif provider=='IN_PROGRESS': ref.update({'progressStage':'rendering_video','progressPercent':46,'progressMessage':'Generating your video.','providerStatus':provider,'updatedAt':int(time.time())})
         elif provider=='COMPLETED':
@@ -1530,7 +2439,19 @@ async def quick_status(job_id:str,authorization:str|None=Header(default=None)):
                 latest=ref.get().to_dict() or job; refunded=_refund_once(db,ref,latest,'kling_provider_failed'); ref.update({'status':'failed','progressStage':'failed','progressPercent':100,'error':'ADGen could not complete this generation.'+(' Your credits were returned.' if refunded else ''),'providerError':str(st.get('error'))[:800]})
             else:
                 job=ref.get().to_dict() or job
-                if not job.get('finalVideoUrl'): await _finish_quick(job_id,job,ref,db)
+                if not job.get('finalVideoUrl'):
+                    # Move off the rendering plateau immediately and let the
+                    # browser keep polling while post-processing continues.
+                    if str(job.get('progressStage') or '') == 'rendering_video':
+                        ref.update({
+                            'progressStage':'processing_video',
+                            'progressPercent':74,
+                            'progressMessage':'Kling render complete. Processing the finished video.',
+                            'providerStatus':provider,
+                            'finishingStartedAt':int(time.time()),
+                            'updatedAt':int(time.time()),
+                        })
+                    _schedule_quick_finish(job_id)
     except Exception as exc:
         print('[Quick V2 video generation Status Error]',repr(exc),flush=True); ref.update({'lastStatusError':str(exc)[:800],'progressMessage':'Your video is still being checked.','updatedAt':int(time.time())})
     job=ref.get().to_dict() or job

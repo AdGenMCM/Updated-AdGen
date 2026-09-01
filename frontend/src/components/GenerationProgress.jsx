@@ -24,6 +24,7 @@ const STEP_MAP = {
     { stage: "processing_video", label: "Finished render processed" },
     { stage: "adding_voiceover", label: "AI narration added", voiceModes: ["voiceover"] },
     { stage: "adding_music", label: "Background music mixed", musicOnly: true },
+    { stage: "finalizing", label: "Selected finishing applied" },
     { stage: "uploading_video", label: "Video uploaded" },
     { stage: "saving_library", label: "Saved to Library" },
     { stage: "succeeded", label: "Video complete" },
@@ -82,7 +83,12 @@ const STEP_MAP = {
 
 const COPY_MAP = {
   videoV2: {
-    queued: 8, building_prompt: 14, submitting_video: 18, rendering_video: 64, processing_video: 74, adding_voiceover: 82, adding_music: 88, finalizing: 92, uploading_video: 97, saving_library: 99, succeeded: 100,
+    kicker: "FULL VIDEO AD", defaultTitle: "Creating your Full Video Ad",
+    failedTitle: "We couldn't finish this video", defaultMessage: "Preparing your Full Video Ad.",
+  },
+  videoV2Quick: {
+    kicker: "QUICK CLIP", defaultTitle: "Creating your Quick Clip",
+    failedTitle: "We couldn't finish this video", defaultMessage: "Preparing your Quick Clip.",
   },
   video: {
     kicker: "VIDEO GENERATION",
@@ -133,6 +139,7 @@ const TITLE_MAP = {
     processing_video: "Processing your video",
     adding_voiceover: "Adding AI narration",
     adding_music: "Adding background music",
+    finalizing: "Applying finishing touches",
     uploading_video: "Uploading your video",
     saving_library: "Saving to your Library",
     succeeded: "Your Quick Clip is ready",
@@ -198,7 +205,7 @@ const HELPER_MESSAGES = {
     processing_video: ["Preparing and validating the completed video..."],
     adding_voiceover: ["Generating and mixing the selected off-screen narrator..."],
     adding_music: ["Creating campaign-matched instrumental music...", "Mixing it quietly beneath speech and visuals..."],
-    finalizing: ["Applying captions and CTA finishing...", "Preparing the final ADGen delivery..."],
+    finalizing: ["Applying your selected text and CTA finishing...", "Preparing the final ADGen delivery..."],
     uploading_video: ["Uploading your finished Full Video Ad..."],
     saving_library: ["Adding the completed ad to your Library..."],
     succeeded: ["Your finished Full Video Ad is ready."],
@@ -212,6 +219,7 @@ const HELPER_MESSAGES = {
     processing_video: ["Preparing the completed video..."],
     adding_voiceover: ["Adding the selected off-screen narration..."],
     adding_music: ["Adding subtle campaign-matched background music..."],
+    finalizing: ["Applying your selected text and CTA finishing...", "Preparing the final ADGen delivery..."],
     uploading_video: ["Uploading your video..."],
     saving_library: ["Adding the video to your Library..."],
     succeeded: ["Your Quick Clip is ready."],
@@ -467,33 +475,15 @@ const CHARACTER_DIALOGUE_VISUAL_FLOORS = {
 };
 
 const VIDEO_V2_VISUAL_FLOORS = {
-  queued: 3,
-  loading_brand_kit: 6,
-  building_prompt: 8,
-  submitting_video: 14,
-  rendering_video: 18,
-  processing_video: 64,
-  adding_voiceover: 74,
-  adding_music: 82,
-  finalizing: 88,
-  uploading_video: 92,
-  saving_library: 97,
-  succeeded: 100,
+  queued: 3, loading_brand_kit: 6, building_prompt: 8, submitting_video: 14,
+  rendering_video: 18, processing_video: 74, adding_voiceover: 80,
+  adding_music: 84, finalizing: 89, uploading_video: 93, saving_library: 98, succeeded: 100,
 };
 
 const VIDEO_V2_VISUAL_CEILINGS = {
-  queued: 8,
-  loading_brand_kit: 10,
-  building_prompt: 14,
-  submitting_video: 18,
-  rendering_video: 64,
-  processing_video: 74,
-  adding_voiceover: 82,
-  adding_music: 88,
-  finalizing: 92,
-  uploading_video: 97,
-  saving_library: 99,
-  succeeded: 100,
+  queued: 8, loading_brand_kit: 10, building_prompt: 14, submitting_video: 18,
+  rendering_video: 73, processing_video: 79, adding_voiceover: 84,
+  adding_music: 89, finalizing: 93, uploading_video: 98, saving_library: 99, succeeded: 100,
 };
 
 const VISUAL_CEILINGS = {
@@ -579,10 +569,13 @@ export default function GenerationProgress({
   voiceMode,
   musicAndEffects = false,
   failed = false,
+  errorMessage,
+  onClose,
   expectedMaxSeconds,
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [helperIndex, setHelperIndex] = useState(0);
+  const [failureDismissed, setFailureDismissed] = useState(false);
   const [displayPercent, setDisplayPercent] = useState(
     Math.max(0, Math.min(100, Number(percent) || 0))
   );
@@ -662,6 +655,7 @@ export default function GenerationProgress({
       : backendPercent;
 
   useEffect(() => {
+    if (!open || !failed) setFailureDismissed(false);
     if (!open) {
       startedAtRef.current = null;
       setElapsedSeconds(0);
@@ -682,7 +676,7 @@ export default function GenerationProgress({
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [open]);
+  }, [open, failed]);
 
   useEffect(() => {
     setHelperIndex(0);
@@ -743,8 +737,10 @@ export default function GenerationProgress({
             ? 1800
             : stage === "adding_voiceover"
               ? 2200
-              : stage === "finalizing"
-                ? 1800
+              : stage === "adding_music"
+                ? 2100
+                : stage === "finalizing"
+                  ? 1800
                 : ["uploading_video", "saving_library"].includes(stage)
                   ? 1400
                   : 1800
@@ -779,6 +775,7 @@ export default function GenerationProgress({
           let increment = 0.45;
           if (stage === "rendering_video") increment = 0.35;
           else if (stage === "adding_voiceover") increment = 0.4;
+          else if (stage === "adding_music") increment = 0.38;
           else if (stage === "processing_video") increment = 0.5;
           else if (stage === "finalizing") increment = 0.45;
           else if (["uploading_video", "saving_library"].includes(stage)) increment = 0.35;
@@ -831,7 +828,7 @@ export default function GenerationProgress({
     isVideoV2Progress,
   ]);
 
-  if (!open) return null;
+  if (!open || (failed && failureDismissed)) return null;
 
   const order = steps.reduce((out, stepItem, index) => {
     out[stepItem.stage] = index;
@@ -857,15 +854,16 @@ export default function GenerationProgress({
   let reassurance = null;
 
   if (isVideoRendering) {
+    const videoLabel = type === "videoV2Quick" ? "Quick Clips" : "Full Video Ads";
     if (elapsedSeconds >= 600) {
       reassurance =
-        "This render is taking longer than usual, but it may still complete normally. Keep this page open while ADGen continues checking it.";
-    } else if (elapsedSeconds >= 180) {
+        "This render is taking longer than the usual 8–10 minute window, but it may still complete normally. Keep this page open while ADGen continues checking it.";
+    } else if (elapsedSeconds >= 300) {
       reassurance =
-        "Your video is still rendering normally. Full Video Ads commonly take about 5–10 minutes depending on scene complexity and demand.";
+        `Your video is still rendering normally. ${videoLabel} can take up to 8–10 minutes depending on scene complexity and generation demand.`;
     } else {
       reassurance =
-        "Full Video Ads typically take about 5–10 minutes to finish. The percentage shown is an estimate based on the current processing stage.";
+        `${videoLabel} can take up to 8–10 minutes for a finished result. The percentage is an estimate based on the backend-confirmed processing stage.`;
     }
   } else if (!failed && elapsedSeconds >= 45 && stage !== "succeeded") {
     reassurance =
@@ -905,6 +903,17 @@ export default function GenerationProgress({
           <div className="generation-progress-helper" key={`${stage}-${helperIndex}`}>
             <span className="generation-progress-helper-dot" aria-hidden="true" />
             <span>{helperMessages[helperIndex]}</span>
+          </div>
+        )}
+
+        {failed && (
+          <div className="generation-progress-failure" role="alert">
+            <div className="generation-progress-failure-icon" aria-hidden="true">!</div>
+            <div>
+              <strong>Something interrupted this generation.</strong>
+              <p>{errorMessage || message || "ADGen couldn't complete this request. Close this message and try again."}</p>
+              <small>You can safely close this window and make another attempt.</small>
+            </div>
           </div>
         )}
 
@@ -958,10 +967,25 @@ export default function GenerationProgress({
           })}
         </div>
 
-        {!failed && ["video", "videoV2", "videoV2Quick"].includes(type) && (
-          <p className="generation-progress-footer">
-            Keep this page open. Your finished video will be saved to your Library automatically.
-          </p>
+        {failed ? (
+          <div className="generation-progress-failure-actions">
+            <button
+              type="button"
+              className="generation-progress-close"
+              onClick={() => {
+                setFailureDismissed(true);
+                if (onClose) onClose();
+              }}
+            >
+              Close & Try Again
+            </button>
+          </div>
+        ) : (
+          ["video", "videoV2", "videoV2Quick"].includes(type) && (
+            <p className="generation-progress-footer">
+              Keep this page open. After the base render completes, any selected finishing is applied before the finished video is saved to your Library automatically.
+            </p>
+          )
         )}
       </div>
     </div>

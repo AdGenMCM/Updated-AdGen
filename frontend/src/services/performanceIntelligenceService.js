@@ -23,12 +23,17 @@ async function request(path, options = {}) {
 
   let payload = {};
   try { payload = await response.json(); } catch { payload = {}; }
+
   if (!response.ok) {
-    const detail = typeof payload?.detail === "string"
-      ? payload.detail
-      : payload?.detail?.message || payload?.message || "Performance Intelligence request failed.";
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : payload?.detail?.message ||
+          payload?.message ||
+          "Performance Intelligence request failed.";
     throw new Error(detail);
   }
+
   return payload;
 }
 
@@ -36,8 +41,17 @@ export function getPerformanceIntelligence() {
   return request("/performance-intelligence");
 }
 
-export function getGenerationProfile() {
-  return request("/performance-intelligence/generation-profile");
+export function getGenerationProfile(mode = null) {
+  const normalized =
+    mode === "image" || mode === "video"
+      ? mode
+      : null;
+
+  const suffix = normalized
+    ? `?mode=${encodeURIComponent(normalized)}`
+    : "";
+
+  return request(`/performance-intelligence/generation-profile${suffix}`);
 }
 
 export function getPerformanceRefreshStatus() {
@@ -45,11 +59,15 @@ export function getPerformanceRefreshStatus() {
 }
 
 export function getLearningTimeline(limit = 25) {
-  return request(`/performance-intelligence/learning-timeline?limit=${encodeURIComponent(limit)}`);
+  return request(
+    `/performance-intelligence/learning-timeline?limit=${encodeURIComponent(limit)}`
+  );
 }
 
 export function recalculatePerformanceIntelligence() {
-  return request("/performance-intelligence/recalculate", { method: "POST" });
+  return request("/performance-intelligence/recalculate", {
+    method: "POST",
+  });
 }
 
 export function rebuildPerformanceIntelligence({

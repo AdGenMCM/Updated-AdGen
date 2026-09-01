@@ -392,6 +392,66 @@ async def moderate_video_request(
 
 
 
+# Customer-facing ad text receives a stricter commercial brand-safety pass.
+# AI-generated copy is never counted as a policy violation against the user.
+BRAND_UNSAFE_DISPLAY_PATTERNS = (
+    r"\b(?:fuck|fucking|fucked|motherfucker|motherfucking)\b",
+    r"\b(?:shit|bullshit|shitty)\b",
+    r"\b(?:bitch|bitches)\b",
+    r"\b(?:cunt|dick|cock|pussy|asshole)\b",
+    r"\b(?:slut|whore)\b",
+)
+
+def _display_text_brand_safe(text: str) -> bool:
+    normalized = _normalize(text)
+    return not normalized or not any(
+        re.search(pattern, normalized, flags=re.IGNORECASE)
+        for pattern in BRAND_UNSAFE_DISPLAY_PATTERNS
+    )
+
+async def moderate_generated_display_text(
+    db,
+    uid: str,
+    *,
+    text_parts: Iterable[Optional[str]],
+) -> Dict[str, Any]:
+    parts = [p.strip() for p in text_parts if isinstance(p, str) and p.strip()]
+    if not parts:
+        return {"checked": True, "flagged": False, "categories": []}
+    if not _display_text_brand_safe("\\n".join(parts)):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "ADGen generated display text that did not meet brand-safety standards. Please regenerate the text.",
+                "generatedTextRejected": True,
+            },
+        )
+    return await moderate_video_request(
+        db, uid, text_parts=parts, record_violation=False
+    )
+
+async def moderate_user_display_text(
+    db,
+    uid: str,
+    *,
+    text_parts: Iterable[Optional[str]],
+) -> Dict[str, Any]:
+    parts = [p.strip() for p in text_parts if isinstance(p, str) and p.strip()]
+    if not parts:
+        return {"checked": True, "flagged": False, "categories": []}
+    if not _display_text_brand_safe("\\n".join(parts)):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "On-screen ad text must remain brand-safe. Remove vulgar or obscene wording and try again.",
+                "brandSafety": True,
+            },
+        )
+    return await moderate_video_request(
+        db, uid, text_parts=parts, record_violation=True
+    )
+
+
 PERSON_TERMS = re.compile(
     r"\b(person|people|woman|women|girl|female|man|men|boy|male|model|athlete|"
     r"trainer|coach|creator|influencer|spokesperson|speaker|customer|worker|"

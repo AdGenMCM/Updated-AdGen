@@ -1,8 +1,7 @@
 import hashlib
-import json
 import time
 from collections import Counter, defaultdict
-from typing import Any
+from typing import Any, Iterable
 
 from auth_helpers import get_db
 from google.cloud import firestore as gc_firestore
@@ -12,7 +11,9 @@ from .models import PerformanceEvidence, QualificationThresholds
 
 ROOT_COLLECTION = "performance_intelligence"
 EVIDENCE_SUBCOLLECTION = "evidence"
-REFRESH_SUBCOLLECTION = "refresh_sessions"
+
+POSITIVE_STATUSES = {"strong", "winner"}
+QUALIFIED_STATUSES = {"qualified", "strong", "winner", "underperformer"}
 
 
 def stable_creative_id(*parts: Any) -> str:
@@ -44,7 +45,10 @@ def get_thresholds(uid: str) -> QualificationThresholds:
         return QualificationThresholds()
 
 
-def save_thresholds(uid: str, thresholds: QualificationThresholds) -> None:
+def save_thresholds(
+    uid: str,
+    thresholds: QualificationThresholds,
+) -> None:
     root_ref(uid).set(
         {
             "thresholds": thresholds.model_dump(),
@@ -54,87 +58,35 @@ def save_thresholds(uid: str, thresholds: QualificationThresholds) -> None:
     )
 
 
-def _content_hash(payload: dict[str, Any]) -> str:
-    ignored = {
-        "updatedAt",
-        "firstSeenAt",
-        "lastChangedAt",
-        "contentHash",
-    }
-    clean = {
-        key: value
-        for key, value in payload.items()
-        if key not in ignored
-    }
-    raw = json.dumps(
-        clean,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def upsert_evidence(
-    uid: str,
-    evidence: PerformanceEvidence,
-) -> tuple[str, str]:
-    """Add or update one stable evidence record.
-
-    Metrics are treated as the newest absolute provider values. They are never
-    added to the prior values. Historical evidence documents not present in the
-    current refresh are left untouched.
-    """
+def save_evidence(uid: str, evidence: PerformanceEvidence) -> str:
     doc_id = evidence_document_id(evidence)
-    ref = (
+    payload = evidence.model_dump()
+    payload["updatedAt"] = int(time.time())
+
+    (
         root_ref(uid)
         .collection(EVIDENCE_SUBCOLLECTION)
         .document(doc_id)
+        .set(payload, merge=True)
     )
-    now = int(time.time())
-    existing_snap = ref.get()
-    existing = existing_snap.to_dict() or {}
-    incoming = evidence.model_dump()
-
-    # A fast refresh can skip media analysis. Preserve previously extracted
-    # traits rather than replacing them with empty feature sections.
-    previous_features = existing.get("features") or {}
-    incoming_features = incoming.get("features") or {}
-    for section in ("copy", "image", "video"):
-        if not incoming_features.get(section) and previous_features.get(section):
-            incoming_features[section] = previous_features[section]
-    incoming["features"] = incoming_features
-
-    incoming_hash = _content_hash(incoming)
-    if existing and existing.get("contentHash") == incoming_hash:
-        return doc_id, "unchanged"
-
-    ref.set(
-        {
-            **incoming,
-            "contentHash": incoming_hash,
-            "firstSeenAt": existing.get("firstSeenAt") or now,
-            "lastChangedAt": now,
-            "updatedAt": now,
-        },
-        merge=True,
-    )
-    return doc_id, "updated" if existing else "added"
-
-
-def save_evidence(uid: str, evidence: PerformanceEvidence) -> str:
-    doc_id, _change = upsert_evidence(uid, evidence)
     return doc_id
+
+
+def upsert_evidence(uid: str, evidence: PerformanceEvidence) -> str:
+    """
+    Backward-compatible alias used by the existing Google Ads and Meta Ads
+    adapters. The PI v3 store writes evidence with the same merge/upsert
+    semantics through save_evidence(), so older adapters can continue importing
+    upsert_evidence without any behavior change.
+    """
+    return save_evidence(uid, evidence)
 
 
 def get_evidence(uid: str, limit: int = 1000) -> list[dict[str, Any]]:
     query = (
         root_ref(uid)
         .collection(EVIDENCE_SUBCOLLECTION)
-        .order_by(
-            "updatedAt",
-            direction=gc_firestore.Query.DESCENDING,
-        )
+        .order_by("updatedAt", direction=gc_firestore.Query.DESCENDING)
         .limit(limit)
     )
     return [
@@ -142,88 +94,6 @@ def get_evidence(uid: str, limit: int = 1000) -> list[dict[str, Any]]:
         for snap in query.stream()
     ]
 
-
-def start_refresh_session(uid: str, request: dict[str, Any]) -> str:
-    now = int(time.time())
-    ref = (
-        root_ref(uid)
-        .collection(REFRESH_SUBCOLLECTION)
-        .document()
-    )
-    ref.set(
-        {
-            "status": "running",
-            "startedAt": now,
-            "updatedAt": now,
-            "request": request,
-            "sources": {},
-        }
-    )
-    root_ref(uid).set(
-        {
-            "latestRefresh": {
-                "id": ref.id,
-                "status": "running",
-                "startedAt": now,
-            }
-        },
-        merge=True,
-    )
-    return ref.id
-
-
-def finish_refresh_session(
-    uid: str,
-    session_id: str,
-    *,
-    status: str,
-    sources: dict[str, Any],
-    before: dict[str, Any] | None = None,
-    after: dict[str, Any] | None = None,
-    learning_changes: dict[str, Any] | None = None,
-    error: str | None = None,
-) -> dict[str, Any]:
-    now = int(time.time())
-    ref = (
-        root_ref(uid)
-        .collection(REFRESH_SUBCOLLECTION)
-        .document(session_id)
-    )
-    existing = ref.get().to_dict() or {}
-    started_at = int(existing.get("startedAt") or now)
-    payload = {
-        "status": status,
-        "sources": sources,
-        "before": before or {},
-        "after": after or {},
-        "learningChanges": learning_changes or {},
-        "error": error,
-        "finishedAt": now,
-        "updatedAt": now,
-        "durationSeconds": max(0, now - started_at),
-    }
-    ref.set(payload, merge=True)
-    latest = {
-        "id": session_id,
-        "startedAt": started_at,
-        **payload,
-    }
-    root_ref(uid).set({"latestRefresh": latest}, merge=True)
-    return latest
-
-
-
-def get_refresh_sessions(uid: str, limit: int = 50) -> list[dict[str, Any]]:
-    query = (
-        root_ref(uid)
-        .collection(REFRESH_SUBCOLLECTION)
-        .order_by("startedAt", direction=gc_firestore.Query.DESCENDING)
-        .limit(max(1, min(int(limit), 200)))
-    )
-    return [
-        {"id": snap.id, **(snap.to_dict() or {})}
-        for snap in query.stream()
-    ]
 
 def _weighted_average(items: list[tuple[float, float]]) -> float | None:
     total_weight = sum(max(weight, 0.0) for _value, weight in items)
@@ -243,246 +113,389 @@ def _top_counter(counter: Counter, limit: int = 8) -> list[dict[str, Any]]:
     return [
         {
             "value": value,
-            "count": count,
-            "share": round(count / total, 4),
+            "count": round(float(count), 4),
+            "share": round(float(count) / float(total), 4),
         }
         for value, count in counter.most_common(limit)
     ]
 
 
-
-# Creative-structure learning gates. Data is collected immediately, but a
-# structure preference is exposed to generation only after all evidence gates pass.
-STRUCTURE_MIN_SAMPLES_PER_VALUE = 5
-STRUCTURE_MIN_RELATIVE_LIFT_PCT = 15.0
-
-
-def _creative_structure(item: dict[str, Any]) -> dict[str, Any]:
-    features = item.get("features") or {}
-    source_metadata = features.get("source_metadata") or {}
-    raw = source_metadata.get("creativeElements")
-    return raw if isinstance(raw, dict) else {}
+def _as_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    text = str(value).strip()
+    return text or None
 
 
-def _structure_value(
-    structure: dict[str, Any],
-    dimension: str,
-) -> str | None:
-    if dimension == "headline":
-        value = structure.get("headline")
-        return "on" if value is True else ("off" if value is False else None)
-    if dimension == "body":
-        value = structure.get("body")
-        return "on" if value is True else ("off" if value is False else None)
-    if dimension == "cta":
-        value = structure.get("cta")
-        return "on" if value is True else ("off" if value is False else None)
-    if dimension == "logo_mode":
-        mode = str(structure.get("logoMode") or "").strip().lower()
-        return mode if mode in {"none", "generate", "brand_kit"} else None
-    return None
+def _add(counter: Counter, value: Any, score: float) -> None:
+    text = _as_text(value)
+    if text:
+        counter[text.lower()] += score
 
 
-def _structure_learning_profile(
-    qualified_items: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Aggregate structure performance and expose only sufficiently supported winners."""
-    dimensions = ("headline", "body", "cta", "logo_mode")
-    profile: dict[str, Any] = {
-        "thresholds": {
-            "minSamplesPerValue": STRUCTURE_MIN_SAMPLES_PER_VALUE,
-            "minRelativeLiftPct": STRUCTURE_MIN_RELATIVE_LIFT_PCT,
-        },
-        "dimensions": {},
-        "qualifiedFindings": [],
+def _add_many(counter: Counter, values: Iterable[Any], score: float) -> None:
+    for value in values or []:
+        _add(counter, value, score)
+
+
+def _num(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        number = float(value)
+        if number != number:
+            return None
+        return number
+    except (TypeError, ValueError):
+        return None
+
+
+def _mode_matches(item: dict[str, Any], mode: str) -> bool:
+    kind = str(item.get("kind") or "").lower()
+    if mode == "image":
+        return kind in {"image", "mixed"}
+    if mode == "video":
+        return kind in {"video", "mixed"}
+    return True
+
+
+def _profile_confidence(items: list[dict[str, Any]], source_count: int) -> float:
+    evidence_count = len(items)
+    qualified_count = sum(
+        1 for item in items if item.get("evidence_status") in QUALIFIED_STATUSES
+    )
+    positive_count = sum(
+        1 for item in items if item.get("evidence_status") in POSITIVE_STATUSES
+    )
+    if not evidence_count:
+        return 0.0
+    return min(
+        1.0,
+        (
+            min(qualified_count / 12.0, 1.0) * 0.55
+            + min(positive_count / 6.0, 1.0) * 0.30
+            + min(source_count / 3.0, 1.0) * 0.15
+        ),
+    )
+
+
+def _mode_stats(items: list[dict[str, Any]]) -> dict[str, Any]:
+    sources = Counter(str(item.get("source") or "unknown") for item in items)
+    qualified = [
+        item for item in items
+        if item.get("evidence_status") in QUALIFIED_STATUSES
+    ]
+    positive = [
+        item for item in items
+        if item.get("evidence_status") in POSITIVE_STATUSES
+    ]
+    return {
+        "evidenceCount": len(items),
+        "qualifiedCount": len(qualified),
+        "positiveCount": len(positive),
+        "underperformerCount": sum(
+            1 for item in items
+            if item.get("evidence_status") == "underperformer"
+        ),
+        "sourceCount": len(sources),
+        "sources": dict(sources),
+        "confidence": round(_profile_confidence(items, len(sources)), 4),
     }
 
-    for dimension in dimensions:
-        groups: dict[str, dict[str, float]] = defaultdict(
-            lambda: {
-                "samples": 0,
-                "impressions": 0.0,
-                "clicks": 0.0,
-                "spend": 0.0,
-                "conversions": 0.0,
-                "revenue": 0.0,
-            }
-        )
 
-        for item in qualified_items:
-            structure = _creative_structure(item)
-            value = _structure_value(structure, dimension)
-            if value is None:
-                continue
-
-            group = groups[value]
-            group["samples"] += 1
-            group["impressions"] += float(item.get("impressions") or 0)
-            group["clicks"] += float(item.get("clicks") or 0)
-            group["spend"] += float(item.get("spend") or 0)
-            group["conversions"] += float(item.get("conversions") or 0)
-            group["revenue"] += float(item.get("revenue") or 0)
-
-        rows = {}
-        eligible = {}
-        for value, group in groups.items():
-            impressions = group["impressions"]
-            clicks = group["clicks"]
-            spend = group["spend"]
-            conversions = group["conversions"]
-            revenue = group["revenue"]
-            row = {
-                **group,
-                "samples": int(group["samples"]),
-                "ctrPercent": round((clicks / impressions) * 100, 4)
-                if impressions > 0 else None,
-                "cvrPercent": round((conversions / clicks) * 100, 4)
-                if clicks > 0 else None,
-                "roas": round(revenue / spend, 4)
-                if spend > 0 else None,
-            }
-            # Existing PI qualification is the performance-quality gate.
-            # Structure learning adds only the cross-treatment sample gate.
-            row["eligible"] = bool(
-                row["samples"] >= STRUCTURE_MIN_SAMPLES_PER_VALUE
-            )
-            rows[value] = row
-            if row["eligible"]:
-                eligible[value] = row
-
-        finding = None
-        if len(eligible) >= 2:
-            # Prefer ROAS only when at least two eligible treatments have actual
-            # conversion/revenue signal; otherwise use CTR.
-            roas_ready = [
-                (value, row)
-                for value, row in eligible.items()
-                if row["conversions"] > 0
-                and row["revenue"] > 0
-                and row["roas"] is not None
-            ]
-            metric = "roas" if len(roas_ready) >= 2 else "ctrPercent"
-            ranked = sorted(
-                eligible.items(),
-                key=lambda pair: (
-                    pair[1].get(metric)
-                    if pair[1].get(metric) is not None
-                    else -1
-                ),
-                reverse=True,
-            )
-            best_value, best = ranked[0]
-            second_value, second = ranked[1]
-            best_metric = best.get(metric)
-            second_metric = second.get(metric)
-
-            if (
-                best_metric is not None
-                and second_metric is not None
-                and second_metric > 0
-            ):
-                lift_pct = (
-                    (float(best_metric) - float(second_metric))
-                    / float(second_metric)
-                    * 100
-                )
-                if lift_pct >= STRUCTURE_MIN_RELATIVE_LIFT_PCT:
-                    finding = {
-                        "dimension": dimension,
-                        "preferredValue": best_value,
-                        "runnerUpValue": second_value,
-                        "metric": metric,
-                        "relativeLiftPct": round(lift_pct, 1),
-                        "sampleCounts": {
-                            key: int(value["samples"])
-                            for key, value in eligible.items()
-                        },
-                        "impressions": {
-                            key: round(float(value["impressions"]), 2)
-                            for key, value in eligible.items()
-                        },
-                        "spend": {
-                            key: round(float(value["spend"]), 2)
-                            for key, value in eligible.items()
-                        },
-                        "confidence": "qualified",
-                    }
-                    profile["qualifiedFindings"].append(finding)
-
-        profile["dimensions"][dimension] = {
-            "groups": rows,
-            "finding": finding,
-        }
-
-    return profile
-
-
-def _performance_unit_key(item: dict[str, Any]) -> str:
-    explicit = str(item.get("performance_unit_id") or "").strip()
-    if explicit:
-        return explicit
-    source = str(item.get("source") or "unknown")
-    account = str(item.get("source_account_id") or "")
-    campaign = str(item.get("campaign_id") or "")
-    raw = item.get("raw_metadata") or {}
-    if source == "google_ads":
-        scope = str(raw.get("adId") or raw.get("ad_id") or raw.get("assetGroupId") or item.get("ad_group_id") or "campaign")
-    elif source == "meta_ads":
-        scope = str(item.get("deployment_id") or raw.get("metaAdId") or raw.get("adId") or item.get("creative_id") or "creative")
-    else:
-        scope = str(item.get("deployment_id") or item.get("creative_id") or item.get("external_asset_id") or "creative")
-    return ":".join([source, account, campaign, scope])
-
-
-def _unit_representatives(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    representatives: dict[str, dict[str, Any]] = {}
-    for item in items:
-        key = _performance_unit_key(item)
-        current = representatives.get(key)
-        if current is None or float(item.get("qualification_score") or 0) > float(current.get("qualification_score") or 0):
-            representatives[key] = item
-    return representatives
-
-
-def rebuild_summary(uid: str) -> dict[str, Any]:
-    # This intentionally reads the full retained evidence set. A refresh never
-    # scopes the summary to only the most recently requested provider range.
-    evidence = get_evidence(uid, limit=5000)
-    unit_representatives = _unit_representatives(evidence)
-    independent_results = list(unit_representatives.values())
-    unit_asset_counts = Counter(_performance_unit_key(item) for item in evidence)
-    positive = [
-        item
-        for item in evidence
-        if item.get("evidence_status") in {"strong", "winner"}
-    ]
-    negative = [
-        item
-        for item in independent_results
-        if item.get("evidence_status") == "underperformer"
-    ]
-    qualified = [
-        item
-        for item in independent_results
-        if item.get("evidence_status")
-        in {"qualified", "strong", "winner", "underperformer"}
-    ]
-
-    colors = Counter()
-    styles = Counter()
-    compositions = Counter()
-    backgrounds = Counter()
-    lifestyle = Counter()
+def _common_copy_profile(positive: list[dict[str, Any]]) -> dict[str, Any]:
     tones = Counter()
     cta_openers = Counter()
     headline_openers = Counter()
     asset_roles = Counter()
+    platforms = Counter()
+    headline_lengths: list[tuple[float, float]] = []
+
+    for item in positive:
+        score = max(float(item.get("qualification_score") or 0.25), 0.05)
+        features = item.get("features") or {}
+        copy = features.get("copy") or {}
+        meta = features.get("source_metadata") or {}
+
+        _add(tones, copy.get("emotional_tone") or meta.get("tone"), score)
+        _add(cta_openers, copy.get("first_cta_word"), score)
+        _add(headline_openers, copy.get("first_headline_word"), score)
+        _add(asset_roles, item.get("asset_role"), score)
+        _add(
+            platforms,
+            meta.get("platform")
+            or item.get("platform_label")
+            or (item.get("raw_metadata") or {}).get("platform"),
+            score,
+        )
+
+        length = _num(copy.get("headline_length"))
+        if length is not None:
+            headline_lengths.append((length, score))
+
+    return {
+        "top_emotional_tones": _top_counter(tones, 5),
+        "top_cta_openers": _top_counter(cta_openers, 5),
+        "top_headline_openers": _top_counter(headline_openers, 5),
+        "top_asset_roles": _top_counter(asset_roles, 8),
+        "top_platforms": _top_counter(platforms, 5),
+        "average_winning_headline_length": _weighted_average(headline_lengths),
+    }
+
+
+def _build_image_profile(positive: list[dict[str, Any]]) -> dict[str, Any]:
+    colors = Counter()
+    styles = Counter()
+    compositions = Counter()
+    backgrounds = Counter()
+    imagery = Counter()
+    tones = Counter()
+    text_levels = Counter()
+    text_positions = Counter()
+    cta_positions = Counter()
+    contrast_levels = Counter()
+    orientations = Counter()
+    ratios = Counter()
+    reference_modes = Counter()
+    campaign_objectives = Counter()
+    product_types = Counter()
+    product_prominence: list[tuple[float, float]] = []
+
+    for item in positive:
+        if not _mode_matches(item, "image"):
+            continue
+        score = max(float(item.get("qualification_score") or 0.25), 0.05)
+        features = item.get("features") or {}
+        image = features.get("image") or {}
+        meta = features.get("source_metadata") or {}
+        raw = item.get("raw_metadata") or {}
+
+        _add_many(colors, image.get("dominant_colors") or [], score)
+        for key, counter in [
+            ("visual_style", styles),
+            ("composition", compositions),
+            ("background_type", backgrounds),
+            ("lifestyle_vs_studio", imagery),
+            ("emotional_tone", tones),
+            ("text_overlay_level", text_levels),
+            ("text_position", text_positions),
+            ("cta_position", cta_positions),
+            ("contrast_level", contrast_levels),
+            ("aspect_orientation", orientations),
+        ]:
+            _add(counter, image.get(key), score)
+
+        _add(ratios, meta.get("ratio") or raw.get("ratio"), score)
+        _add(reference_modes, meta.get("referenceImageMode") or raw.get("referenceImageMode"), score)
+        _add(campaign_objectives, meta.get("campaignObjective") or raw.get("campaignObjective"), score)
+        _add(product_types, meta.get("productType") or raw.get("productType"), score)
+
+        prominence = _num(image.get("product_prominence_percent"))
+        if prominence is not None:
+            product_prominence.append((prominence, score))
+
+    common = _common_copy_profile(
+        [item for item in positive if _mode_matches(item, "image")]
+    )
+    return {
+        **common,
+        "top_colors": _top_counter(colors, 5),
+        "top_visual_styles": _top_counter(styles, 5),
+        "top_compositions": _top_counter(compositions, 5),
+        "top_backgrounds": _top_counter(backgrounds, 5),
+        "top_imagery_types": _top_counter(imagery, 5),
+        "top_image_emotional_tones": _top_counter(tones, 5),
+        "top_text_overlay_levels": _top_counter(text_levels, 4),
+        "top_text_positions": _top_counter(text_positions, 5),
+        "top_cta_positions": _top_counter(cta_positions, 5),
+        "top_contrast_levels": _top_counter(contrast_levels, 4),
+        "top_aspect_orientations": _top_counter(orientations, 4),
+        "top_ratios": _top_counter(ratios, 5),
+        "top_reference_modes": _top_counter(reference_modes, 4),
+        "top_campaign_objectives": _top_counter(campaign_objectives, 6),
+        "top_product_types": _top_counter(product_types, 6),
+        "average_winning_product_prominence_percent": _weighted_average(
+            product_prominence
+        ),
+    }
+
+
+def _build_video_profile(positive: list[dict[str, Any]]) -> dict[str, Any]:
+    durations = Counter()
+    ratios = Counter()
+    modes = Counter()
+    campaign_types = Counter()
+    visual_styles = Counter()
+    hook_styles = Counter()
+    pace = Counter()
+    camera_motion = Counter()
+    voice_modes = Counter()
+    music_usage = Counter()
+    overlay_usage = Counter()
+    cta_finish_usage = Counter()
+    reference_usage = Counter()
+    scene_counts = Counter()
+    scene_roles = Counter()
+    scene_performance_modes = Counter()
+
+    duration_values: list[tuple[float, float]] = []
+    thumb_stop_values: list[tuple[float, float]] = []
+    view_3s_values: list[tuple[float, float]] = []
+    view_6s_values: list[tuple[float, float]] = []
+    hold_values: list[tuple[float, float]] = []
+    conversion_rate_values: list[tuple[float, float]] = []
+
+    for item in positive:
+        if not _mode_matches(item, "video"):
+            continue
+
+        score = max(float(item.get("qualification_score") or 0.25), 0.05)
+        features = item.get("features") or {}
+        video = features.get("video") or {}
+        meta = features.get("source_metadata") or {}
+        raw = item.get("raw_metadata") or {}
+
+        duration = _num(video.get("duration_seconds") or meta.get("duration"))
+        if duration is not None and duration > 0:
+            duration_values.append((duration, score))
+            _add(durations, str(int(round(duration))), score)
+
+        _add(ratios, video.get("ratio") or meta.get("ratio") or raw.get("ratio"), score)
+        _add(modes, video.get("generation_mode") or meta.get("mode"), score)
+        _add(campaign_types, video.get("campaign_type") or meta.get("campaignType"), score)
+        _add(visual_styles, video.get("visual_style") or meta.get("visualStyle"), score)
+        _add(hook_styles, video.get("hook_style") or meta.get("hookStyle"), score)
+        _add(pace, video.get("pace") or meta.get("pace"), score)
+        _add(camera_motion, video.get("camera_motion") or meta.get("cameraMotion"), score)
+        _add(voice_modes, video.get("voice_mode") or meta.get("voiceMode"), score)
+        _add(music_usage, video.get("music_enabled"), score)
+        _add(overlay_usage, video.get("text_overlays_enabled"), score)
+        _add(cta_finish_usage, video.get("cta_finish_enabled"), score)
+        _add(reference_usage, video.get("reference_image_used"), score)
+
+        count = _num(video.get("scene_count"))
+        if count is not None:
+            _add(scene_counts, str(int(count)), score)
+
+        _add_many(scene_roles, video.get("scene_roles") or [], score)
+        _add_many(
+            scene_performance_modes,
+            video.get("scene_performance_modes") or [],
+            score,
+        )
+
+        for field, bucket in [
+            ("thumb_stop_rate", thumb_stop_values),
+            ("view_3s", view_3s_values),
+            ("view_6s", view_6s_values),
+            ("hold_rate", hold_values),
+            ("conversion_rate", conversion_rate_values),
+        ]:
+            value = _num(item.get(field))
+            if value is not None:
+                bucket.append((value, score))
+
+    common = _common_copy_profile(
+        [item for item in positive if _mode_matches(item, "video")]
+    )
+
+    return {
+        **common,
+        "top_durations": _top_counter(durations, 5),
+        "top_ratios": _top_counter(ratios, 5),
+        "top_generation_modes": _top_counter(modes, 5),
+        "top_campaign_types": _top_counter(campaign_types, 7),
+        "top_visual_styles": _top_counter(visual_styles, 6),
+        "top_hook_styles": _top_counter(hook_styles, 6),
+        "top_pacing": _top_counter(pace, 5),
+        "top_camera_motion": _top_counter(camera_motion, 6),
+        "top_voice_modes": _top_counter(voice_modes, 5),
+        "top_music_usage": _top_counter(music_usage, 3),
+        "top_text_overlay_usage": _top_counter(overlay_usage, 3),
+        "top_cta_finish_usage": _top_counter(cta_finish_usage, 3),
+        "top_reference_image_usage": _top_counter(reference_usage, 3),
+        "top_scene_counts": _top_counter(scene_counts, 6),
+        "top_scene_roles": _top_counter(scene_roles, 8),
+        "top_scene_performance_modes": _top_counter(
+            scene_performance_modes,
+            5,
+        ),
+        "average_winning_duration_seconds": _weighted_average(duration_values),
+        "average_winning_thumb_stop_rate": _weighted_average(thumb_stop_values),
+        "average_winning_view_3s": _weighted_average(view_3s_values),
+        "average_winning_view_6s": _weighted_average(view_6s_values),
+        "average_winning_hold_rate": _weighted_average(hold_values),
+        "average_winning_conversion_rate": _weighted_average(
+            conversion_rate_values
+        ),
+    }
+
+
+def _build_avoid_profile(negative: list[dict[str, Any]], mode: str) -> dict[str, Any]:
+    """
+    Conservative underperformer signal. Only exposes repeated structured traits;
+    it never turns one weak ad into a hard rule.
+    """
+    counters: dict[str, Counter] = defaultdict(Counter)
+
+    for item in negative:
+        if not _mode_matches(item, mode):
+            continue
+        features = item.get("features") or {}
+        meta = features.get("source_metadata") or {}
+        media = features.get(mode) or {}
+        weight = max(float(item.get("qualification_score") or 0.2), 0.05)
+
+        if mode == "image":
+            fields = {
+                "visual_styles": media.get("visual_style"),
+                "compositions": media.get("composition"),
+                "backgrounds": media.get("background_type"),
+                "text_overlay_levels": media.get("text_overlay_level"),
+                "ratios": meta.get("ratio"),
+            }
+        else:
+            fields = {
+                "durations": media.get("duration_seconds"),
+                "visual_styles": media.get("visual_style") or meta.get("visualStyle"),
+                "hook_styles": media.get("hook_style") or meta.get("hookStyle"),
+                "pacing": media.get("pace") or meta.get("pace"),
+                "voice_modes": media.get("voice_mode") or meta.get("voiceMode"),
+                "ratios": media.get("ratio") or meta.get("ratio"),
+            }
+
+        for key, value in fields.items():
+            _add(counters[key], value, weight)
+
+    return {
+        key: _top_counter(counter, 3)
+        for key, counter in counters.items()
+        if len(counter) > 0
+    }
+
+
+def rebuild_summary(uid: str) -> dict[str, Any]:
+    evidence = get_evidence(uid, limit=2000)
+
+    positive = [
+        item for item in evidence
+        if item.get("evidence_status") in POSITIVE_STATUSES
+    ]
+    negative = [
+        item for item in evidence
+        if item.get("evidence_status") == "underperformer"
+    ]
+    qualified = [
+        item for item in evidence
+        if item.get("evidence_status") in QUALIFIED_STATUSES
+    ]
+
     sources = Counter()
     statuses = Counter()
     source_statuses: dict[str, Counter] = defaultdict(Counter)
 
-    headline_lengths: list[tuple[float, float]] = []
-    product_prominence: list[tuple[float, float]] = []
     ctr_values: list[tuple[float, float]] = []
     roas_values: list[tuple[float, float]] = []
 
@@ -494,119 +507,77 @@ def rebuild_summary(uid: str) -> dict[str, Any]:
         source_statuses[source][evidence_status] += 1
 
     for item in positive:
-        unit_key = _performance_unit_key(item)
-        sibling_count = max(int(unit_asset_counts.get(unit_key) or 1), 1)
-        score = float(item.get("qualification_score") or 0.25) / sibling_count
-        features = item.get("features") or {}
-        copy = features.get("copy") or {}
-        image = features.get("image") or {}
+        score = max(float(item.get("qualification_score") or 0.25), 0.05)
+        ctr = _num(item.get("ctr_percent"))
+        roas = _num(item.get("roas"))
+        if ctr is not None:
+            ctr_values.append((ctr, score))
+        if roas is not None:
+            roas_values.append((roas, score))
 
-        for color in image.get("dominant_colors") or []:
-            colors[str(color).lower()] += score
-        for key, counter in [
-            ("visual_style", styles),
-            ("composition", compositions),
-            ("background_type", backgrounds),
-            ("lifestyle_vs_studio", lifestyle),
-            ("emotional_tone", tones),
-        ]:
-            value = image.get(key)
-            if value:
-                counter[str(value).lower()] += score
+    image_items = [item for item in evidence if _mode_matches(item, "image")]
+    video_items = [item for item in evidence if _mode_matches(item, "video")]
 
-        if copy.get("first_cta_word"):
-            cta_openers[str(copy["first_cta_word"]).lower()] += score
-        if copy.get("first_headline_word"):
-            headline_openers[
-                str(copy["first_headline_word"]).lower()
-            ] += score
-        if item.get("asset_role"):
-            asset_roles[str(item["asset_role"]).lower()] += score
-        if copy.get("headline_length") is not None:
-            headline_lengths.append(
-                (float(copy["headline_length"]), score)
-            )
-        if image.get("product_prominence_percent") is not None:
-            try:
-                product_prominence.append(
-                    (float(image["product_prominence_percent"]), score)
-                )
-            except (TypeError, ValueError):
-                pass
-        if item.get("ctr_percent") is not None:
-            ctr_values.append((float(item["ctr_percent"]), score))
-        if item.get("roas") is not None:
-            roas_values.append((float(item["roas"]), score))
+    image_positive = [item for item in positive if _mode_matches(item, "image")]
+    video_positive = [item for item in positive if _mode_matches(item, "video")]
 
-    source_count = len(sources)
-    evidence_count = len(evidence)
-    independent_result_count = len(independent_results)
-    qualified_count = len(qualified)
-    positive_units = {_performance_unit_key(item) for item in positive}
-    positive_count = len(positive_units)
+    image_profile = _build_image_profile(image_positive)
+    video_profile = _build_video_profile(video_positive)
 
-    confidence = 0.0
-    if independent_result_count:
-        confidence = min(
-            1.0,
-            min(qualified_count / 20.0, 1.0) * 0.55
-            + min(positive_count / 10.0, 1.0) * 0.30
-            + min(source_count / 3.0, 1.0) * 0.15,
-        )
+    # Preserve the historical generationProfile key as the image profile.
+    # Image generation already consumed image-oriented fields from this key.
+    generation_profiles = {
+        "image": image_profile,
+        "video": video_profile,
+    }
 
-    creative_structure_learning = _structure_learning_profile(qualified)
-
-    generation_profile = {
-        "top_colors": _top_counter(colors, 5),
-        "top_visual_styles": _top_counter(styles, 5),
-        "top_compositions": _top_counter(compositions, 5),
-        "top_backgrounds": _top_counter(backgrounds, 5),
-        "top_imagery_types": _top_counter(lifestyle, 5),
-        "top_emotional_tones": _top_counter(tones, 5),
-        "top_cta_openers": _top_counter(cta_openers, 5),
-        "top_headline_openers": _top_counter(headline_openers, 5),
-        "top_asset_roles": _top_counter(asset_roles, 8),
-        "average_winning_headline_length": _weighted_average(
-            headline_lengths
-        ),
-        "average_winning_product_prominence_percent": _weighted_average(
-            product_prominence
-        ),
-        # Raw structure aggregation is retained for future analysis, while only
-        # qualifiedFindings are eligible to influence generation.
-        "creative_structure_learning": creative_structure_learning,
-        "creative_structure_findings": creative_structure_learning.get(
-            "qualifiedFindings", []
-        ),
+    mode_stats = {
+        "image": _mode_stats(image_items),
+        "video": _mode_stats(video_items),
     }
 
     source_stats = {}
-    independent_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for result in independent_results:
-        independent_by_source[str(result.get("source") or "unknown")].append(result)
     for source, count in sources.items():
         status_counts = source_statuses[source]
-        source_units = independent_by_source.get(source, [])
-        unit_statuses = Counter(str(item.get("evidence_status") or "unknown") for item in source_units)
         source_stats[source] = {
             "evidenceCount": count,
-            "independentResultCount": len(source_units),
-            "qualifiedCount": sum(unit_statuses.get(status, 0) for status in {"qualified", "strong", "winner", "underperformer"}),
-            "positiveCount": unit_statuses.get("strong", 0) + unit_statuses.get("winner", 0),
-            "learningCount": unit_statuses.get("learning", 0) + unit_statuses.get("insufficient", 0),
-            "underperformerCount": unit_statuses.get("underperformer", 0),
+            "qualifiedCount": sum(
+                status_counts.get(status, 0)
+                for status in QUALIFIED_STATUSES
+            ),
+            "positiveCount": (
+                status_counts.get("strong", 0)
+                + status_counts.get("winner", 0)
+            ),
+            "learningCount": (
+                status_counts.get("learning", 0)
+                + status_counts.get("insufficient", 0)
+            ),
+            "underperformerCount": status_counts.get("underperformer", 0),
             "statuses": dict(status_counts),
-            "independentStatuses": dict(unit_statuses),
         }
 
-    existing_root = root_ref(uid).get().to_dict() or {}
+    source_count = len(sources)
+    evidence_count = len(evidence)
+    qualified_count = len(qualified)
+    positive_count = len(positive)
+
+    confidence = 0.0
+    if evidence_count:
+        confidence = min(
+            1.0,
+            (
+                min(qualified_count / 20.0, 1.0) * 0.55
+                + min(positive_count / 10.0, 1.0) * 0.30
+                + min(source_count / 3.0, 1.0) * 0.15
+            ),
+        )
+
     summary = {
         "version": 3,
         "learningEnabled": True,
         "confidence": round(confidence, 4),
         "evidenceCount": evidence_count,
-        "creativeAssetCount": evidence_count,
-        "independentResultCount": independent_result_count,
         "qualifiedCount": qualified_count,
         "positiveCount": positive_count,
         "underperformerCount": len(negative),
@@ -614,18 +585,29 @@ def rebuild_summary(uid: str) -> dict[str, Any]:
         "sources": dict(sources),
         "sourceStats": source_stats,
         "statuses": dict(statuses),
+        "modeStats": mode_stats,
         "averagePositiveCtrPercent": _weighted_average(ctr_values),
         "averagePositiveRoas": _weighted_average(roas_values),
-        "generationProfile": generation_profile,
-        "latestRefresh": existing_root.get("latestRefresh"),
+
+        # Backward compatible: image generation keeps receiving the historical
+        # image-oriented flat profile.
+        "generationProfile": image_profile,
+
+        # New: explicit image/video separation.
+        "generationProfiles": generation_profiles,
+        "avoidProfiles": {
+            "image": _build_avoid_profile(negative, "image"),
+            "video": _build_avoid_profile(negative, "video"),
+        },
         "updatedAt": int(time.time()),
     }
+
     root_ref(uid).set(summary, merge=True)
     return summary
 
 
 def get_summary(uid: str) -> dict[str, Any]:
     doc = root_ref(uid).get().to_dict() or {}
-    if not doc.get("updatedAt"):
+    if not doc.get("updatedAt") or int(doc.get("version") or 0) < 3:
         return rebuild_summary(uid)
     return doc

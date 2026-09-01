@@ -32,6 +32,7 @@ const LIMITS = {
   performanceBeat: 420,
   voiceover: 180,
   caption: 100,
+  overlayText: 42,
 };
 
 const DURATIONS = [
@@ -268,6 +269,7 @@ export default function VideoAdsV2() {
 
   const [useBrandKit, setUseBrandKit] = useState(true);
   const [brandKitId, setBrandKitId] = useState(null);
+  const [brandKit, setBrandKit] = useState(null);
   const [usePerformanceIntelligence, setUsePerformanceIntelligence] = useState(false);
 
   const [voiceMode, setVoiceMode] = useState("voiceover");
@@ -277,6 +279,7 @@ export default function VideoAdsV2() {
 
   const [musicAndEffects, setMusicAndEffects] = useState(true);
   const [captions, setCaptions] = useState(true);
+  const [textOverlays, setTextOverlays] = useState(false);
   const [endCard, setEndCard] = useState(true);
 
   const [referenceImage, setReferenceImage] = useState(null);
@@ -298,6 +301,91 @@ export default function VideoAdsV2() {
     () => FORMATS.find((item) => item.id === formatId) || FORMATS[0],
     [formatId]
   );
+
+
+  const fullVideoBrandDefaults = useMemo(() => {
+    if (!brandKit) return {};
+
+    const platformRaw = String(brandKit.preferredPlatform || "").toLowerCase();
+    const ratioRaw = String(brandKit.aspectRatioPreference || "");
+
+    let mappedFormatId = "";
+    if (["1024x1792", "720:1280", "1080:1920", "9:16"].includes(ratioRaw)) {
+      mappedFormatId = "vertical";
+    } else if (["1024x1024", "1080:1080", "1:1"].includes(ratioRaw)) {
+      mappedFormatId = "square";
+    } else if (["1792x1024", "1280:720", "1920:1080", "16:9"].includes(ratioRaw)) {
+      mappedFormatId = "landscape";
+    } else if (platformRaw === "tiktok" || platformRaw === "pinterest") {
+      mappedFormatId = "vertical";
+    } else if (
+      platformRaw === "meta" ||
+      platformRaw === "instagram" ||
+      platformRaw === "facebook"
+    ) {
+      mappedFormatId = "square";
+    } else if (
+      platformRaw === "google" ||
+      platformRaw === "youtube" ||
+      platformRaw === "linkedin"
+    ) {
+      mappedFormatId = "landscape";
+    }
+
+    const styleMap = {
+      Premium: "Cinematic / Premium",
+      Minimal: "Minimal",
+      Bold: "Product Showcase",
+      Lifestyle: "Lifestyle",
+      UGC: "UGC",
+      Luxury: "Cinematic / Premium",
+      "Studio Product": "Product Showcase",
+      Photorealistic: "Product Showcase",
+      "Dark & Cinematic": "Cinematic / Premium",
+      "Bright & Clean": "Minimal",
+    };
+
+    return {
+      companyName: brandKit.brandName || "",
+      audience: brandKit.targetAudience || "",
+      tone: brandKit.voice || brandKit.brandPersonality || "",
+      offer: brandKit.offerStyle || "",
+      callToAction: brandKit.preferredCta || "",
+      formatId: mappedFormatId,
+      visualStyle: styleMap[brandKit.imageStyle] || "",
+    };
+  }, [brandKit]);
+
+  useEffect(() => {
+    if (!useBrandKit || !brandKit) return;
+
+    if (fullVideoBrandDefaults.companyName) {
+      setCompanyName(fullVideoBrandDefaults.companyName);
+    }
+    if (fullVideoBrandDefaults.audience) {
+      setAudience(fullVideoBrandDefaults.audience);
+    }
+    if (fullVideoBrandDefaults.tone) {
+      setTone(fullVideoBrandDefaults.tone);
+    }
+    if (fullVideoBrandDefaults.offer) {
+      setOffer(fullVideoBrandDefaults.offer);
+    }
+    if (fullVideoBrandDefaults.callToAction) {
+      setCallToAction(fullVideoBrandDefaults.callToAction);
+    }
+    if (fullVideoBrandDefaults.formatId) {
+      setFormatId(fullVideoBrandDefaults.formatId);
+      setReferenceImageUrl(null);
+    }
+    if (fullVideoBrandDefaults.visualStyle) {
+      setVisualStyle(fullVideoBrandDefaults.visualStyle);
+    }
+
+    invalidateStoryboard();
+    // Apply only when the selected Brand Kit or Brand Kit toggle changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useBrandKit, brandKit, fullVideoBrandDefaults]);
 
   const canUsePerformanceIntelligence = useMemo(() => {
     if (me.isAdmin) return true;
@@ -401,7 +489,8 @@ export default function VideoAdsV2() {
     characterGender,
     characterVoice,
     musicAndEffects,
-    captions,
+    captions: voiceMode !== "none" && captions,
+    textOverlays: voiceMode === "none" && textOverlays,
     endCard,
   });
 
@@ -503,8 +592,18 @@ export default function VideoAdsV2() {
         progressMessage: "Generating your complete multi-shot ad.",
       });
     } catch (err) {
-      setError(err.message || "ADGen could not start the Full Video Ad.");
+      const safeMessage =
+        err.message || "ADGen could not start the Full Video Ad. Please try again.";
+      setError(safeMessage);
       setGenerating(false);
+      setJob((current) => ({
+        ...(current || {}),
+        status: "failed",
+        phase: "failed",
+        progressPercent: 100,
+        progressMessage: safeMessage,
+        error: safeMessage,
+      }));
     }
   };
 
@@ -592,9 +691,9 @@ export default function VideoAdsV2() {
               <span>FAST</span>
               <strong>Quick Clip</strong>
             </div>
-            <p>Create a fast 6–10 second V2 prompt-to-video or image-to-video clip with upgraded character and audio controls.</p>
+            <p>Create a fast 6–10 second V2 clip from one creative brief, with an optional reference image plus upgraded character and audio controls.</p>
             <ul>
-              <li>Prompt → Video and Image → Video</li>
+              <li>One creation flow with an optional reference image</li>
               <li>6s or 10s generation</li>
               <li>Voiceover, Character Dialogue, Brand Kit, and PI controls</li>
               <li>Best when you need one polished clip instead of a full ad</li>
@@ -629,7 +728,7 @@ export default function VideoAdsV2() {
 
       <div className="videoV2">
       <GenerationProgress
-        open={generating && !!job}
+        open={!!job && (generating || job?.status === "failed")}
         type="videoV2"
         stage={job?.phase || "queued"}
         message={job?.progressMessage}
@@ -637,7 +736,14 @@ export default function VideoAdsV2() {
         voiceMode={voiceMode}
         musicAndEffects={musicAndEffects}
         failed={job?.status === "failed"}
-        expectedMaxSeconds={360}
+        errorMessage={job?.error || error}
+        onClose={() => {
+          setGenerating(false);
+          setJob(null);
+          setJobId(null);
+          setError(null);
+        }}
+        expectedMaxSeconds={600}
       />
 
       <GenerationFeedback
@@ -966,7 +1072,7 @@ export default function VideoAdsV2() {
                     key={value}
                     type="button"
                     className={voiceMode === value ? "selected" : ""}
-                    onClick={() => { setVoiceMode(value); invalidateStoryboard(); }}
+                    onClick={() => { setVoiceMode(value); if (value === "none") { setCaptions(false); } else { setTextOverlays(false); setCaptions(true); } invalidateStoryboard(); }}
                   >
                     <strong>{title}</strong>
                     <span>{body}</span>
@@ -1059,9 +1165,13 @@ export default function VideoAdsV2() {
                   <input type="checkbox" checked={musicAndEffects} onChange={(e) => setMusicAndEffects(e.target.checked)} />
                   <span><strong>Music & Audio</strong><small>Add campaign-matched music and subtle audio polish.</small></span>
                 </label>
-                <label>
-                  <input type="checkbox" checked={captions} onChange={(e) => setCaptions(e.target.checked)} />
-                  <span><strong>Captions</strong><small>Add clean, social-ready captions.</small></span>
+                <label className={voiceMode !== "none" ? "disabled" : ""}>
+                  <input type="checkbox" checked={textOverlays} disabled={voiceMode !== "none"} onChange={(e) => { setTextOverlays(e.target.checked); invalidateStoryboard(); }} />
+                  <span><strong>{voiceMode === "none" ? "Text Overlays" : "🔒 Text Overlays"}</strong><small>{voiceMode === "none" ? "AI-suggested short scene copy rendered exactly during finishing." : "Available with No Voice to avoid clutter with spoken messaging."}</small></span>
+                </label>
+                <label className={voiceMode === "none" ? "disabled" : ""}>
+                  <input type="checkbox" checked={captions} disabled={voiceMode === "none"} onChange={(e) => setCaptions(e.target.checked)} />
+                  <span><strong>{voiceMode === "none" ? "🔒 Captions" : "Captions"}</strong><small>{voiceMode === "none" ? "Captions are reserved for spoken content." : "Add clean subtitles for the spoken content."}</small></span>
                 </label>
                 <label>
                   <input type="checkbox" checked={endCard} onChange={(e) => setEndCard(e.target.checked)} />
@@ -1102,7 +1212,13 @@ export default function VideoAdsV2() {
                 <div className="videoV2BrandKit">
                   <BrandKitSelector
                     value={brandKitId}
-                    onChange={(id) => { setBrandKitId(id); invalidateStoryboard(); }}
+                    onChange={(id) => {
+                      setBrandKitId(id);
+                      invalidateStoryboard();
+                    }}
+                    onKitChange={(selectedKit) => {
+                      setBrandKit(selectedKit);
+                    }}
                     disabled={generating || storyLoading}
                   />
                 </div>
@@ -1255,14 +1371,17 @@ export default function VideoAdsV2() {
                       </>
                     )}
 
-                    {captions && (
+                    {voiceMode === "none" && textOverlays && (
+                      <label>
+                        <span>Text overlay</span>
+                        <input value={scene.overlayText || ""} maxLength={LIMITS.overlayText} placeholder="Optional — 2–6 words" onChange={(e) => updateScene(scene.id, "overlayText", e.target.value)} />
+                        <CharacterCount value={scene.overlayText} max={LIMITS.overlayText} />
+                      </label>
+                    )}
+                    {voiceMode !== "none" && captions && (
                       <label>
                         <span>Caption idea</span>
-                        <input
-                          value={scene.caption || ""}
-                          maxLength={LIMITS.caption}
-                          onChange={(e) => updateScene(scene.id, "caption", e.target.value)}
-                        />
+                        <input value={scene.caption || ""} maxLength={LIMITS.caption} onChange={(e) => updateScene(scene.id, "caption", e.target.value)} />
                         <CharacterCount value={scene.caption} max={LIMITS.caption} />
                       </label>
                     )}
@@ -1741,8 +1860,7 @@ function VideoAdsV2Quick() {
   const templateSectionRef = useRef(null);
 
   const [me, setMe] = useState({ tier: null, status: null, isAdmin: false });
-
-  const [tab, setTab] = useState("image"); // "image" | "prompt"
+  const [meLoaded, setMeLoaded] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -1791,6 +1909,12 @@ function VideoAdsV2Quick() {
     );
   };
 
+  const quickOverlayLimit = Number(duration) >= 10 ? 3 : 2;
+  const updateOverlayMessage = (index, value) => {
+    const nextValue = String(value || "").split(/\s+/).filter(Boolean).slice(0, 6).join(" ").slice(0, 42);
+    setOverlayMessages((current) => { const next = [...current]; next[index] = nextValue; return next; });
+  };
+
   // ========== Voice & Audio ==========
   const [voiceMode, setVoiceMode] = useState("voiceover"); // none | voiceover | character_dialogue
   const [presetVoice, setPresetVoice] = useState("Leslie");
@@ -1798,6 +1922,9 @@ function VideoAdsV2Quick() {
   const [characterVoice, setCharacterVoice] = useState("natural_female");
   const [characterAction, setCharacterAction] = useState("");
   const [musicAndEffects, setMusicAndEffects] = useState(false);
+  const [textOverlays, setTextOverlays] = useState(false);
+  const [overlayMessages, setOverlayMessages] = useState(["", "", ""]);
+  const [ctaFinish, setCtaFinish] = useState(true);
   const [voiceoverScript, setVoiceoverScript] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -1821,11 +1948,24 @@ function VideoAdsV2Quick() {
 
     const platformFormatMap = {
       meta: "square_1x1",
+      instagram: "square_1x1",
+      facebook: "square_1x1",
       tiktok: "vertical_9x16",
-      google: "landscape_16x9",
-      linkedin: "square_1x1",
       pinterest: "vertical_9x16",
+      google: "landscape_16x9",
+      youtube: "landscape_16x9",
+      linkedin: "landscape_16x9",
     };
+
+    const ratioRaw = String(brandKit.aspectRatioPreference || "");
+    let ratioFormatId = "";
+    if (["1024x1792", "720:1280", "1080:1920", "9:16"].includes(ratioRaw)) {
+      ratioFormatId = "vertical_9x16";
+    } else if (["1024x1024", "1080:1080", "1:1"].includes(ratioRaw)) {
+      ratioFormatId = "square_1x1";
+    } else if (["1792x1024", "1280:720", "1920:1080", "16:9"].includes(ratioRaw)) {
+      ratioFormatId = "landscape_16x9";
+    }
 
     const sceneStyleMap = {
       Premium: "studio product",
@@ -1840,12 +1980,15 @@ function VideoAdsV2Quick() {
       "Bright & Clean": "studio product",
     };
 
+    const platformKey = String(brandKit.preferredPlatform || "").toLowerCase();
+
     return {
+      companyName: brandKit.brandName || "",
       audience: brandKit.targetAudience || "",
       tone: brandKit.voice || brandKit.brandPersonality || "",
       offer: brandKit.offerStyle || "",
       callToAction: brandKit.preferredCta || "",
-      formatId: platformFormatMap[brandKit.preferredPlatform] || "",
+      formatId: ratioFormatId || platformFormatMap[platformKey] || "",
       sceneStyle: sceneStyleMap[brandKit.imageStyle] || "",
     };
   }, [brandKit]);
@@ -1853,6 +1996,7 @@ function VideoAdsV2Quick() {
   useEffect(() => {
     const nextDefaults = useBrandKit && brandKit ? videoBrandDefaults : {};
 
+    setCompanyName(nextDefaults.companyName || "");
     setAudience(nextDefaults.audience || "");
     setTone(nextDefaults.tone || "confident");
     setOffer(nextDefaults.offer || "");
@@ -2180,7 +2324,7 @@ function VideoAdsV2Quick() {
       "lightingStyle",
       "pace",
     ]);
-    moveToWorkspaceSection(videoSettingsSectionRef);
+    moveToWorkspaceSection(creativeSectionRef);
   };
 
   const startVideoFromScratch = () => {
@@ -2251,7 +2395,10 @@ function VideoAdsV2Quick() {
           });
         }
       } catch {
-        // non-fatal
+        // If account lookup fails, finish loading and let the normal gate
+        // handle the unresolved account state instead of flashing it early.
+      } finally {
+        setMeLoaded(true);
       }
     };
     run();
@@ -2337,8 +2484,6 @@ function VideoAdsV2Quick() {
 
   useEffect(() => {
     if (advancedOpen) return;
-
-    setTab("prompt");
     setDuration(6);
     setVoiceMode("none");
     setVoiceoverScript("");
@@ -2354,7 +2499,6 @@ function VideoAdsV2Quick() {
   const onPickFile = (f) => {
     resetJob();
     setImageFile(f || null);
-
     if (imagePreview) {
       try { URL.revokeObjectURL(imagePreview); } catch {}
     }
@@ -2509,6 +2653,31 @@ function VideoAdsV2Quick() {
     }
   };
 
+  const buildUnifiedReferencePrompt = () => {
+    const parts = [
+      description.trim(),
+      productName.trim() ? `Advertised product or service: ${productName.trim()}.` : "",
+      offer.trim() ? `Offer: ${offer.trim()}.` : "",
+      audience.trim() ? `Audience: ${audience.trim()}.` : "",
+      goal ? `Goal: ${goal}.` : "",
+      tone.trim() ? `Tone: ${tone.trim()}.` : "",
+      hookStyle ? `Hook style: ${hookStyle}.` : "",
+      sceneStyle ? `Scene style: ${sceneStyle}.` : "",
+      cameraMotion ? `Camera motion: ${cameraMotion}.` : "",
+      lightingStyle ? `Lighting: ${lightingStyle}.` : "",
+      pace ? `Pace: ${pace}.` : "",
+      callToAction.trim() ? `Call to action: ${callToAction.trim()}.` : "",
+      fullCreativeDirection.trim()
+        ? `Additional creative direction: ${fullCreativeDirection.trim()}`
+        : "",
+      promptText.trim()
+        ? `Reference image motion direction: ${promptText.trim()}`
+        : "",
+    ].filter(Boolean);
+
+    return parts.join(" ").slice(0, 1580);
+  };
+
   // Start jobs
   const startImageVideo = async () => {
     if (!ensureVideoCreditsAvailable()) return;
@@ -2526,10 +2695,11 @@ function VideoAdsV2Quick() {
 
       const payload = {
         companyName: companyName.trim() || null,
+        productName: productName.trim() || null,
         useBrandKit,
         brandKitId,
         promptImageUrl,
-        promptText,
+        promptText: buildUnifiedReferencePrompt(),
         duration,
         ratio,
         voiceoverScript: voiceMode !== "none" ? (voiceoverScript || "").trim() : null,
@@ -2544,6 +2714,9 @@ function VideoAdsV2Quick() {
           characterAction: characterAction.trim() || null,
           musicAndEffects,
         },
+        textOverlays: voiceMode === "none" && textOverlays,
+        overlayMessages: voiceMode === "none" && textOverlays ? overlayMessages.slice(0, quickOverlayLimit) : [],
+        ctaFinish,
 
         // The backend securely resolves the current learned profile.
         usePerformanceIntelligence:
@@ -2708,6 +2881,12 @@ function VideoAdsV2Quick() {
           characterAction: quickMode ? null : (characterAction.trim() || null),
           musicAndEffects: quickMode ? false : musicAndEffects,
         },
+        textOverlays: !quickMode && effectiveVoiceMode === "none" && textOverlays,
+        overlayMessages:
+          !quickMode && effectiveVoiceMode === "none" && textOverlays
+            ? overlayMessages.slice(0, quickOverlayLimit)
+            : [],
+        ctaFinish: quickMode ? false : ctaFinish,
 
         // The backend securely resolves the current learned profile.
         usePerformanceIntelligence:
@@ -2830,12 +3009,14 @@ function VideoAdsV2Quick() {
           return;
         }
         if (data.status === "failed") {
-          setError(
-            customerSafeMessage(
-              data.error,
-              "We couldn't create your video. Please try again."
-            )
+          const safeFailure = customerSafeMessage(
+            data.error,
+            "We couldn't create your video. Close this message and try again."
           );
+          setProgressStage("failed");
+          setProgressPercent(100);
+          setProgressMessage(safeFailure);
+          setError(safeFailure);
           // Terminal failure reflects the backend's finalized rollback/refund state.
           void refreshWorkspaceRef.current?.();
           return;
@@ -2844,12 +3025,15 @@ function VideoAdsV2Quick() {
         timer = setTimeout(poll, 1500);
       } catch (e) {
         if (cancelled) return;
-        setError(
-          customerSafeMessage(
-            e?.message,
-            "We couldn't check your video status. Please try again."
-          )
+        const safeFailure = customerSafeMessage(
+          e?.message,
+          "We couldn't continue checking this video. Close this message and try again."
         );
+        setStatus("failed");
+        setProgressStage("failed");
+        setProgressPercent(100);
+        setProgressMessage(safeFailure);
+        setError(safeFailure);
       }
     };
 
@@ -2859,9 +3043,7 @@ function VideoAdsV2Quick() {
       if (timer) clearTimeout(timer);
     };
   }, [jobId]);
-
-  const canStartPrompt = productName.trim() && description.trim();
-  const canStartImage = !!imageFile;
+  const canStartUnified = Boolean(productName.trim() && description.trim());
 
   const ensureVideoCreditsAvailable = () => {
     if (!videoLimitReached) return true;
@@ -2890,6 +3072,17 @@ function VideoAdsV2Quick() {
         <div className="box">
           <p>Please log in to use Video Ads.</p>
           <button className="primary" onClick={() => navigate("/login")}>Go to Login</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!meLoaded) {
+    return (
+      <div className="videoAds">
+        <div className="videoAdsHeader">
+          <h1>Video Ads</h1>
+          <p>Loading your video workspace...</p>
         </div>
       </div>
     );
@@ -2972,16 +3165,25 @@ return (
       onDownload={downloadVideo}
     />
     <GenerationProgress
-      open={isGenerating}
+      open={isGenerating || status === "failed"}
       type="videoV2Quick"
-      stage={progressStage}
-      message={progressMessage}
-      percent={progressPercent}
+      stage={status === "failed" ? "failed" : progressStage}
+      message={error || progressMessage}
+      percent={status === "failed" ? 100 : progressPercent}
       voiceoverEnabled={voiceMode === "voiceover" && !!(voiceoverScript || "").trim()}
       voiceMode={voiceMode}
       musicAndEffects={musicAndEffects}
       failed={status === "failed"}
-      expectedMaxSeconds={180}
+      errorMessage={error}
+      onClose={() => {
+        setStatus(null);
+        setJobId(null);
+        setError(null);
+        setProgressStage("queued");
+        setProgressMessage("Preparing your video request.");
+        setProgressPercent(5);
+      }}
+      expectedMaxSeconds={600}
     />
 
     <div className="videoAdsLayout">
@@ -3003,7 +3205,7 @@ return (
           </p>
         </div>
 
-        {videoLimitReached && (
+{videoLimitReached && (
           <div className="generatorLimitTop">
             <div className="generatorUsageLimitCard generatorUsageLimitCardV2" role="alert">
                   <div className="generatorLimitIntro">
@@ -3074,7 +3276,6 @@ return (
               onClick={() => {
                 setAdvancedOpen(false);
                 setTemplatesOpen(false);
-                setTab("prompt");
                 setDuration(6);
                 setVoiceMode("none");
                 setVoiceoverScript("");
@@ -3306,7 +3507,6 @@ return (
                 !description.trim()
               }
               onClick={async () => {
-                setTab("prompt");
                 setVoiceMode("none");
                 setVoiceoverScript("");
 
@@ -3482,9 +3682,9 @@ return (
               <div className="template-helper-note">
                 <span aria-hidden="true">✨</span>
                 <span>
-                  Templates prefill your current controls only. Creation modes,
-                  Brand Kit, voiceover, Performance Intelligence, uploads, and
-                  every existing integration stay unchanged.
+                  Templates prefill your current controls only. Brand Kit,
+                  voiceover, Performance Intelligence, optional reference images,
+                  and every existing integration stay unchanged.
                 </span>
               </div>
             </div>
@@ -3509,40 +3709,375 @@ return (
 
         <div className="videoAdsForm">
         <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
-        <StepSection
-          step="1"
-          title="Creation Mode"
-          description="Choose whether to animate an uploaded image or generate a video from a written prompt."
-        >
-          <div className="videoTabs">
-            <button
-              type="button"
-              disabled={isGenerating}
-              className={tab === "image" ? "active" : ""}
-              onClick={() => {
-                setTab("image");
-                resetJob();
-              }}
+          <div ref={creativeSectionRef} className="videoCreativeScrollTarget">
+            <StepSection
+              step="1"
+              title="Create Your Video"
+              description="Describe the video you want. Add a reference image only when you want ADGen to preserve a specific product, subject, packaging, or visual starting point."
             >
-              Image → Video
-            </button>
+              <div className="videoQuickCreativeIdentity">
+                <div className="field">
+                  <label>
+                    Company / Brand Name <span className="videoQuickOptional">Optional</span>
+                    <InfoTip text="Keeps the generated video associated with the correct company or brand and supports Brand Kit context when enabled." />
+                  </label>
+                  <input
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Example: Ember Coffee Co."
+                    maxLength={LIMITS.companyName}
+                    disabled={isGenerating}
+                  />
+                  <div
+                    className={`videoCharacterCount ${
+                      companyName.length >= LIMITS.companyName * 0.9 ? "nearLimit" : ""
+                    }`}
+                  >
+                    {companyName.length}/{LIMITS.companyName}
+                  </div>
+                </div>
 
-            <button
-              type="button"
-              disabled={isGenerating}
-              className={tab === "prompt" ? "active" : ""}
-              onClick={() => {
-                setTab("prompt");
-                resetJob();
-              }}
-            >
-              Prompt → Video
-            </button>
+                <div className="field">
+                  <label>
+                    Product or Service
+                    <InfoTip text="The product, service, app, property, event, or offer the video is advertising." />
+                  </label>
+                  <input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="What are you advertising?"
+                    maxLength={QUICK_PRODUCT_MAX}
+                    disabled={isGenerating}
+                  />
+                  <div
+                    className={`videoCharacterCount ${
+                      productName.length >= QUICK_PRODUCT_MAX * 0.9 ? "nearLimit" : ""
+                    }`}
+                  >
+                    {productName.length}/{QUICK_PRODUCT_MAX}
+                  </div>
+                </div>
+              </div>
+
+              <div className="field">
+                <label>
+                  Video Prompt & Product Description
+                  <InfoTip text="Describe the product, setting, action, environment, product interaction, camera movement, and desired ending shot." />
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => { setDescription(e.target.value); clearVideoValidation(); }}
+                  rows={3}
+                  maxLength={VIDEO_DESCRIPTION_MAX}
+                  disabled={isGenerating}
+                  placeholder="Describe the product, setting, action, and desired visual result."
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    description.length >= VIDEO_DESCRIPTION_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {description.length}/{VIDEO_DESCRIPTION_MAX}
+                </div>
+              </div>
+
+              <div className="videoSectionHeading videoModeHeading">
+                <h2>
+                  Optional Reference Image
+                  <InfoTip text="If you add an image, ADGen automatically uses it as the visual starting point. If you leave this empty, ADGen generates the clip from your written brief." />
+                </h2>
+                <p>
+                  Upload an image when exact product appearance, packaging, a person, property,
+                  interface, or another visual should be preserved.
+                </p>
+              </div>
+
+              <div
+                className={`dropzone ${dragOver ? "dragOver" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => !isGenerating && fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                <input
+                  ref={fileInputRef}
+                  className="hiddenFile"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => onPickFile(e.target.files?.[0])}
+                  disabled={isGenerating}
+                />
+
+                {!imagePreview ? (
+                  <div className="dropzoneInner">
+                    <div className="dzTitle">Add a reference image (optional)</div>
+                    <div className="dzSub">
+                      Drag & drop or click to upload (PNG/JPG/WEBP)
+                    </div>
+                  </div>
+                ) : (
+                  <div className="previewWrap">
+                    <img src={imagePreview} alt="Reference preview" className="previewImg" />
+                    <div className="previewMeta">
+                      <div className="previewName">{imageFile?.name}</div>
+                      <div className="hint">
+                        ADGen will automatically use Image → Video for this generation.
+                      </div>
+                      <button
+                        className="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPickFile(null);
+                        }}
+                        type="button"
+                        disabled={isGenerating}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {imagePreview && (
+                <>
+                  <div className="uploadTip">
+                    <strong>Reference image active</strong>
+                    <p>
+                      ADGen will preserve the supplied visual identity while using the same
+                      campaign brief and controls below to direct the clip.
+                    </p>
+                  </div>
+
+                  <div className="field">
+                    <label>
+                      Reference Image Motion <span className="videoQuickOptional">Optional</span>
+                      <InfoTip text="Add any motion that specifically applies to the uploaded image, such as a camera push, hand interaction, product rotation, or subject movement." />
+                    </label>
+                    <textarea
+                      value={promptText}
+                      onChange={(e) => setPromptText(e.target.value)}
+                      rows={3}
+                      maxLength={IMAGE_MOTION_PROMPT_MAX}
+                      disabled={isGenerating}
+                      placeholder="Example: Slow camera push-in while a hand picks up the bottle and turns it toward camera."
+                    />
+                    <div
+                      className={`videoCharacterCount ${
+                        promptText.length >= IMAGE_MOTION_PROMPT_MAX * 0.9
+                          ? "nearLimit"
+                          : ""
+                      }`}
+                    >
+                      {promptText.length}/{IMAGE_MOTION_PROMPT_MAX}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Offer
+                    <InfoTip text="Discounts, promotions, free trials, bundles, or incentives to include." />
+                  </label>
+                  <input
+                    value={offer}
+                    onChange={(e) => setOffer(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    Audience
+                    <InfoTip text="Who this video advertisement is intended for." />
+                  </label>
+                  <input
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    placeholder="Optional"
+                    disabled={isGenerating}
+                  />
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Goal
+                    <InfoTip text="Choose whether the video should focus on sales, leads, traffic, or awareness." />
+                  </label>
+                  <select value={goal} onChange={(e) => { setGoal(e.target.value); markControlOverride("goal"); }} disabled={isGenerating}>
+                    <option value="conversions">Sales / Conversions</option>
+                    <option value="leads">Generate Leads</option>
+                    <option value="traffic">Website Traffic</option>
+                    <option value="awareness">Brand Awareness</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Tone
+                    <InfoTip text="Controls the personality of the commercial." />
+                  </label>
+                  <input value={tone} onChange={(e) => { setTone(e.target.value); markControlOverride("tone"); }} disabled={isGenerating} />
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Hook Style
+                    <InfoTip text="Determines how the video captures attention during the first few seconds." />
+                  </label>
+                  <select value={hookStyle} onChange={(e) => { setHookStyle(e.target.value); markControlOverride("hookStyle"); }} disabled={isGenerating}>
+                    <option value="bold claim">Bold claim</option>
+                    <option value="question">Question</option>
+                    <option value="problem solution">Problem → Solution</option>
+                    <option value="social proof">Social proof</option>
+                    <option value="before after">Before / After</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Pace
+                    <InfoTip text="Controls the speed and rhythm of the edit." />
+                  </label>
+                  <select value={pace} onChange={(e) => { setPace(e.target.value); markControlOverride("pace"); }} disabled={isGenerating}>
+                    <option value="fast">Fast (scroll-stopping)</option>
+                    <option value="medium">Medium</option>
+                    <option value="slow cinematic">Slow / cinematic</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Scene Style
+                    <InfoTip text="Defines the overall visual style of the commercial." />
+                  </label>
+                  <select value={sceneStyle} onChange={(e) => { setSceneStyle(e.target.value); markControlOverride("sceneStyle"); }} disabled={isGenerating}>
+                    <option value="studio product">Studio product</option>
+                    <option value="lifestyle">Lifestyle</option>
+                    <option value="ugc">UGC style</option>
+                    <option value="cinematic">Cinematic</option>
+                    <option value="minimal abstract">Minimal / abstract</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Camera Motion
+                    <InfoTip text="Controls how the virtual camera moves through the scene." />
+                  </label>
+                  <select value={cameraMotion} onChange={(e) => { setCameraMotion(e.target.value); markControlOverride("cameraMotion"); }} disabled={isGenerating}>
+                    <option value="none">None</option>
+                    <option value="subtle">Subtle</option>
+                    <option value="dynamic">Dynamic</option>
+                    <option value="fast cuts">Fast cuts</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label>
+                    Lighting
+                    <InfoTip text="Sets the lighting mood for the generated video." />
+                  </label>
+                  <select value={lightingStyle} onChange={(e) => { setLightingStyle(e.target.value); markControlOverride("lightingStyle"); }} disabled={isGenerating}>
+                    <option value="bright clean">Bright / clean</option>
+                    <option value="natural">Natural</option>
+                    <option value="dramatic">Dramatic</option>
+                    <option value="high contrast">High contrast</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>
+                    Call to Action
+                    <InfoTip text="The action you want viewers to take after watching." />
+                  </label>
+                  <input value={callToAction} onChange={(e) => setCallToAction(e.target.value)} disabled={isGenerating} />
+                </div>
+              </div>
+
+              <div className="field">
+                <label>
+                  Creative Direction
+                  <InfoTip text="Optional guidance for composition, storytelling, motion, or other details not covered by the controls above." />
+                </label>
+                <textarea
+                  value={fullCreativeDirection}
+                  onChange={(e) => setFullCreativeDirection(e.target.value)}
+                  maxLength={CREATIVE_DIRECTION_MAX}
+                  placeholder="Optional — add any final creative direction"
+                  disabled={isGenerating}
+                  rows={3}
+                />
+                <div
+                  className={`videoCharacterCount ${
+                    fullCreativeDirection.length >= CREATIVE_DIRECTION_MAX * 0.9
+                      ? "nearLimit"
+                      : ""
+                  }`}
+                >
+                  {fullCreativeDirection.length}/{CREATIVE_DIRECTION_MAX}
+                </div>
+              </div>
+
+              {validationError && (
+                <div
+                  ref={validationRef}
+                  className="videoValidationCard"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  <div className="videoValidationIcon" aria-hidden="true">!</div>
+                  <div className="videoValidationCopy">
+                    <strong>{validationError.title}</strong>
+                    <p>{validationError.message}</p>
+                    {validationError.help && (
+                      <p className="videoValidationHelp">{validationError.help}</p>
+                    )}
+                  </div>
+
+                  <div className="videoValidationActions">
+                    <button
+                      type="button"
+                      className="videoValidationAction"
+                      onClick={() => applyValidationFix(validationError)}
+                    >
+                      {validationError.actionLabel}
+                    </button>
+
+                    {validationError.secondaryActionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction secondary"
+                        onClick={() => applyValidationFix(validationError, true)}
+                      >
+                        {validationError.secondaryActionLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </StepSection>
           </div>
-        </StepSection>
         </div>
-
-        <div ref={videoSettingsSectionRef} className="video-settings-scroll-target">
+<div ref={videoSettingsSectionRef} className="video-settings-scroll-target">
         <StepSection
           step="2"
           title="Video Settings"
@@ -3686,6 +4221,13 @@ return (
               </label>
            </div>
 
+           <div className={`videoEnhancementCard ${textOverlays && voiceMode === "none" ? "enabled" : ""}`}>
+            <label className="videoToggle"><input type="checkbox" checked={textOverlays} onChange={(e) => setTextOverlays(e.target.checked)} disabled={isGenerating || voiceMode !== "none"} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>{voiceMode === "none" ? "Text Overlays" : "🔒 Text Overlays"}</span></span><small>{voiceMode === "none" ? `${quickOverlayLimit} messages maximum` : "Available with No Voice"}</small></span></label>
+           </div>
+           <div className={`videoEnhancementCard ${ctaFinish ? "enabled" : ""}`}>
+            <label className="videoToggle"><input type="checkbox" checked={ctaFinish} onChange={(e) => setCtaFinish(e.target.checked)} disabled={isGenerating} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>CTA Finish</span></span><small>Separate final branded action</small></span></label>
+           </div>
+
            <div className="videoEnhancementCard">
             {isFreePlan ? (
               <div className="videoToggleCopy">
@@ -3762,6 +4304,7 @@ return (
           </div>
 
 
+          {voiceMode === "none" && textOverlays && <div className="videoQuickOverlayEditor"><div className="videoQuickFinishingHead"><strong>Text Overlay Messages</strong><span>{quickOverlayLimit} maximum · 2–6 words each.</span></div><div className="videoQuickOverlayInputs">{Array.from({ length: quickOverlayLimit }).map((_, index) => <label key={index}><span>Message {index + 1}</span><input value={overlayMessages[index] || ""} maxLength={42} placeholder="2–6 words" onChange={(e) => updateOverlayMessage(index, e.target.value)} /><small>{(overlayMessages[index] || "").length}/42</small></label>)}</div></div>}
           <div ref={voiceScriptRef} className={`box voBox ${voiceMode === "none" ? "voBoxDisabled" : ""}`}>
             <div className="voiceHeader">
               <div>
@@ -3857,446 +4400,41 @@ return (
               </div>
             )}
           </div>
-        </StepSection>
-        </div>
-        <div ref={creativeSectionRef} className="videoCreativeScrollTarget">
-                <StepSection
-          step="3"
-          title={tab === "image" ? "Image to Video" : "Prompt to Video"}
-          description={
-            tab === "image"
-              ? "Upload an image and describe how it should move."
-              : "Describe the video you want to generate."
-          }
-        >
-          <div className={`videoQuickCreativeIdentity ${tab === "image" ? "imageMode" : ""}`}>
-            <div className="field">
-              <label>
-                Company / Brand Name <span className="videoQuickOptional">Optional</span>
-                <InfoTip text="Keeps the generated video associated with the correct company or brand and supports Brand Kit context when enabled." />
-              </label>
-              <input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Example: Ember Coffee Co."
-                maxLength={LIMITS.companyName}
-                disabled={isGenerating}
-              />
-              <div
-                className={`videoCharacterCount ${
-                  companyName.length >= LIMITS.companyName * 0.9 ? "nearLimit" : ""
-                }`}
-              >
-                {companyName.length}/{LIMITS.companyName}
-              </div>
-            </div>
 
-            {tab === "prompt" && (
-              <div className="field">
-                <label>
-                  Product or Service
-                  <InfoTip text="The product, service, app, property, event, or offer the video is advertising." />
-                </label>
-                <input
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder="What are you advertising?"
-                  maxLength={QUICK_PRODUCT_MAX}
-                  disabled={isGenerating}
-                />
-                <div
-                  className={`videoCharacterCount ${
-                    productName.length >= QUICK_PRODUCT_MAX * 0.9 ? "nearLimit" : ""
-                  }`}
-                >
-                  {productName.length}/{QUICK_PRODUCT_MAX}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {tab === "image" && (
-            <>
-              <div
-                className={`dropzone ${dragOver ? "dragOver" : ""}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-                onClick={() => !isGenerating && fileInputRef.current?.click()}
-                role="button"
-                tabIndex={0}
-              >
-                <input
-                  ref={fileInputRef}
-                  className="hiddenFile"
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  onChange={(e) => onPickFile(e.target.files?.[0])}
-                  disabled={isGenerating}
-                />
-
-                {!imagePreview ? (
-                  <div className="dropzoneInner">
-                    <div className="dzTitle">
-                      Drag & drop an image
-                      <InfoTip text="Upload a clean product or lifestyle image that will become the starting frame of the animation." />
-                    </div>
-                    <div className="dzSub">or click to upload (PNG/JPG/WEBP)</div>
-                  </div>
-                ) : (
-                  <div className="previewWrap">
-                    <img src={imagePreview} alt="preview" className="previewImg" />
-                    <div className="previewMeta">
-                      <div className="previewName">{imageFile?.name}</div>
-                      <button
-                        className="secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPickFile(null);
-                        }}
-                        type="button"
-                        disabled={isGenerating}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="uploadTip">
-                <strong>💡 Best Results</strong>
-                <p>
-                  Upload a clean product or lifestyle image with the important subject clearly visible.
-                  ADGen preserves the reference product and packaging while adapting it to the selected format.
-                </p>
-              </div>
-
-              <div className="field">
-                <label>
-                  Prompt Text
-                  <InfoTip text="Describe how the image should move, what happens in the scene, and any camera movement." />
-                </label>
-                <textarea
-                  value={promptText}
-                  onChange={(e) => setPromptText(e.target.value)}
-                  rows={3}
-                  maxLength={IMAGE_MOTION_PROMPT_MAX}
-                  disabled={isGenerating}
-                />
-                <div
-                  className={`videoCharacterCount ${
-                    promptText.length >= IMAGE_MOTION_PROMPT_MAX * 0.9
-                      ? "nearLimit"
-                      : ""
-                  }`}
-                >
-                  {promptText.length}/{IMAGE_MOTION_PROMPT_MAX}
-                </div>
-              </div>
-
-
-              {validationError && (
-                <div
-                  ref={validationRef}
-                  className="videoValidationCard"
-                  role="alert"
-                  aria-live="assertive"
-                >
-                  <div className="videoValidationIcon" aria-hidden="true">!</div>
-                  <div className="videoValidationCopy">
-                    <strong>{validationError.title}</strong>
-                    <p>{validationError.message}</p>
-                    {validationError.help && (
-                      <p className="videoValidationHelp">{validationError.help}</p>
-                    )}
-                  </div>
-
-                  <div className="videoValidationActions">
-                    <button
-                      type="button"
-                      className="videoValidationAction"
-                      onClick={() => applyValidationFix(validationError)}
-                    >
-                      {validationError.actionLabel}
-                    </button>
-
-                    {validationError.secondaryActionLabel && (
-                      <button
-                        type="button"
-                        className="videoValidationAction secondary"
-                        onClick={() => applyValidationFix(validationError, true)}
-                      >
-                        {validationError.secondaryActionLabel}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button
-                className="primary"
-                disabled={isGenerating || videoLimitReached || !canStartImage || scriptTooLong}
-                onClick={async () => {
-                  try {
+          <div className="videoQuickFinalAction">
+            <button
+              className="primary"
+              disabled={
+                isGenerating ||
+                videoLimitReached ||
+                scriptTooLong ||
+                !canStartUnified
+              }
+              onClick={async () => {
+                try {
+                  if (imageFile) {
                     await startImageVideo();
-                  } catch {}
-                }}
-                title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
-              >
-                {isGenerating ? "Creating..." : "Create My Video"}
-              </button>
-
-              <div className="hint" style={{ marginTop: 8 }}>
-                High-quality video generation can take up to 4 minutes.
-              </div>
-            </>
-          )}
-
-          {tab === "prompt" && (
-            <>
-              <div className="field">
-                <label>
-                  Video Prompt & Product Description
-                  <InfoTip text="Describe the product, setting, action, environment, product interaction, camera movement, and desired ending shot." />
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => { setDescription(e.target.value); clearVideoValidation(); }}
-                  rows={3}
-                  maxLength={VIDEO_DESCRIPTION_MAX}
-                  disabled={isGenerating}
-                  placeholder="Describe the product, setting, action, and desired visual result."
-                />
-                <div
-                  className={`videoCharacterCount ${
-                    description.length >= VIDEO_DESCRIPTION_MAX * 0.9
-                      ? "nearLimit"
-                      : ""
-                  }`}
-                >
-                  {description.length}/{VIDEO_DESCRIPTION_MAX}
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Offer
-                    <InfoTip text="Discounts, promotions, free trials, bundles, or incentives to include." />
-                  </label>
-                  <input
-                    value={offer}
-                    onChange={(e) => setOffer(e.target.value)}
-                    placeholder="Optional"
-                    disabled={isGenerating}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    Audience
-                    <InfoTip text="Who this video advertisement is intended for." />
-                  </label>
-                  <input
-                    value={audience}
-                    onChange={(e) => setAudience(e.target.value)}
-                    placeholder="Optional"
-                    disabled={isGenerating}
-                  />
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Goal
-                    <InfoTip text="Choose whether the video should focus on sales, leads, traffic, or awareness." />
-                  </label>
-                  <select value={goal} onChange={(e) => { setGoal(e.target.value); markControlOverride("goal"); }} disabled={isGenerating}>
-                    <option value="conversions">Sales / Conversions</option>
-                    <option value="leads">Generate Leads</option>
-                    <option value="traffic">Website Traffic</option>
-                    <option value="awareness">Brand Awareness</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Tone
-                    <InfoTip text="Controls the personality of the commercial." />
-                  </label>
-                  <input value={tone} onChange={(e) => { setTone(e.target.value); markControlOverride("tone"); }} disabled={isGenerating} />
-                </div>
-              </div>
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Hook Style
-                    <InfoTip text="Determines how the video captures attention during the first few seconds." />
-                  </label>
-                  <select value={hookStyle} onChange={(e) => { setHookStyle(e.target.value); markControlOverride("hookStyle"); }} disabled={isGenerating}>
-                    <option value="bold claim">Bold claim</option>
-                    <option value="question">Question</option>
-                    <option value="problem solution">Problem → Solution</option>
-                    <option value="social proof">Social proof</option>
-                    <option value="before after">Before / After</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Pace
-                    <InfoTip text="Controls the speed and rhythm of the edit." />
-                  </label>
-                  <select value={pace} onChange={(e) => { setPace(e.target.value); markControlOverride("pace"); }} disabled={isGenerating}>
-                    <option value="fast">Fast (scroll-stopping)</option>
-                    <option value="medium">Medium</option>
-                    <option value="slow cinematic">Slow / cinematic</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Scene Style
-                    <InfoTip text="Defines the overall visual style of the commercial." />
-                  </label>
-                  <select value={sceneStyle} onChange={(e) => { setSceneStyle(e.target.value); markControlOverride("sceneStyle"); }} disabled={isGenerating}>
-                    <option value="studio product">Studio product</option>
-                    <option value="lifestyle">Lifestyle</option>
-                    <option value="ugc">UGC style</option>
-                    <option value="cinematic">Cinematic</option>
-                    <option value="minimal abstract">Minimal / abstract</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Camera Motion
-                    <InfoTip text="Controls how the virtual camera moves through the scene." />
-                  </label>
-                  <select value={cameraMotion} onChange={(e) => { setCameraMotion(e.target.value); markControlOverride("cameraMotion"); }} disabled={isGenerating}>
-                    <option value="none">None</option>
-                    <option value="subtle">Subtle</option>
-                    <option value="dynamic">Dynamic</option>
-                    <option value="fast cuts">Fast cuts</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label>
-                    Lighting
-                    <InfoTip text="Sets the lighting mood for the generated video." />
-                  </label>
-                  <select value={lightingStyle} onChange={(e) => { setLightingStyle(e.target.value); markControlOverride("lightingStyle"); }} disabled={isGenerating}>
-                    <option value="bright clean">Bright / clean</option>
-                    <option value="natural">Natural</option>
-                    <option value="dramatic">Dramatic</option>
-                    <option value="high contrast">High contrast</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Call to Action
-                    <InfoTip text="The action you want viewers to take after watching." />
-                  </label>
-                  <input value={callToAction} onChange={(e) => setCallToAction(e.target.value)} disabled={isGenerating} />
-                </div>
-              </div>
-
-              <div className="field">
-                <label>
-                  Creative Direction
-                  <InfoTip text="Optional guidance for composition, storytelling, motion, or other details not covered by the controls above." />
-                </label>
-                <textarea
-                  value={fullCreativeDirection}
-                  onChange={(e) => setFullCreativeDirection(e.target.value)}
-                  maxLength={CREATIVE_DIRECTION_MAX}
-                  placeholder="Optional — add any final creative direction"
-                  disabled={isGenerating}
-                  rows={3}
-                />
-                <div
-                  className={`videoCharacterCount ${
-                    fullCreativeDirection.length >=
-                    CREATIVE_DIRECTION_MAX * 0.9
-                      ? "nearLimit"
-                      : ""
-                  }`}
-                >
-                  {fullCreativeDirection.length}/{CREATIVE_DIRECTION_MAX}
-                </div>
-              </div>
-
-
-              {validationError && (
-                <div
-                  ref={validationRef}
-                  className="videoValidationCard"
-                  role="alert"
-                  aria-live="assertive"
-                >
-                  <div className="videoValidationIcon" aria-hidden="true">!</div>
-                  <div className="videoValidationCopy">
-                    <strong>{validationError.title}</strong>
-                    <p>{validationError.message}</p>
-                    {validationError.help && (
-                      <p className="videoValidationHelp">{validationError.help}</p>
-                    )}
-                  </div>
-
-                  <div className="videoValidationActions">
-                    <button
-                      type="button"
-                      className="videoValidationAction"
-                      onClick={() => applyValidationFix(validationError)}
-                    >
-                      {validationError.actionLabel}
-                    </button>
-
-                    {validationError.secondaryActionLabel && (
-                      <button
-                        type="button"
-                        className="videoValidationAction secondary"
-                        onClick={() => applyValidationFix(validationError, true)}
-                      >
-                        {validationError.secondaryActionLabel}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button
-                className="primary"
-                disabled={isGenerating || videoLimitReached || !canStartPrompt || scriptTooLong}
-                onClick={async () => {
-                  try {
+                  } else {
                     await startPromptVideo();
-                  } catch {}
-                }}
-                title={scriptTooLong ? "Shorten your voiceover script to fit the selected duration." : ""}
-              >
-                {isGenerating ? "Creating..." : "Create My Video"}
-              </button>
+                  }
+                } catch {}
+              }}
+              title={
+                scriptTooLong
+                  ? "Shorten your voiceover script to fit the selected duration."
+                  : ""
+              }
+            >
+              {isGenerating ? "Creating..." : "Create My Video"}
+            </button>
 
-              <div className="hint" style={{ marginTop: 8 }}>
-                High-quality video generation can take up to 4 minutes.
-              </div>
-            </>
-          )}
+            <div className="hint" style={{ marginTop: 8 }}>
+              High-quality video generation can take up to 4 minutes.
+            </div>
+          </div>
         </StepSection>
         </div>
-        </div>
+                </div>
           </div>
         )}
       </main>
@@ -4401,6 +4539,11 @@ return (
             </div>
           ) : (
             <div className="videoSpecList">
+              <div className="videoSpecRow">
+                <span>Source</span>
+                <strong>{imageFile ? "Reference image + brief" : "Written brief"}</strong>
+              </div>
+
               <div className="videoSpecRow">
                 <span>Duration</span>
                 <strong>{duration}s</strong>
