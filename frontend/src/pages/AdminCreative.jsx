@@ -194,7 +194,10 @@ function CreativeCard({ item, onSelect }) {
         )}
 
         <p className="admin-creative-prompt-preview">
-          {item.prompt || "No generation prompt was stored for this creative."}
+          {item.prompt ||
+            (isVideo
+              ? item.videoGeneration?.description || "Generation direction was not stored for this older video."
+              : "No generation prompt was stored for this creative.")}
         </p>
 
         <div className="admin-creative-actions">
@@ -215,6 +218,28 @@ function CreativeCard({ item, onSelect }) {
       </div>
     </article>
   );
+}
+
+
+function yesNo(value) {
+  if (value === true) return "On";
+  if (value === false) return "Off";
+  return "—";
+}
+
+function videoModeLabel(value) {
+  const raw = String(value || "").toLowerCase();
+  if (raw.includes("full")) return "Full Video Ad";
+  if (raw.includes("quick")) return "Quick Clip";
+  return value || "—";
+}
+
+function voiceModeLabel(value) {
+  const raw = String(value || "").toLowerCase();
+  if (raw === "voiceover") return "AI Voiceover";
+  if (raw === "character_dialogue") return "Character Dialogue";
+  if (raw === "none") return "No Voice";
+  return value || "—";
 }
 
 function DetailsDrawer({ item, onClose }) {
@@ -285,6 +310,63 @@ function DetailsDrawer({ item, onClose }) {
             </dl>
           </section>
 
+          {item.kind === "video" && (
+            <section className="admin-creative-detail-section">
+              <h3>Video Generation</h3>
+              <dl>
+                <div><dt>Mode</dt><dd>{videoModeLabel(item.videoGeneration?.mode)}</dd></div>
+                <div><dt>Product</dt><dd>{item.videoGeneration?.productName || item.productName || "—"}</dd></div>
+                <div><dt>Voice</dt><dd>{voiceModeLabel(item.videoGeneration?.voiceMode)}</dd></div>
+                <div><dt>Sound Effects</dt><dd>{yesNo(item.videoGeneration?.soundEffects)}</dd></div>
+                <div><dt>Background Music</dt><dd>{yesNo(item.videoGeneration?.backgroundMusic)}</dd></div>
+                <div><dt>Captions</dt><dd>{yesNo(item.videoGeneration?.captions)}</dd></div>
+                <div><dt>CTA Finish</dt><dd>{yesNo(item.videoGeneration?.ctaFinish)}</dd></div>
+                <div><dt>CTA</dt><dd>{item.videoGeneration?.callToAction || "—"}</dd></div>
+                <div><dt>Storyboard Scenes</dt><dd>{item.videoGeneration?.storyboardSceneCount || "—"}</dd></div>
+              </dl>
+
+              {item.videoGeneration?.description && (
+                <div className="admin-creative-video-copy">
+                  <strong>Description</strong>
+                  <p>{item.videoGeneration.description}</p>
+                </div>
+              )}
+
+              {item.videoGeneration?.creativeDirection &&
+                item.videoGeneration.creativeDirection !== item.videoGeneration.description && (
+                <div className="admin-creative-video-copy">
+                  <strong>Creative Direction</strong>
+                  <p>{item.videoGeneration.creativeDirection}</p>
+                </div>
+              )}
+
+              {item.videoGeneration?.voiceoverScript && (
+                <div className="admin-creative-video-copy">
+                  <strong>Voiceover / Dialogue</strong>
+                  <p>{item.videoGeneration.voiceoverScript}</p>
+                </div>
+              )}
+
+              {item.videoGeneration?.storyboard?.scenes?.length > 0 && (
+                <div className="admin-creative-storyboard">
+                  <strong>Storyboard</strong>
+                  {item.videoGeneration.storyboard.scenes.map((scene, index) => (
+                    <div key={scene.id || index} className="admin-creative-storyboard-scene">
+                      <span>Scene {index + 1}</span>
+                      <p>
+                        {scene.visualDescription ||
+                          scene.description ||
+                          scene.prompt ||
+                          scene.action ||
+                          "Scene details were stored without a display description."}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {item.kind === "image" && (
             <section className="admin-creative-detail-section">
               <h3>Creative Structure</h3>
@@ -332,9 +414,12 @@ function DetailsDrawer({ item, onClose }) {
           </section>
 
           <section className="admin-creative-detail-section">
-            <h3>Prompt</h3>
+            <h3>{item.kind === "video" ? "Generation Direction" : "Prompt"}</h3>
             <p className="admin-creative-long-copy">
-              {item.prompt || "No prompt was stored for this creative."}
+              {item.prompt ||
+                (item.kind === "video"
+                  ? "This older video record does not contain saved user generation direction."
+                  : "No prompt was stored for this creative.")}
             </p>
           </section>
 

@@ -161,10 +161,14 @@ class FullAdBrief(BaseModel):
     presetVoice: str = Field(default="Leslie", max_length=80)
     characterVoice: str = Field(default="natural_female", max_length=80)
     characterGender: Literal["female", "male"] = "female"
-    musicAndEffects: bool = True
-    captions: bool = True
+    # Native provider scene audio and external background music are separate.
+    # Keep musicAndEffects temporarily for backward compatibility with older clients/jobs.
+    soundEffects: Optional[bool] = None
+    backgroundMusic: Optional[bool] = None
+    musicAndEffects: Optional[bool] = None
+    captions: bool = False
     textOverlays: bool = False
-    endCard: bool = True
+    endCard: bool = False
 
 
 class StoryboardRequest(FullAdBrief): pass
@@ -195,7 +199,11 @@ class AudioConfig(BaseModel):
     characterVoice: str = "natural_female"
     characterGender: Literal["female", "male"] = "female"
     characterAction: Optional[str] = Field(default=None, max_length=500)
-    musicAndEffects: bool = False
+    # Native provider scene audio and external background music are separate.
+    # Keep musicAndEffects temporarily for backward compatibility with older clients/jobs.
+    soundEffects: Optional[bool] = None
+    backgroundMusic: Optional[bool] = None
+    musicAndEffects: Optional[bool] = None
 
 class StartImageVideoRequest(BaseModel):
     companyName: Optional[str] = Field(default=None, max_length=120)
@@ -217,7 +225,7 @@ class StartImageVideoRequest(BaseModel):
     winnersInfluence: Optional[float] = 0.5
     textOverlays: bool = False
     overlayMessages: List[str] = Field(default_factory=list, max_length=3)
-    ctaFinish: bool = True
+    ctaFinish: bool = False
 
 class StartPromptVideoRequest(BaseModel):
     companyName: Optional[str] = Field(default=None, max_length=120)
@@ -252,7 +260,7 @@ class StartPromptVideoRequest(BaseModel):
     winnersInfluence: Optional[float] = 0.5
     textOverlays: bool = False
     overlayMessages: List[str] = Field(default_factory=list, max_length=3)
-    ctaFinish: bool = True
+    ctaFinish: bool = False
 
 class StartVideoResponse(BaseModel):
     jobId: str
@@ -433,6 +441,37 @@ def _layout(duration:int)->List[int]: return list(FULL_LAYOUTS[int(duration)])
 def _full_credits(duration:int)->int: return FULL_AD_CREDITS[int(duration)]
 def _quick_credits(duration:int)->int: return QUICK_CREDITS[int(duration)]
 def _kling_ratio(ratio:str)->str: return RATIO_TO_KLING.get(str(ratio), "9:16")
+
+def _audio_value(source:Any, field:str, *, default:bool)->bool:
+    """Resolve split audio fields with compatibility for the legacy combined flag."""
+    if isinstance(source, dict):
+        value=source.get(field)
+        legacy=source.get('musicAndEffects')
+    else:
+        value=getattr(source,field,None)
+        legacy=getattr(source,'musicAndEffects',None)
+    if value is not None:
+        return bool(value)
+    if legacy is not None:
+        return bool(legacy)
+    return bool(default)
+
+
+def _sound_effects_enabled(source:Any, *, voice_mode:Optional[str]=None, default:bool=True)->bool:
+    mode=str(
+        voice_mode
+        or (source.get('voiceMode') if isinstance(source,dict) else getattr(source,'voiceMode',''))
+        or ''
+    )
+    # Kling native audio is required for synchronized Character Dialogue.
+    if mode=='character_dialogue':
+        return True
+    return _audio_value(source,'soundEffects',default=default)
+
+
+def _background_music_enabled(source:Any, *, default:bool=False)->bool:
+    return _audio_value(source,'backgroundMusic',default=default)
+
 
 
 def _campaign_roles(campaign_type:str, count:int)->List[str]:
@@ -998,6 +1037,8 @@ def _mirror_full(db, job_id:str, job:Dict[str,Any])->None:
         'uid':job.get('uid'),'status':'succeeded','kind':'full_video_ad_v2','source':'video_v2_kling',
         'productName':job.get('productName'),'description':job.get('description'),'duration':job.get('duration'),
         'ratio':job.get('ratio'),'finalVideoUrl':job.get('finalVideoUrl'),'storyboard':job.get('storyboard'),
+        'brief':job.get('brief'),'scenes':job.get('scenes'),
+        'compiledGenerationPrompt':job.get('compiledGenerationPrompt'),
         'creditsReserved':job.get('creditsReserved'),'createdAt':job.get('createdAt'),'updatedAt':int(time.time()),
         'progressStage':'succeeded','progressPercent':100,'progressMessage':'Your Full Video Ad is ready.',
         'provider':'kling_v3_pro','falRequestId':job.get('falRequestId'),
@@ -1064,7 +1105,11 @@ def _shot_prompt(scene:StoryboardScene, brief:FullAdBrief, storyboard:Storyboard
         parts.append('No on-screen person speaks. Keep visible people nonverbal; narration is added separately by ADGen.')
     else:
         parts.append('No spoken dialogue. Keep any visible people nonverbal.')
-    if brief.musicAndEffects and brief.voiceMode!='voiceover': parts.append('Include realistic scene ambience and restrained commercial sound design; no unrelated vocals.')
+    if _sound_effects_enabled(brief, voice_mode=brief.voiceMode, default=True):
+        if brief.voiceMode=='character_dialogue':
+            parts.append('Include realistic synchronized scene ambience and restrained commercial sound design around the native dialogue; no unrelated voices or vocals.')
+        else:
+            parts.append('Include realistic synchronized scene ambience and restrained commercial sound design; no vocals, spoken words, or unrelated voices.')
     if brand: parts.append(brand)
     if intel: parts.append(intel)
 
@@ -1211,7 +1256,7 @@ def _full_payload(req:StartFullAdRequest, brand:str, intel:str)->tuple[str,Dict[
         if len(prompt) > 512:
             raise RuntimeError('Compiled video scene prompt exceeded the provider limit.')
         multi.append({'prompt':prompt,'duration':str(int(scene.duration))})
-    generate_audio = req.voiceMode=='character_dialogue' or (req.voiceMode=='none' and req.musicAndEffects) or (req.voiceMode=='voiceover' and req.musicAndEffects)
+    generate_audio = _sound_effects_enabled(req, voice_mode=req.voiceMode, default=True)
     common={'multi_prompt':multi,'duration':str(req.duration),'generate_audio':bool(generate_audio),'shot_type':'customize','negative_prompt':NEGATIVE_PROMPT,'cfg_scale':0.5}
     if req.referenceImageUrl:
         # Reference image is the authority for packaging and printed product text.
@@ -1716,6 +1761,10 @@ async def start_full(req:StartFullAdRequest,authorization:str|None=Header(defaul
         'brief':req.model_dump(exclude={'storyboard'}),
         'storyboard':req.storyboard.model_dump(),
         'scenes':[s.model_dump() for s in req.storyboard.scenes],
+        'userGenerationPrompt':_clean(req.creativeDirection or req.description,1800) or None,
+        'compiledGenerationPrompt':_clean(' | '.join(
+            str(item.get('prompt') or '') for item in payload.get('multi_prompt', [])
+        ),4000) or None,
         'creditsReserved':credits if not admin else 0,
         'usagePeriodKey':reservation.get('periodKey') or reservation.get('month'),
         'planCreditsReserved':int(reservation.get('planCharged') or 0),
@@ -1789,9 +1838,9 @@ async def _finish_full(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
             ref.update({'phase':'adding_voiceover','progressPercent':80,'progressMessage':'Adding the selected AI narration.','updatedAt':int(time.time())})
             stage_started=time.perf_counter()
             narration=await asyncio.to_thread(_openai_tts_bytes,script,str(brief.get('presetVoice') or 'Leslie'))
-            final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=bool(brief.get('musicAndEffects')))
+            final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=_sound_effects_enabled(brief, voice_mode=voice_mode, default=True))
             _timing_log('full',job_id,'voiceover generation + mix',stage_started)
-    if bool(brief.get('musicAndEffects')):
+    if _background_music_enabled(brief, default=False):
         ref.update({'phase':'adding_music','progressPercent':84,'progressMessage':'Creating and mixing subtle campaign-matched background music.','updatedAt':int(time.time())})
         try:
             stage_started=time.perf_counter()
@@ -2084,7 +2133,14 @@ def _quick_prompt(req:Any,base_prompt:str,brand:str,intel:str)->str:
         parts.append('No visible person speaks or mouths words. Generate only visual action and scene ambience; ADGen adds the selected off-screen narrator after rendering.')
     else:
         parts.append('No spoken dialogue. Visible people remain naturally nonverbal with relaxed mouths and no speech-like gestures.')
-    if not audio.musicAndEffects and mode!='character_dialogue': parts.append('Do not create vocals or spoken audio.')
+    sound_effects=_sound_effects_enabled(audio, voice_mode=mode, default=True)
+    if sound_effects:
+        if mode=='character_dialogue':
+            parts.append('Generate synchronized native scene sound and ambience around the spoken performance, including only realistic sounds caused by visible actions and environment.')
+        else:
+            parts.append('Generate realistic synchronized scene sound and ambience for visible actions and environment. No vocals, spoken words, or unrelated voices.')
+    elif mode!='character_dialogue':
+        parts.append('Do not generate scene audio, vocals, or spoken audio.')
     parts.append(
         'Continuous meaningful motion and clear commercial shot progression. '
         'When no reference exists, keep packaging copy minimal and use only the '
@@ -2168,7 +2224,7 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         image_url=image_url,
     )
 
-    generate_audio=req.audio.voiceMode=='character_dialogue' or bool(req.audio.musicAndEffects)
+    generate_audio=_sound_effects_enabled(req.audio, voice_mode=req.audio.voiceMode, default=True)
     payload={
         'prompt':prompt,
         'duration':str(req.duration),
@@ -2206,6 +2262,10 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         'kind':'quick_clip_v2',
         'source':'video_v2_kling',
         'companyName':getattr(req,'companyName',None),
+        'productName':getattr(req,'productName',None),
+        'description':getattr(req,'description',None),
+        'userGenerationPrompt':_clean(base_prompt,1800) or None,
+        'compiledGenerationPrompt':_clean(prompt,4000) or None,
         'duration':req.duration,
         'ratio':req.ratio,
         'creditsReserved':credits if not admin else 0,
@@ -2303,9 +2363,9 @@ async def _finish_quick(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
         ref.update({'progressStage':'adding_voiceover','progressPercent':82,'progressMessage':'Adding the selected AI narration.','updatedAt':int(time.time())})
         stage_started=time.perf_counter()
         narration=await asyncio.to_thread(_openai_tts_bytes,str(job.get('voiceoverScript')),str((job.get('voiceover') or {}).get('presetVoice') or 'Leslie'))
-        final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=True)
+        final=await asyncio.to_thread(_mix_voiceover,final,narration,keep_original_audio=_sound_effects_enabled(audio, voice_mode=voice_mode, default=True))
         _timing_log('quick',job_id,'voiceover generation + mix',stage_started)
-    if bool(audio.get('musicAndEffects')):
+    if _background_music_enabled(audio, default=False):
         ref.update({'progressStage':'adding_music','progressPercent':88,'progressMessage':'Adding subtle campaign-matched background music.','updatedAt':int(time.time())})
         quick_brief={'campaignType':'quick clip','subjectName':job.get('companyName'),'description':job.get('companyName'),'visualStyle':'commercial','tone':'campaign-matched'}
         try:

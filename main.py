@@ -6499,15 +6499,81 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         else media_url
     )
 
-    prompt = (
-        _pick(data, ["directorPrompt", "userPrompt", "promptText", "prompt"], default="")
-        if is_video
-        else (
-            _pick(optimizer_result, ["summary", "diagnosis"], default="")
-            if is_optimizer
-            else _pick(data, ["visualPrompt", "prompt"], default="")
+    brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+    audio = data.get("audio") if isinstance(data.get("audio"), dict) else {}
+    storyboard = data.get("storyboard") if isinstance(data.get("storyboard"), dict) else {}
+    scenes = storyboard.get("scenes") if isinstance(storyboard.get("scenes"), list) else []
+    if not scenes and isinstance(data.get("scenes"), list):
+        scenes = data.get("scenes") or []
+
+    if is_video:
+        # Prefer the user's own creative direction. Compiled/provider prompts are
+        # available separately for admin diagnostics and are not substituted for
+        # the user's request.
+        prompt = _pick(
+            data,
+            ["userGenerationPrompt", "userPrompt", "promptText", "description", "directorPrompt"],
+            default="",
         )
-    )
+        if not prompt:
+            prompt = _pick(
+                brief,
+                ["creativeDirection", "description"],
+                default="",
+            )
+    elif is_optimizer:
+        prompt = _pick(optimizer_result, ["summary", "diagnosis"], default="")
+    else:
+        prompt = _pick(data, ["visualPrompt", "prompt"], default="")
+
+    video_generation = None
+    if is_video:
+        voice_mode = _pick(audio, ["voiceMode"], default=None) or _pick(
+            brief, ["voiceMode"], default=None
+        )
+        video_generation = {
+            "mode": data.get("kind") or None,
+            "companyName": data.get("companyName") or None,
+            "productName": _pick(data, ["productName", "product_name"], default=None)
+                or _pick(brief, ["subjectName"], default=None),
+            "description": data.get("description") or brief.get("description") or None,
+            "creativeDirection": brief.get("creativeDirection") or data.get("fullCreativeDirection") or None,
+            "offer": brief.get("offer") or None,
+            "audience": brief.get("audience") or None,
+            "tone": brief.get("tone") or None,
+            "platform": brief.get("platform") or None,
+            "voiceMode": voice_mode,
+            "voiceoverScript": data.get("voiceoverScript") or brief.get("voiceoverScript") or None,
+            "soundEffects": (
+                audio.get("soundEffects")
+                if "soundEffects" in audio
+                else brief.get("soundEffects")
+            ),
+            "backgroundMusic": (
+                audio.get("backgroundMusic")
+                if "backgroundMusic" in audio
+                else brief.get("backgroundMusic")
+            ),
+            "captions": brief.get("captions") if "captions" in brief else None,
+            "ctaFinish": (
+                data.get("ctaFinish")
+                if "ctaFinish" in data
+                else brief.get("endCard")
+            ),
+            "callToAction": data.get("callToAction") or brief.get("cta") or None,
+            "textOverlays": (
+                data.get("textOverlays")
+                if "textOverlays" in data
+                else brief.get("textOverlays")
+            ),
+            "storyboardSceneCount": len(scenes),
+            "storyboard": storyboard or None,
+            "compiledPrompt": _pick(
+                data,
+                ["compiledGenerationPrompt", "compiledPrompt", "directorPrompt"],
+                default=None,
+            ),
+        }
 
     return {
         "id": doc_id,
@@ -6517,7 +6583,8 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         "updatedAt": _safe_int(data.get("updatedAt"), 0),
         "status": str(data.get("status") or "unknown").lower(),
         "source": data.get("source") or data.get("sourceType") or None,
-        "productName": _pick(data, ["productName", "product_name"], default=None),
+        "productName": _pick(data, ["productName", "product_name"], default=None)
+            or (_pick(brief, ["subjectName"], default=None) if is_video else None),
         "url": media_url,
         "thumbnailUrl": thumbnail_url,
         "prompt": prompt or "",
@@ -6526,10 +6593,11 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         "duration": _safe_int(data.get("duration"), 0) if is_video else None,
         "feedback": data.get("feedback") if isinstance(data.get("feedback"), dict) else None,
         "optimizerResult": optimizer_result if is_optimizer else None,
-        "model": data.get("model") or None,
+        "videoGeneration": video_generation,
+        "model": data.get("model") or data.get("provider") or None,
         "fileSizeBytes": _safe_int(data.get("fileSizeBytes"), 0),
         "error": data.get("error") or None,
-        "brandKitUsed": bool(data.get("brandKitUsed") or data.get("useBrandKit")),
+        "brandKitUsed": bool(data.get("brandKitUsed") or data.get("useBrandKit") or brief.get("useBrandKit")),
         "creativeElements": (
             data.get("creativeElements")
             if isinstance(data.get("creativeElements"), dict)
@@ -6542,7 +6610,6 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
         ),
         "user": user,
     }
-
 
 @app.get("/admin/creative")
 def admin_list_creative(
@@ -6637,6 +6704,10 @@ def admin_list_creative(
                     item.get("status"),
                     item.get("productName"),
                     item.get("prompt"),
+                    (item.get("videoGeneration") or {}).get("description"),
+                    (item.get("videoGeneration") or {}).get("creativeDirection"),
+                    (item.get("videoGeneration") or {}).get("callToAction"),
+                    (item.get("videoGeneration") or {}).get("voiceoverScript"),
                     item.get("model"),
                     item.get("source"),
                     user.get("email"),

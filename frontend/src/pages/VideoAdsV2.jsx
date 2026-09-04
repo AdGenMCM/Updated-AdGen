@@ -277,10 +277,11 @@ export default function VideoAdsV2() {
   const [characterGender, setCharacterGender] = useState("female");
   const [characterVoice, setCharacterVoice] = useState("natural_female");
 
-  const [musicAndEffects, setMusicAndEffects] = useState(true);
-  const [captions, setCaptions] = useState(true);
+  const [soundEffects, setSoundEffects] = useState(true);
+  const [backgroundMusic, setBackgroundMusic] = useState(false);
+  const [captions, setCaptions] = useState(false);
   const [textOverlays, setTextOverlays] = useState(false);
-  const [endCard, setEndCard] = useState(true);
+  const [endCard, setEndCard] = useState(false);
 
   const [referenceImage, setReferenceImage] = useState(null);
   const [referencePreview, setReferencePreview] = useState(null);
@@ -488,7 +489,8 @@ export default function VideoAdsV2() {
     presetVoice,
     characterGender,
     characterVoice,
-    musicAndEffects,
+    soundEffects: voiceMode === "character_dialogue" ? true : soundEffects,
+    backgroundMusic,
     captions: voiceMode !== "none" && captions,
     textOverlays: voiceMode === "none" && textOverlays,
     endCard,
@@ -734,7 +736,7 @@ export default function VideoAdsV2() {
         message={job?.progressMessage}
         percent={job?.progressPercent || 20}
         voiceMode={voiceMode}
-        musicAndEffects={musicAndEffects}
+        musicAndEffects={backgroundMusic}
         failed={job?.status === "failed"}
         errorMessage={job?.error || error}
         onClose={() => {
@@ -1064,7 +1066,7 @@ export default function VideoAdsV2() {
 
               <div className="videoV2VoiceCards">
                 {[
-                  ["none", "No Voice", "Visual ad with music and sound only."],
+                  ["none", "No Voice", "Visual ad with optional scene sound and background music."],
                   ["voiceover", "AI Voiceover", "Off-screen narration timed to each storyboard scene."],
                   ["character_dialogue", "On-Screen Character", "One recurring character can move through the scene while speaking with synchronized dialogue."],
                 ].map(([value, title, body]) => (
@@ -1072,7 +1074,7 @@ export default function VideoAdsV2() {
                     key={value}
                     type="button"
                     className={voiceMode === value ? "selected" : ""}
-                    onClick={() => { setVoiceMode(value); if (value === "none") { setCaptions(false); } else { setTextOverlays(false); setCaptions(true); } invalidateStoryboard(); }}
+                    onClick={() => { setVoiceMode(value); if (value === "none") { setCaptions(false); } else { setTextOverlays(false); } invalidateStoryboard(); }}
                   >
                     <strong>{title}</strong>
                     <span>{body}</span>
@@ -1161,9 +1163,32 @@ export default function VideoAdsV2() {
               </div>
 
               <div className="videoV2Toggles">
+                <label className={voiceMode === "character_dialogue" ? "disabled" : ""}>
+                  <input
+                    type="checkbox"
+                    checked={voiceMode === "character_dialogue" ? true : soundEffects}
+                    disabled={voiceMode === "character_dialogue"}
+                    onChange={(e) => setSoundEffects(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Sound Effects &amp; Ambience</strong>
+                    <small>
+                      {voiceMode === "character_dialogue"
+                        ? "Included automatically with on-screen dialogue for synchronized scene audio."
+                        : "Generate natural synchronized scene sounds and ambience with the video."}
+                    </small>
+                  </span>
+                </label>
                 <label>
-                  <input type="checkbox" checked={musicAndEffects} onChange={(e) => setMusicAndEffects(e.target.checked)} />
-                  <span><strong>Music & Audio</strong><small>Add campaign-matched music and subtle audio polish.</small></span>
+                  <input
+                    type="checkbox"
+                    checked={backgroundMusic}
+                    onChange={(e) => setBackgroundMusic(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Background Music</strong>
+                    <small>Add campaign-matched instrumental music during finishing.</small>
+                  </span>
                 </label>
                 <label className={voiceMode !== "none" ? "disabled" : ""}>
                   <input type="checkbox" checked={textOverlays} disabled={voiceMode !== "none"} onChange={(e) => { setTextOverlays(e.target.checked); invalidateStoryboard(); }} />
@@ -1175,7 +1200,13 @@ export default function VideoAdsV2() {
                 </label>
                 <label>
                   <input type="checkbox" checked={endCard} onChange={(e) => setEndCard(e.target.checked)} />
-                  <span><strong>CTA Finish</strong><small>Finish with your product, brand, and selected action.</small></span>
+                  <span>
+                    <strong>
+                      CTA Finish
+                      <InfoTip text="Adds your selected call-to-action and brand name over approximately the final 1.8 seconds of the existing video. It does not generate a separate end card." />
+                    </strong>
+                    <small>Show your CTA with a branded treatment over the final moments of the video.</small>
+                  </span>
                 </label>
               </div>
             </div>
@@ -1921,10 +1952,11 @@ function VideoAdsV2Quick() {
   const [characterGender, setCharacterGender] = useState("female");
   const [characterVoice, setCharacterVoice] = useState("natural_female");
   const [characterAction, setCharacterAction] = useState("");
-  const [musicAndEffects, setMusicAndEffects] = useState(false);
+  const [soundEffects, setSoundEffects] = useState(true);
+  const [backgroundMusic, setBackgroundMusic] = useState(false);
   const [textOverlays, setTextOverlays] = useState(false);
   const [overlayMessages, setOverlayMessages] = useState(["", "", ""]);
-  const [ctaFinish, setCtaFinish] = useState(true);
+  const [ctaFinish, setCtaFinish] = useState(false);
   const [voiceoverScript, setVoiceoverScript] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -2712,7 +2744,8 @@ function VideoAdsV2Quick() {
           characterVoice,
           characterGender,
           characterAction: characterAction.trim() || null,
-          musicAndEffects,
+          soundEffects: voiceMode === "character_dialogue" ? true : soundEffects,
+          backgroundMusic,
         },
         textOverlays: voiceMode === "none" && textOverlays,
         overlayMessages: voiceMode === "none" && textOverlays ? overlayMessages.slice(0, quickOverlayLimit) : [],
@@ -2879,7 +2912,8 @@ function VideoAdsV2Quick() {
           characterVoice,
           characterGender,
           characterAction: quickMode ? null : (characterAction.trim() || null),
-          musicAndEffects: quickMode ? false : musicAndEffects,
+          soundEffects: effectiveVoiceMode === "character_dialogue" ? true : soundEffects,
+          backgroundMusic: quickMode ? false : backgroundMusic,
         },
         textOverlays: !quickMode && effectiveVoiceMode === "none" && textOverlays,
         overlayMessages:
@@ -3172,7 +3206,7 @@ return (
       percent={status === "failed" ? 100 : progressPercent}
       voiceoverEnabled={voiceMode === "voiceover" && !!(voiceoverScript || "").trim()}
       voiceMode={voiceMode}
-      musicAndEffects={musicAndEffects}
+      musicAndEffects={backgroundMusic}
       failed={status === "failed"}
       errorMessage={error}
       onClose={() => {
@@ -3494,6 +3528,37 @@ return (
                 >
                   {callToAction.length}/{QUICK_CTA_MAX}
                 </div>
+              </div>
+            </div>
+
+            <div className="videoQuickSettingRow">
+              <div className="videoQuickSettingCopy">
+                <div className="videoQuickSettingTitle">
+                  <strong>Sound Effects &amp; Ambience</strong>
+                  <InfoTip text="Generates natural synchronized scene sounds such as movement, pours, clicks, impacts, and environmental ambience. Easy Mode does not add separate background music." />
+                </div>
+                <span>Generate natural synchronized sounds and ambience that match the action in your video.</span>
+              </div>
+
+              <div className="videoQuickSegmented" role="group" aria-label="Sound Effects and Ambience">
+                <button
+                  type="button"
+                  className={soundEffects ? "selected" : ""}
+                  onClick={() => setSoundEffects(true)}
+                  disabled={isGenerating}
+                  aria-pressed={soundEffects}
+                >
+                  On
+                </button>
+                <button
+                  type="button"
+                  className={!soundEffects ? "selected" : ""}
+                  onClick={() => setSoundEffects(false)}
+                  disabled={isGenerating}
+                  aria-pressed={!soundEffects}
+                >
+                  Off
+                </button>
               </div>
             </div>
 
@@ -4203,20 +4268,38 @@ return (
 
 
           <div className="videoEnhancementGrid">
-           <div className={`videoEnhancementCard ${musicAndEffects ? "enabled" : ""}`}>
+           <div className={`videoEnhancementCard ${(voiceMode === "character_dialogue" || soundEffects) ? "enabled" : ""}`}>
               <label className="videoToggle">
                 <input
                   type="checkbox"
-                  checked={musicAndEffects}
-                  onChange={(e) => setMusicAndEffects(e.target.checked)}
+                  checked={voiceMode === "character_dialogue" ? true : soundEffects}
+                  onChange={(e) => setSoundEffects(e.target.checked)}
+                  disabled={isGenerating || voiceMode === "character_dialogue"}
+                />
+                <span className="videoToggleCopy">
+                  <span className="videoToggleTitle">
+                    <span>Sound Effects &amp; Ambience</span>
+                    <InfoTip text={voiceMode === "character_dialogue" ? "Included automatically with on-screen dialogue so Kling can generate synchronized dialogue and natural scene sound together." : "Generates natural synchronized scene sounds such as movement, pours, clicks, impacts, and ambience with the video."} />
+                  </span>
+                  <small>{voiceMode === "character_dialogue" ? "Included automatically with Character Dialogue" : soundEffects ? "Natural synchronized scene audio" : "Off"}</small>
+                </span>
+              </label>
+           </div>
+
+           <div className={`videoEnhancementCard ${backgroundMusic ? "enabled" : ""}`}>
+              <label className="videoToggle">
+                <input
+                  type="checkbox"
+                  checked={backgroundMusic}
+                  onChange={(e) => setBackgroundMusic(e.target.checked)}
                   disabled={isGenerating}
                 />
                 <span className="videoToggleCopy">
                   <span className="videoToggleTitle">
-                    <span>Music &amp; Audio</span>
-                    <InfoTip text="Adds campaign-matched instrumental music at a restrained background level. ADGen keeps speech clear and avoids unrelated sounds." />
+                    <span>Background Music</span>
+                    <InfoTip text="Adds campaign-matched instrumental music at a restrained background level during finishing." />
                   </span>
-                  <small>{musicAndEffects ? "Subtle background music and audio polish" : "Optional"}</small>
+                  <small>{backgroundMusic ? "Campaign-matched instrumental music" : "Optional"}</small>
                 </span>
               </label>
            </div>
@@ -4225,7 +4308,21 @@ return (
             <label className="videoToggle"><input type="checkbox" checked={textOverlays} onChange={(e) => setTextOverlays(e.target.checked)} disabled={isGenerating || voiceMode !== "none"} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>{voiceMode === "none" ? "Text Overlays" : "🔒 Text Overlays"}</span></span><small>{voiceMode === "none" ? `${quickOverlayLimit} messages maximum` : "Available with No Voice"}</small></span></label>
            </div>
            <div className={`videoEnhancementCard ${ctaFinish ? "enabled" : ""}`}>
-            <label className="videoToggle"><input type="checkbox" checked={ctaFinish} onChange={(e) => setCtaFinish(e.target.checked)} disabled={isGenerating} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>CTA Finish</span></span><small>Separate final branded action</small></span></label>
+            <label className="videoToggle">
+              <input
+                type="checkbox"
+                checked={ctaFinish}
+                onChange={(e) => setCtaFinish(e.target.checked)}
+                disabled={isGenerating}
+              />
+              <span className="videoToggleCopy">
+                <span className="videoToggleTitle">
+                  <span>CTA Finish</span>
+                  <InfoTip text="Adds your selected call-to-action and brand name over approximately the final 1.8 seconds of the existing clip. It does not generate a separate end card." />
+                </span>
+                <small>Show your CTA with a branded treatment over the final moments of the clip.</small>
+              </span>
+            </label>
            </div>
 
            <div className="videoEnhancementCard">
@@ -4569,9 +4666,16 @@ return (
               </div>
 
               <div className="videoSpecRow">
-                <span>Music & effects</span>
-                <strong className={`videoStatusPill ${musicAndEffects ? "on" : "off"}`}>
-                  {musicAndEffects ? "Enabled" : "Disabled"}
+                <span>Sound effects &amp; ambience</span>
+                <strong className={`videoStatusPill ${(voiceMode === "character_dialogue" || soundEffects) ? "on" : "off"}`}>
+                  {voiceMode === "character_dialogue" || soundEffects ? "Enabled" : "Disabled"}
+                </strong>
+              </div>
+
+              <div className="videoSpecRow">
+                <span>Background music</span>
+                <strong className={`videoStatusPill ${backgroundMusic ? "on" : "off"}`}>
+                  {backgroundMusic ? "Enabled" : "Disabled"}
                 </strong>
               </div>
 
