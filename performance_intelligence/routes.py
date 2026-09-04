@@ -12,6 +12,8 @@ from .service import (
     analyze_one,
     generation_profile,
     get_summary,
+    learning_timeline,
+    performance_refresh_status,
     get_thresholds,
     rebuild_intelligence,
     rebuild_summary,
@@ -39,6 +41,21 @@ def intelligence_generation_profile(
     user=Depends(require_intelligence_user),
 ):
     return generation_profile(user["uid"], mode=mode)
+
+
+@router.get("/refresh-status")
+def intelligence_refresh_status(
+    user=Depends(require_intelligence_user),
+):
+    return performance_refresh_status(user["uid"])
+
+
+@router.get("/learning-timeline")
+def intelligence_learning_timeline(
+    limit: int = Query(default=25, ge=1, le=100),
+    user=Depends(require_intelligence_user),
+):
+    return learning_timeline(user["uid"], limit=limit)
 
 
 @router.get("/evidence")

@@ -11,6 +11,7 @@ from .models import PerformanceEvidence, QualificationThresholds
 
 ROOT_COLLECTION = "performance_intelligence"
 EVIDENCE_SUBCOLLECTION = "evidence"
+REFRESH_SUBCOLLECTION = "refresh_sessions"
 
 POSITIVE_STATUSES = {"strong", "winner"}
 QUALIFIED_STATUSES = {"qualified", "strong", "winner", "underperformer"}
@@ -72,14 +73,44 @@ def save_evidence(uid: str, evidence: PerformanceEvidence) -> str:
     return doc_id
 
 
-def upsert_evidence(uid: str, evidence: PerformanceEvidence) -> str:
+def upsert_evidence(
+    uid: str,
+    evidence: PerformanceEvidence,
+) -> tuple[str, str]:
     """
-    Backward-compatible alias used by the existing Google Ads and Meta Ads
-    adapters. The PI v3 store writes evidence with the same merge/upsert
-    semantics through save_evidence(), so older adapters can continue importing
-    upsert_evidence without any behavior change.
+    Upsert evidence while reporting whether this refresh added, updated, or
+    left the evidence unchanged. Google Ads and Meta Ads adapters use this
+    result for Learning Manager refresh summaries.
     """
-    return save_evidence(uid, evidence)
+    doc_id = evidence_document_id(evidence)
+    ref = (
+        root_ref(uid)
+        .collection(EVIDENCE_SUBCOLLECTION)
+        .document(doc_id)
+    )
+    existing = ref.get().to_dict() or {}
+
+    payload = evidence.model_dump()
+    payload["updatedAt"] = int(time.time())
+
+    # updatedAt is bookkeeping and must not turn an otherwise identical record
+    # into an "updated" result.
+    comparable_existing = {
+        key: value
+        for key, value in existing.items()
+        if key != "updatedAt"
+    }
+    comparable_next = dict(evidence.model_dump())
+
+    if not existing:
+        change = "added"
+    elif comparable_existing == comparable_next:
+        change = "unchanged"
+    else:
+        change = "updated"
+
+    ref.set(payload, merge=True)
+    return doc_id, change
 
 
 def get_evidence(uid: str, limit: int = 1000) -> list[dict[str, Any]]:
@@ -93,6 +124,41 @@ def get_evidence(uid: str, limit: int = 1000) -> list[dict[str, Any]]:
         {"id": snap.id, **(snap.to_dict() or {})}
         for snap in query.stream()
     ]
+
+
+def save_refresh_session(
+    uid: str,
+    payload: dict[str, Any],
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    collection = root_ref(uid).collection(REFRESH_SUBCOLLECTION)
+    ref = collection.document(session_id) if session_id else collection.document()
+
+    data = dict(payload or {})
+    data["id"] = ref.id
+    ref.set(data, merge=True)
+    return data
+
+
+def get_refresh_sessions(
+    uid: str,
+    limit: int = 25,
+) -> list[dict[str, Any]]:
+    query = (
+        root_ref(uid)
+        .collection(REFRESH_SUBCOLLECTION)
+        .order_by("startedAt", direction=gc_firestore.Query.DESCENDING)
+        .limit(max(1, min(int(limit or 25), 100)))
+    )
+    return [
+        {"id": snap.id, **(snap.to_dict() or {})}
+        for snap in query.stream()
+    ]
+
+
+def get_latest_refresh_session(uid: str) -> dict[str, Any] | None:
+    sessions = get_refresh_sessions(uid, limit=1)
+    return sessions[0] if sessions else None
 
 
 def _weighted_average(items: list[tuple[float, float]]) -> float | None:

@@ -1,7 +1,9 @@
 from typing import Any, Literal
 
 from .adapters.google_ads import ingest_google_ads
+from integrations.google_ads.store import get_connection as get_google_connection
 from .adapters.meta_ads import ingest_meta_ads
+from integrations.meta_ads.store import get_connection as get_meta_connection
 from .adapters.manual import ingest_manual_creative, ingest_manual_library
 from .extractors import analyze_copy, analyze_image, analyze_video_metadata
 from .models import (
@@ -13,10 +15,14 @@ from .models import (
 )
 from .qualification import qualify_evidence
 from .store import (
+    get_latest_refresh_session,
+    get_refresh_sessions,
     get_summary,
     get_thresholds,
     rebuild_summary,
+    root_ref,
     save_evidence,
+    save_refresh_session,
     save_thresholds,
 )
 
@@ -24,35 +30,200 @@ from .store import (
 GenerationMode = Literal["image", "video"]
 
 
+def _source_refresh_state(value: dict[str, Any] | None) -> str:
+    value = value or {}
+    failures = value.get("failures")
+    if value.get("reason"):
+        return "warning"
+    if isinstance(failures, list) and failures:
+        return "warning"
+    return "completed"
+
+
 def rebuild_intelligence(
     *,
     uid: str,
     payload: RebuildRequest,
 ) -> dict[str, Any]:
+    started_at = int(__import__("time").time())
+    before = get_summary(uid)
+
+    session = save_refresh_session(
+        uid,
+        {
+            "status": "running",
+            "startedAt": started_at,
+            "finishedAt": None,
+            "sources": {
+                "manual": bool(payload.include_manual),
+                "googleAds": bool(payload.include_google_ads),
+                "metaAds": bool(payload.include_meta_ads),
+            },
+            "ranges": {
+                "googleAds": payload.google_date_range,
+                "metaAds": payload.meta_date_range,
+            },
+            "before": {
+                "confidence": before.get("confidence", 0),
+                "evidenceCount": before.get("evidenceCount", 0),
+                "qualifiedCount": before.get("qualifiedCount", 0),
+                "positiveCount": before.get("positiveCount", 0),
+            },
+        },
+    )
+
     results: dict[str, Any] = {}
 
-    if payload.include_manual:
-        results["manual"] = ingest_manual_library(
-            uid=uid,
-            analyze_media=payload.analyze_media,
+    try:
+        if payload.include_manual:
+            results["manual"] = ingest_manual_library(
+                uid=uid,
+                analyze_media=payload.analyze_media,
+            )
+
+        if payload.include_google_ads:
+            results["googleAds"] = ingest_google_ads(
+                uid=uid,
+                date_range=payload.google_date_range,
+                start_date=payload.google_start_date,
+                end_date=payload.google_end_date,
+                analyze_media=payload.analyze_media,
+            )
+
+        if payload.include_meta_ads:
+            results["metaAds"] = ingest_meta_ads(
+                uid=uid,
+                date_range=payload.meta_date_range,
+                start_date=payload.meta_start_date,
+                end_date=payload.meta_end_date,
+                analyze_media=payload.analyze_media,
+            )
+
+        summary = rebuild_summary(uid)
+        finished_at = int(__import__("time").time())
+
+        selected_results = [
+            results.get(key)
+            for key in ("manual", "googleAds", "metaAds")
+            if key in results
+        ]
+        overall_status = (
+            "partial"
+            if any(_source_refresh_state(item) == "warning" for item in selected_results)
+            else "completed"
         )
 
-    if payload.include_google_ads:
-        results["googleAds"] = ingest_google_ads(
-            uid=uid,
-            date_range=payload.google_date_range,
-            analyze_media=payload.analyze_media,
+        latest_refresh = save_refresh_session(
+            uid,
+            {
+                "status": overall_status,
+                "startedAt": started_at,
+                "finishedAt": finished_at,
+                "sources": session.get("sources", {}),
+                "ranges": session.get("ranges", {}),
+                "before": session.get("before", {}),
+                "after": {
+                    "confidence": summary.get("confidence", 0),
+                    "evidenceCount": summary.get("evidenceCount", 0),
+                    "qualifiedCount": summary.get("qualifiedCount", 0),
+                    "positiveCount": summary.get("positiveCount", 0),
+                },
+                "results": {
+                    key: results.get(key)
+                    for key in ("manual", "googleAds", "metaAds")
+                    if key in results
+                },
+            },
+            session_id=session["id"],
         )
 
-    if payload.include_meta_ads:
-        results["metaAds"] = ingest_meta_ads(
-            uid=uid,
-            date_range=payload.meta_date_range,
-            analyze_media=payload.analyze_media,
+        root_ref(uid).set(
+            {
+                "latestRefresh": latest_refresh,
+                "learningUpdatedAt": finished_at,
+            },
+            merge=True,
         )
 
-    results["summary"] = rebuild_summary(uid)
-    return results
+        results["summary"] = {
+            **summary,
+            "latestRefresh": latest_refresh,
+            "learningUpdatedAt": finished_at,
+        }
+        results["latestRefresh"] = latest_refresh
+        results["before"] = session.get("before", {})
+        results["after"] = latest_refresh.get("after", {})
+        results["status"] = overall_status
+        return results
+
+    except Exception as exc:
+        finished_at = int(__import__("time").time())
+        failed_refresh = save_refresh_session(
+            uid,
+            {
+                "status": "failed",
+                "startedAt": started_at,
+                "finishedAt": finished_at,
+                "sources": session.get("sources", {}),
+                "ranges": session.get("ranges", {}),
+                "before": session.get("before", {}),
+                "error": str(exc)[:500],
+            },
+            session_id=session["id"],
+        )
+        root_ref(uid).set(
+            {"latestRefresh": failed_refresh},
+            merge=True,
+        )
+        raise
+
+
+def performance_refresh_status(uid: str) -> dict[str, Any]:
+    summary = get_summary(uid)
+    google = get_google_connection(uid) or {}
+    meta = get_meta_connection(uid) or {}
+
+    google_selected = bool(google.get("selectedCustomerId"))
+    meta_selected = bool(meta.get("selectedAdAccountId"))
+
+    return {
+        "learningUpdatedAt": (
+            summary.get("learningUpdatedAt")
+            or summary.get("updatedAt")
+        ),
+        "latestRefresh": (
+            summary.get("latestRefresh")
+            or get_latest_refresh_session(uid)
+        ),
+        "googleAds": {
+            "connected": bool(google),
+            "selected": google_selected,
+            "selectedCustomerId": google.get("selectedCustomerId"),
+            "lastSyncAt": (
+                google.get("lastSyncAt")
+                or google.get("lastCreativeSyncAt")
+                or google.get("updatedAt")
+            ),
+        },
+        "metaAds": {
+            "connected": bool(meta),
+            "selected": meta_selected,
+            "selectedAdAccountId": meta.get("selectedAdAccountId"),
+            "lastCreativeSyncAt": (
+                meta.get("lastCreativeSyncAt")
+                or meta.get("lastSyncAt")
+                or meta.get("updatedAt")
+            ),
+        },
+    }
+
+
+def learning_timeline(uid: str, limit: int = 25) -> dict[str, Any]:
+    sessions = get_refresh_sessions(uid, limit=limit)
+    return {
+        "count": len(sessions),
+        "sessions": sessions,
+    }
 
 
 def analyze_one(
@@ -202,6 +373,8 @@ def generation_profile(
 __all__ = [
     "analyze_one",
     "generation_profile",
+    "learning_timeline",
+    "performance_refresh_status",
     "get_summary",
     "get_thresholds",
     "ingest_manual_creative",

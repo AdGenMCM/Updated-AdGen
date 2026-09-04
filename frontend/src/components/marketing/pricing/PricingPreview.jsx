@@ -121,6 +121,11 @@ export default function PricingPreview() {
           View all plans
         </MarketingButton>
       </div>
+
+      <p className="adgen-pricing-credit-note">
+        Need more generations? Purchase additional non-expiring Image or Video
+        credits anytime without changing your plan.
+      </p>
     </Section>
   );
 }

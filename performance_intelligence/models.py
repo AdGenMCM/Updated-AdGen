@@ -41,6 +41,7 @@ class PerformanceEvidence(BaseModel):
     external_asset_id: str | None = None
     creative_id: str
     deployment_id: str | None = None
+    performance_unit_id: str | None = None
     kind: Literal["image", "video", "copy", "mixed"]
     asset_role: str | None = None
 
@@ -75,8 +76,18 @@ class RebuildRequest(BaseModel):
     include_manual: bool = True
     include_google_ads: bool = True
     include_meta_ads: bool = True
+
     google_date_range: str = "LAST_30_DAYS"
+    google_start_date: str | None = None
+    google_end_date: str | None = None
+
     meta_date_range: str = "LAST_30_DAYS"
+    meta_start_date: str | None = None
+    meta_end_date: str | None = None
+
+    # Retained for frontend compatibility. The existing adapters decide whether
+    # provider synchronization is required/available.
+    sync_sources: bool = True
     analyze_media: bool = True
 
 

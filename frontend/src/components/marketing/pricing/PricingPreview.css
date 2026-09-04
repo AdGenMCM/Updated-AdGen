@@ -162,3 +162,13 @@
 .adgen-pricing-card.featured h3 {
   color: #312e81;
 }
+
+.adgen-pricing-credit-note {
+  max-width: 720px;
+  margin: 22px auto 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.65;
+}

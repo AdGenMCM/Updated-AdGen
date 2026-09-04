@@ -3,9 +3,6 @@ import "./Hero.css";
 
 import Section from "../layout/Section";
 import MarketingButton from "../actions/MarketingButton";
-import ProductCanvas from "../ProductCanvas";
-import ProductMomentCard from "../ProductMomentCard";
-import DashboardPreview from "../DashboardPreview";
 
 import { trackEvent } from "../../../analytics/tracking";
 
@@ -81,53 +78,6 @@ export default function Hero() {
         </div>
       </div>
 
-      <div className="adgen-marketing-hero-visual">
-        <ProductCanvas
-          variant="hero"
-          alt="ADGen creative platform dashboard showing brand, generation, and performance workflows"
-          floatingCards={
-            <>
-              <ProductMomentCard
-                position="top-left"
-                status="success"
-                icon="brand"
-                eyebrow="Brand Kit"
-                title="Brand applied"
-                detail="Logo, colors, fonts, and voice connected"
-              />
-
-              <ProductMomentCard
-                position="top-right"
-                status="active"
-                icon="spark"
-                eyebrow="Creative"
-                title="Campaign building"
-                detail="Images, video, and copy in progress"
-              />
-
-              <ProductMomentCard
-                position="bottom-left"
-                status="insight"
-                icon="chart"
-                eyebrow="Performance"
-                title="Performance signal found"
-                detail="Qualified results ready to guide what comes next"
-              />
-
-              <ProductMomentCard
-                position="bottom-right"
-                status="video"
-                icon="video"
-                eyebrow="Delivery"
-                title="Creative ready"
-                detail="Campaign assets prepared for launch"
-              />
-            </>
-          }
-        >
-          <DashboardPreview />
-        </ProductCanvas>
-      </div>
     </Section>
   );
 }
