@@ -890,14 +890,15 @@
     font-size: 0.82rem;
   }
 
-  .template-card-copy small {
-    display: -webkit-box;
-    overflow: hidden;
-    font-size: 0.68rem;
-    line-height: 1.35;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
+ .template-card-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
 
   .template-card-action {
     font-size: 0.67rem;
@@ -1871,4 +1872,261 @@
   .generatorLimitTop {
     margin-bottom: 22px;
   }
+}
+
+/* =========================================================
+   Brand Kit V2 generation controls
+========================================================= */
+.brandkit-generation-controls {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--ag-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.brandkit-generation-controls-advanced {
+  margin-bottom: 2px;
+}
+
+.brandkit-generation-controls-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.brandkit-generation-controls-head > div {
+  display: grid;
+  gap: 5px;
+}
+
+.brandkit-generation-controls-head strong {
+  color: var(--ag-text);
+  font-size: 0.98rem;
+}
+
+.brandkit-generation-controls-head small,
+.brandkit-template-generation-option small,
+.brandkit-generation-summary span {
+  color: var(--ag-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.brandkit-generation-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.brandkit-template-generation-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.brandkit-template-generation-option > div {
+  display: grid;
+  gap: 5px;
+}
+
+.brandkit-template-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ag-text-soft);
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.brandkit-template-switch input {
+  width: auto;
+  margin: 0;
+}
+
+.brandkit-template-switch:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.brandkit-generation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.18);
+}
+
+.brandkit-generation-summary strong {
+  color: #c4b5fd;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.brandkit-control-lock {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ag-border);
+  border-radius: 999px;
+  color: var(--ag-muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.brandkit-generation-controls.is-locked {
+  opacity: 0.62;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.brandkit-generation-controls.is-locked select,
+.brandkit-generation-controls.is-locked input {
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .brandkit-generation-controls-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .brandkit-generation-controls-head {
+    flex-direction: column;
+  }
+
+  .brandkit-template-generation-option {
+    grid-template-columns: 1fr;
+  }
+
+  .brandkit-template-switch {
+    justify-self: start;
+  }
+}
+
+/* =========================================================
+   Full Workspace — unified Brand Kit creative section
+========================================================= */
+.brandkit-workspace-section {
+  display: grid;
+  gap: 20px;
+  padding: 26px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.09), rgba(79, 70, 229, 0.035)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.brandkit-workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.brandkit-workspace-kicker {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: var(--ag-primary-hover);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.brandkit-workspace-head h3 {
+  margin: 0;
+  color: var(--ag-text);
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.brandkit-workspace-head p {
+  margin: 7px 0 0;
+  color: var(--ag-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.brandkit-workspace-toggle {
+  padding: 16px;
+  border: 1px solid var(--ag-border);
+  border-radius: 15px;
+  background: rgba(255,255,255,.035);
+}
+
+.brandkit-workspace-selector {
+  min-width: 0;
+}
+
+.brandkit-workspace-locked-copy,
+.brandkit-workspace-disabled-field {
+  display: grid;
+  gap: 5px;
+  color: var(--ag-text-soft);
+}
+
+.brandkit-workspace-locked-copy small,
+.brandkit-workspace-disabled-field {
+  color: var(--ag-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.brandkit-workspace-disabled-field {
+  padding: 14px 15px;
+  border: 1px solid var(--ag-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+
+.brandkit-workspace-section.is-locked {
+  opacity: .62;
+  filter: saturate(.65);
+}
+
+.brandkit-workspace-section.is-locked select,
+.brandkit-workspace-section.is-locked input,
+.brandkit-workspace-section.is-locked button {
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .brandkit-workspace-section {
+    padding: 20px;
+  }
+
+  .brandkit-workspace-head {
+    flex-direction: column;
+  }
+}
+
+
+/* Full-width Performance Intelligence + generation-specific reference clarity */
+.adgen-form .enhancement-grid > .performance-intelligence-option {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.reference-scope-note {
+  margin-top: 12px;
+  color: var(--ag-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  text-align: center;
 }

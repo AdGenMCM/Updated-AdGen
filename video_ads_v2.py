@@ -505,7 +505,32 @@ def _refund_once(db, ref, job:Dict[str,Any], reason:str)->bool:
 def _brand_and_intel(db, uid:str, user_doc:Dict[str,Any], *, use_brand:bool, brand_id:Optional[str], use_intel:bool, admin:bool, tier:str, preserve_image:bool)->tuple[str,str]:
     brand=""; intel=""
     if use_brand:
-        try: brand=compile_video_brand_direction(resolve_brand_kit(db,uid,brand_id,user_doc) or {})
+        try:
+            kit = resolve_brand_kit(db,uid,brand_id,user_doc) or {}
+            brand = compile_video_brand_direction(kit)
+
+            # Brand Kit V2 fields that genuinely apply across media may guide
+            # Video Ads. Image-template/layout controls are intentionally ignored:
+            # templateReferenceUrl, templateConsistency, preferredAdLayout,
+            # logoPlacement, headlinePlacement, and ctaPlacement are image-only.
+            v2 = []
+            if kit.get('creativeDirection'):
+                v2.append('Persistent creative direction: ' + _clean(kit.get('creativeDirection'), 220))
+            if kit.get('requiredPhrases'):
+                v2.append('Required wording when relevant: ' + _clean(kit.get('requiredPhrases'), 150))
+            products = kit.get('products') or []
+            if isinstance(products,list) and products:
+                summaries=[]
+                for item in products[:3]:
+                    if isinstance(item,dict) and item.get('name'):
+                        summary=str(item.get('name'))
+                        if item.get('description'):
+                            summary += ': ' + _clean(item.get('description'),80)
+                        summaries.append(summary)
+                if summaries:
+                    v2.append('Saved offerings: ' + ' | '.join(summaries))
+            if v2:
+                brand = _clean((brand + ' ' + ' '.join(v2)).strip(), 700)
         except Exception as exc: print('[Video V2 Brand Kit]',repr(exc),flush=True)
     if use_intel and (admin or tier in {"pro_monthly","business_monthly"}):
         try: intel=compact_video_intelligence(get_intelligence_generation_profile(uid, mode='video') or {}, preserve_source_image=preserve_image, max_chars=650)

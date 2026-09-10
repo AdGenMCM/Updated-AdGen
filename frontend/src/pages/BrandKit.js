@@ -69,8 +69,66 @@ fontEnabled: {
   brandKeywords: "",
   negativeKeywords: "",
   complianceRules: "",
-  productsServices: "",
+  productsServices: "", // legacy fallback retained for existing Brand Kits
+
+  creativeDirection: "",
+  requiredPhrases: "",
+  preferredAdLayout: "",
+  logoPlacement: "auto",
+  headlinePlacement: "auto",
+  ctaPlacement: "auto",
+  templateReferenceUrl: "", // legacy single-template fallback
+  templateConsistency: "inspiration",
+  imageTemplates: [],
+  products: [],
 };
+
+function normalizeImageTemplates(source) {
+  const list = Array.isArray(source?.imageTemplates)
+    ? source.imageTemplates.filter((item) => item && item.referenceImageUrl)
+    : [];
+
+  if (list.length) {
+    const normalized = list.map((item, index) => ({
+      id: item.id || `template-${index + 1}`,
+      name: item.name || `Template ${index + 1}`,
+      referenceImageUrl: item.referenceImageUrl || "",
+      consistency: item.consistency === "follow_closely" ? "follow_closely" : "inspiration",
+      creativeDirection: item.creativeDirection || "",
+      isDefault: Boolean(item.isDefault),
+    }));
+    if (!normalized.some((item) => item.isDefault) && normalized.length) {
+      normalized[0].isDefault = true;
+    }
+    return normalized;
+  }
+
+  if (source?.templateReferenceUrl) {
+    return [{
+      id: "legacy-template",
+      name: "Brand Template",
+      referenceImageUrl: source.templateReferenceUrl,
+      consistency: source.templateConsistency === "follow_closely" ? "follow_closely" : "inspiration",
+      creativeDirection: "",
+      isDefault: true,
+    }];
+  }
+
+  return [];
+}
+
+function hydrateBrandKit(source) {
+  const selected = source || {};
+  return {
+    ...defaultKit,
+    ...selected,
+    colors: { ...defaultKit.colors, ...(selected.colors || {}) },
+    colorEnabled: { ...defaultKit.colorEnabled, ...(selected.colorEnabled || {}) },
+    fonts: { ...defaultKit.fonts, ...(selected.fonts || {}) },
+    fontEnabled: { ...defaultKit.fontEnabled, ...(selected.fontEnabled || {}) },
+    imageTemplates: normalizeImageTemplates(selected),
+  };
+}
 
 function buildGoogleFontUrl(fonts) {
   const uniqueFonts = [...new Set(fonts.filter(Boolean))];
@@ -89,11 +147,15 @@ function buildGoogleFontUrl(fonts) {
 export default function BrandKit() {
   const apiBase = (process.env.REACT_APP_API_BASE_URL || "").trim();
   const logoInputRef = useRef(null);
+  const templateInputRef = useRef(null);
+  const productImageInputRef = useRef(null);
 
   const [kit, setKit] = useState(defaultKit);
   const [kits, setKits] = useState([]);
   const [selectedKitId, setSelectedKitId] = useState(null);
   const [kitLimit, setKitLimit] = useState(1);
+  const [templateLimit, setTemplateLimit] = useState(0);
+  const [productLimit, setProductLimit] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
@@ -102,32 +164,41 @@ export default function BrandKit() {
   const [saveMsg, setSaveMsg] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoErr, setLogoErr] = useState("");
+  const [templateUploading, setTemplateUploading] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+  const [templateDraft, setTemplateDraft] = useState({
+    id: "",
+    name: "",
+    referenceImageUrl: "",
+    consistency: "inspiration",
+    creativeDirection: "",
+    isDefault: false,
+  });
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [editingProductIndex, setEditingProductIndex] = useState(null);
+  const [productDraft, setProductDraft] = useState({ name: "", type: "product", description: "", sellingPoints: "", referenceImageUrl: "", isPrimary: false });
+  const [productImageUploading, setProductImageUploading] = useState(false);
 
   const brandCompletion = useMemo(() => {
-  const checks = [
-    { label: "Brand name", done: !!kit.brandName },
-    { label: "Logo", done: !!kit.logoUrl },
-    { label: "Website", done: !!kit.websiteUrl },
-    { label: "Industry", done: !!kit.industry },
-    { label: "Audience", done: !!kit.targetAudience },
-    { label: "Brand DNA", done: !!kit.brandDna },
-    { label: "Colors", done: !!(kit.colors?.primary || kit.colors?.secondary || kit.colors?.accent) },
-    { label: "Fonts", done: !!(kit.fonts?.headline || kit.fonts?.body || kit.fonts?.cta) },
-    { label: "Voice", done: !!kit.voice },
-    { label: "Rules", done: !!(kit.doList || kit.dontList || kit.complianceRules) },
-  ];
+    const checks = [
+      { label: "Brand name", done: !!kit.brandName },
+      { label: "Logo", done: !!kit.logoUrl },
+      { label: "Industry", done: !!kit.industry },
+      { label: "Audience", done: !!kit.targetAudience },
+      { label: "Positioning", done: !!kit.brandDna },
+      { label: "Colors", done: !!(kit.colors?.primary || kit.colors?.secondary || kit.colors?.accent) },
+      { label: "Typography", done: !!(kit.fonts?.headline || kit.fonts?.body || kit.fonts?.cta) },
+      { label: "Voice", done: !!kit.voice },
+      { label: "Creative direction", done: !!(kit.creativeDirection || kit.imageStyle || (kit.imageTemplates || []).length) },
+      { label: "Products / services", done: Array.isArray(kit.products) && kit.products.length > 0 },
+      { label: "Guardrails", done: !!(kit.doList || kit.dontList || kit.negativeKeywords || kit.complianceRules || kit.requiredPhrases) },
+    ];
 
-  const completed = checks.filter((item) => item.done).length;
-  const score = Math.round((completed / checks.length) * 100);
-
-  return {
-    score,
-    completed,
-    total: checks.length,
-    checks,
-    missing: checks.filter((item) => !item.done),
-  };
-}, [kit]);
+    const completed = checks.filter((item) => item.done).length;
+    const score = Math.round((completed / checks.length) * 100);
+    return { score, completed, total: checks.length, checks, missing: checks.filter((item) => !item.done) };
+  }, [kit]);
 
   const fontOptions = useMemo(() => {
     return googleFonts.map((font) => ({
@@ -211,6 +282,8 @@ export default function BrandKit() {
     const items = Array.isArray(data?.items) ? data.items : [];
     setKits(items);
     setKitLimit(data?.limit || 1);
+    setTemplateLimit(Number(data?.templateLimit ?? 0));
+    setProductLimit(Number(data?.productLimit ?? 0));
     setIsAdmin(Boolean(data?.isAdmin));
 
     const nextId =
@@ -223,14 +296,7 @@ export default function BrandKit() {
 
     const selected = items.find((item) => item.id === nextId) || items[0] || null;
     if (selected) {
-      setKit({
-        ...defaultKit,
-        ...selected,
-        colors: { ...defaultKit.colors, ...(selected.colors || {}) },
-        colorEnabled: { ...defaultKit.colorEnabled, ...(selected.colorEnabled || {}) },
-        fonts: { ...defaultKit.fonts, ...(selected.fonts || {}) },
-        fontEnabled: { ...defaultKit.fontEnabled, ...(selected.fontEnabled || {}) },
-      });
+      setKit(hydrateBrandKit(selected));
     } else {
       setKit(defaultKit);
     }
@@ -244,14 +310,7 @@ export default function BrandKit() {
     setSelectedKitId(id);
     const selected = kits.find((item) => item.id === id);
     if (!selected) return;
-    setKit({
-      ...defaultKit,
-      ...selected,
-      colors: { ...defaultKit.colors, ...(selected.colors || {}) },
-      colorEnabled: { ...defaultKit.colorEnabled, ...(selected.colorEnabled || {}) },
-      fonts: { ...defaultKit.fonts, ...(selected.fonts || {}) },
-      fontEnabled: { ...defaultKit.fontEnabled, ...(selected.fontEnabled || {}) },
-    });
+    setKit(hydrateBrandKit(selected));
     setSaveMsg("");
   };
 
@@ -418,6 +477,143 @@ export default function BrandKit() {
       setSaveMsg("Could not save Brand Kit. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openTemplateModal = (index = null) => {
+    if (index === null && !isAdmin && (kit.imageTemplates || []).length >= templateLimit) {
+      setSaveMsg(`This Brand Kit has reached its ${templateLimit} image template limit.`);
+      return;
+    }
+
+    setEditingTemplateIndex(index);
+    const existing = index === null ? null : kit.imageTemplates?.[index];
+    setTemplateDraft(existing ? { ...existing } : {
+      id: `template-${Date.now()}`,
+      name: "",
+      referenceImageUrl: "",
+      consistency: "inspiration",
+      creativeDirection: "",
+      isDefault: (kit.imageTemplates || []).length === 0,
+    });
+    setTemplateModalOpen(true);
+    setSaveMsg("");
+  };
+
+  const saveTemplateDraft = () => {
+    const name = templateDraft.name.trim();
+    if (!name) {
+      setSaveMsg("Enter a name for this image template.");
+      return;
+    }
+    if (!templateDraft.referenceImageUrl) {
+      setSaveMsg("Upload an image for this template before saving it.");
+      return;
+    }
+
+    const next = [...(kit.imageTemplates || [])];
+    const clean = {
+      ...templateDraft,
+      id: templateDraft.id || `template-${Date.now()}`,
+      name,
+      consistency: templateDraft.consistency === "follow_closely" ? "follow_closely" : "inspiration",
+      creativeDirection: (templateDraft.creativeDirection || "").trim(),
+      isDefault: Boolean(templateDraft.isDefault),
+    };
+
+    if (clean.isDefault) {
+      next.forEach((item) => { item.isDefault = false; });
+    }
+
+    if (editingTemplateIndex === null) next.push(clean);
+    else next[editingTemplateIndex] = clean;
+
+    if (next.length && !next.some((item) => item.isDefault)) next[0].isDefault = true;
+    updateKit("imageTemplates", next);
+    setTemplateModalOpen(false);
+  };
+
+  const removeTemplate = (index) => {
+    const next = (kit.imageTemplates || []).filter((_, i) => i !== index);
+    if (next.length && !next.some((item) => item.isDefault)) next[0].isDefault = true;
+    updateKit("imageTemplates", next);
+  };
+
+  const uploadTemplateReference = async (file) => {
+    if (!file || !selectedKitId) return;
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      setTemplateUploading(true);
+      setSaveMsg("");
+      const token = await user.getIdToken(true);
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}/template-image`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail?.message || data?.detail || "Template upload failed.");
+      setTemplateDraft((prev) => ({ ...prev, referenceImageUrl: data.referenceImageUrl || "" }));
+    } catch (err) {
+      setSaveMsg(err.message || "Template upload failed.");
+    } finally {
+      setTemplateUploading(false);
+      if (templateInputRef.current) templateInputRef.current.value = "";
+    }
+  };
+
+
+  const openProductModal = (index = null) => {
+    if (index === null && !isAdmin && (kit.products || []).length >= productLimit) {
+      setSaveMsg(`This Brand Kit has reached its ${productLimit} product / service limit.`);
+      return;
+    }
+
+    setEditingProductIndex(index);
+    const existing = index === null ? null : kit.products?.[index];
+    setProductDraft(existing ? { ...existing } : { name: "", type: "product", description: "", sellingPoints: "", referenceImageUrl: "", isPrimary: false });
+    setProductModalOpen(true);
+  };
+
+  const saveProductDraft = () => {
+    if (!productDraft.name.trim()) { setSaveMsg("Enter a product or service name."); return; }
+    if (editingProductIndex === null && !isAdmin && (kit.products || []).length >= productLimit) {
+      setSaveMsg(`This Brand Kit has reached its ${productLimit} product / service limit.`);
+      setProductModalOpen(false);
+      return;
+    }
+    const next = [...(kit.products || [])];
+    const clean = { ...productDraft, name: productDraft.name.trim() };
+    if (clean.isPrimary) next.forEach((item) => { item.isPrimary = false; });
+    if (editingProductIndex === null) next.push(clean); else next[editingProductIndex] = clean;
+    updateKit("products", next);
+    setProductModalOpen(false);
+  };
+
+  const removeProduct = (index) => {
+    updateKit("products", (kit.products || []).filter((_, i) => i !== index));
+  };
+
+  const uploadProductReference = async (file) => {
+    if (!file || !selectedKitId) return;
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      setProductImageUploading(true);
+      const token = await user.getIdToken(true);
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${apiBase}/brand-kits/${selectedKitId}/product-reference`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || "Product reference upload failed.");
+      setProductDraft((prev) => ({ ...prev, referenceImageUrl: data.referenceImageUrl || "" }));
+    } catch (err) {
+      setSaveMsg(err.message || "Product reference upload failed.");
+    } finally {
+      setProductImageUploading(false);
     }
   };
 
@@ -844,22 +1040,6 @@ export default function BrandKit() {
                 {logoErr && <p className="brandkit-error">{logoErr}</p>}
               </div>
 
-              <div className="brandkit-import-disabled">
-                <div>
-                  <h3>
-                    Import Brand from Website
-                    <InfoTip text="Coming later: AdGen will scan your website to detect brand colors, fonts, products, tone, and messaging automatically." />
-                  </h3>
-                  <p>
-                    Paste your website URL and AdGen will detect your logo, colors,
-                    fonts, products, and brand voice.
-                  </p>
-                </div>
-
-                <input disabled placeholder="https://yourbrand.com" />
-                <button disabled>Import Brand</button>
-                <span className="coming-soon">Coming Soon</span>
-              </div>
             </div>
 
             <div className="brandkit-section">
@@ -1073,6 +1253,97 @@ export default function BrandKit() {
             </div>
 
             <div className="brandkit-section">
+              <h2>Creative System <span className="section-optional">Optional</span></h2>
+              <p className="brandkit-helper-text">Define how your ads should generally look. These are brand preferences, not hard restrictions on every individual brief.</p>
+
+              <div className="brandkit-field">
+                <FieldLabel htmlFor="creativeDirection" label="Brand Creative Direction" optional info="Describe the recurring visual language ADGen should preserve across generations." />
+                <textarea id="creativeDirection" value={kit.creativeDirection} onChange={(e) => updateKit("creativeDirection", e.target.value)} placeholder="Example: Warm natural lighting, cream backgrounds, premium editorial photography, spacious layouts, short headlines, restrained decorative elements." />
+              </div>
+
+              <div className="brandkit-field">
+                <FieldLabel htmlFor="preferredAdLayout" label="Preferred Ad Layout" optional info="Sets the brand's usual composition while still allowing the current ad brief to take priority." />
+                <select id="preferredAdLayout" value={kit.preferredAdLayout} onChange={(e) => updateKit("preferredAdLayout", e.target.value)}>
+                  <option value="">Auto — let ADGen decide</option>
+                  <option value="product_first">Product-first</option>
+                  <option value="minimal_editorial">Minimal editorial</option>
+                  <option value="bold_social">Bold social</option>
+                  <option value="lifestyle">Lifestyle</option>
+                  <option value="ugc">UGC-style</option>
+                  <option value="custom_template">Custom template reference</option>
+                </select>
+              </div>
+
+              <div className="brandkit-placement-grid">
+                {[
+                  ["logoPlacement", "Logo Placement"],
+                  ["headlinePlacement", "Headline Placement"],
+                  ["ctaPlacement", "CTA Placement"],
+                ].map(([key, label]) => (
+                  <div className="brandkit-field" key={key}>
+                    <FieldLabel htmlFor={key} label={label} optional />
+                    <select id={key} value={kit[key] || "auto"} onChange={(e) => updateKit(key, e.target.value)}>
+                      <option value="auto">Auto</option>
+                      <option value="top_left">Top left</option>
+                      <option value="top_center">Top / center</option>
+                      <option value="top_right">Top right</option>
+                      <option value="middle">Middle</option>
+                      <option value="lower_third">Lower third</option>
+                      <option value="bottom_left">Bottom left</option>
+                      <option value="bottom_center">Bottom / center</option>
+                      <option value="bottom_right">Bottom right</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div className="brandkit-template-card">
+                <div className="brandkit-products-head">
+                  <div>
+                    <h3>Image Templates</h3>
+                    <p>Save reusable image-ad layouts and visual references for this Brand Kit. Templates are selected per generation in the Image Generator.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="brandkit-small-btn brandkit-primary-action"
+                    onClick={() => openTemplateModal()}
+                    disabled={!isAdmin && (kit.imageTemplates || []).length >= templateLimit}
+                  >
+                    + Add Image Template
+                  </button>
+                </div>
+
+                <div className="brandkit-template-usage-row">
+                  <span>{(kit.imageTemplates || []).length} / {isAdmin ? "∞" : templateLimit} templates in this Brand Kit</span>
+                  {!isAdmin && (kit.imageTemplates || []).length >= templateLimit && (
+                    <small>Template limit reached for this Brand Kit.</small>
+                  )}
+                </div>
+
+                {(kit.imageTemplates || []).length ? (
+                  <div className="brandkit-template-list">
+                    {kit.imageTemplates.map((template, index) => (
+                      <div className="brandkit-template-item" key={template.id || `${template.name}-${index}`}>
+                        <img src={template.referenceImageUrl} alt={`${template.name || "Brand"} template`} />
+                        <div className="brandkit-template-item-copy">
+                          <strong>{template.name || `Template ${index + 1}`}</strong>
+                          <span>{template.consistency === "follow_closely" ? "Follow layout closely" : "Style inspiration"}{template.isDefault ? " · Default" : ""}</span>
+                          <p>{template.creativeDirection || "No template-specific direction added."}</p>
+                        </div>
+                        <div className="brandkit-product-actions">
+                          <button type="button" onClick={() => openTemplateModal(index)}>Edit</button>
+                          <button type="button" onClick={() => removeTemplate(index)}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="brandkit-template-empty">No image templates saved for this Brand Kit yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="brandkit-section">
               <h2>Generation Defaults <span className="section-optional">Optional</span></h2>
 
               <div className="brandkit-field">
@@ -1188,7 +1459,7 @@ export default function BrandKit() {
               <div className="brandkit-field">
                 <FieldLabel
                   htmlFor="imageStyle"
-                  label="Default Image Style"
+                  label="Preferred Creative Style"
                   optional
                   info="Gives AdGen a preferred visual direction for future creatives when Brand Kit is enabled."
                 />
@@ -1230,7 +1501,7 @@ export default function BrandKit() {
             </div>
 
             <div className="brandkit-section">
-              <h2>Advanced AI Controls <span className="section-optional">Optional</span></h2>
+              <h2>Voice & Brand Guardrails <span className="section-optional">Optional</span></h2>
 
               <div className="brandkit-field">
                 <FieldLabel
@@ -1245,6 +1516,11 @@ export default function BrandKit() {
                   onChange={(e) => updateKit("voice", e.target.value)}
                   placeholder="Example: Modern, confident, friendly, premium, and conversion-focused."
                 />
+              </div>
+
+              <div className="brandkit-field">
+                <FieldLabel htmlFor="requiredPhrases" label="Required Words & Phrases" optional info="Exact names, terminology, taglines, or phrases ADGen should preserve when relevant." />
+                <textarea id="requiredPhrases" value={kit.requiredPhrases} onChange={(e) => updateKit("requiredPhrases", e.target.value)} placeholder='Example: Always write “ADGen MCM”, never “AdGen”. Refer to the product as “Performance Serum”.' />
               </div>
 
               <div className="brandkit-field">
@@ -1310,7 +1586,7 @@ export default function BrandKit() {
               <div className="brandkit-field">
                 <FieldLabel
                   htmlFor="negativeKeywords"
-                  label="Negative Keywords"
+                  label="Words & Themes to Avoid"
                   optional
                   info="Words, claims, or themes AdGen should avoid using in generated copy or creative direction."
                 />
@@ -1337,19 +1613,36 @@ export default function BrandKit() {
                 />
               </div>
 
-              <div className="brandkit-field">
-                <FieldLabel
-                  htmlFor="productsServices"
-                  label="Products / Services Notes"
-                  optional
-                  info="Helps AdGen understand your main products, secondary offers, bundles, services, and positioning."
-                />
-                <textarea
-                  id="productsServices"
-                  value={kit.productsServices}
-                  onChange={(e) => updateKit("productsServices", e.target.value)}
-                  placeholder="Example: Main product is a premium coaching plan. Secondary offer is a free consultation."
-                />
+              <div className="brandkit-products-section">
+                <div className="brandkit-products-head">
+                  <div><h3>Products & Services</h3><p>Save the offerings ADGen should recognize consistently across future creative.</p></div>
+                  <button
+                    type="button"
+                    className="brandkit-small-btn brandkit-primary-action"
+                    onClick={() => openProductModal()}
+                    disabled={!isAdmin && (kit.products || []).length >= productLimit}
+                  >
+                    + Add Product or Service
+                  </button>
+                </div>
+                <div className="brandkit-template-usage-row">
+                  <span>{(kit.products || []).length} / {isAdmin ? "∞" : productLimit} products & services in this Brand Kit</span>
+                  {!isAdmin && (kit.products || []).length >= productLimit && (
+                    <small>Product / service limit reached for this Brand Kit.</small>
+                  )}
+                </div>
+                {(kit.products || []).length ? (
+                  <div className="brandkit-product-list">
+                    {kit.products.map((product, index) => (
+                      <div className="brandkit-product-card" key={`${product.name}-${index}`}>
+                        {product.referenceImageUrl && <img src={product.referenceImageUrl} alt="" />}
+                        <div className="brandkit-product-copy"><strong>{product.name}</strong><span>{product.type || "product"}{product.isPrimary ? " · Primary" : ""}</span><p>{product.description || "No description added."}</p></div>
+                        <div className="brandkit-product-actions"><button type="button" onClick={() => openProductModal(index)}>Edit</button><button type="button" onClick={() => removeProduct(index)}>Remove</button></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="brandkit-empty-products">No saved products or services yet.</div>}
+                {kit.productsServices && <small className="brandkit-helper-text">Legacy product notes are preserved in this Brand Kit and will continue to guide generation.</small>}
               </div>
 
               <Button
@@ -1428,7 +1721,9 @@ export default function BrandKit() {
               <p>Default CTA: {kit.preferredCta || "No default"}</p>
               <p>Default Platform: {kit.preferredPlatform || "No default"}</p>
               <p>Default Aspect Ratio: {kit.aspectRatioPreference || "No default"}</p>
-              <p>Default Image Style: {kit.imageStyle || "No default"}</p>
+              <p>Preferred Creative Style: {kit.imageStyle || "No default"}</p>
+              <p>Ad Layout: {kit.preferredAdLayout || "Auto"}</p>
+              <p>Image Templates: {(kit.imageTemplates || []).length ? `${kit.imageTemplates.length} saved` : "Not set"}</p>
             </div>
 
             <div className="preview-block">
@@ -1437,6 +1732,7 @@ export default function BrandKit() {
               <p>Brand DNA: {kit.brandDna ? "Configured" : "Not set"}</p>
               <p>Rules: {kit.doList || kit.dontList ? "Configured" : "Not set"}</p>
               <p>Compliance: {kit.complianceRules ? "Configured" : "Not set"}</p>
+              <p>Products / Services: {(kit.products || []).length ? `${kit.products.length} saved` : "Not set"}</p>
             </div>
 
             <div className="preview-block">
@@ -1444,18 +1740,81 @@ export default function BrandKit() {
               <p className="status-ready">✓ Ready for Image Generation</p>
               <p className="status-ready">✓ Ready for Video Ads</p>
               <p className="status-ready">✓ Ready for Ad Optimizer</p>
-              <p className="status-ready">✓ Ready for Future Features</p>
             </div>
 
-            <div className="preview-block muted">
-              <h4>Future Assets</h4>
-              <p>○ Website Import</p>
-              <p>○ Product Catalog</p>
-              <p>○ Brand Images</p>
-              <p>○ Design Guidelines</p>
-            </div>
           </aside>
         </div>
+
+        {templateModalOpen && (
+          <div className="brandkit-modalOverlay" role="dialog" aria-modal="true">
+            <div className="brandkit-modalCard brandkit-product-modal">
+              <div className="brandkit-modalHeader">
+                <div>
+                  <span>Image Templates</span>
+                  <h2>{editingTemplateIndex === null ? "Add Image Template" : "Edit Image Template"}</h2>
+                </div>
+                <button type="button" className="brandkit-modalClose" onClick={() => setTemplateModalOpen(false)}>×</button>
+              </div>
+
+              <label className="brandkit-modalField">
+                <span>Template name</span>
+                <input value={templateDraft.name} onChange={(e) => setTemplateDraft((prev) => ({ ...prev, name: e.target.value }))} placeholder="Example: Game Day Poster" maxLength={80} />
+              </label>
+
+              <label className="brandkit-modalField">
+                <span>Template consistency</span>
+                <select value={templateDraft.consistency} onChange={(e) => setTemplateDraft((prev) => ({ ...prev, consistency: e.target.value }))}>
+                  <option value="inspiration">Style inspiration</option>
+                  <option value="follow_closely">Follow layout closely</option>
+                </select>
+              </label>
+
+              <label className="brandkit-modalField">
+                <span>Template direction <small>(optional)</small></span>
+                <textarea value={templateDraft.creativeDirection} onChange={(e) => setTemplateDraft((prev) => ({ ...prev, creativeDirection: e.target.value }))} placeholder="Example: Keep the athlete centered, use a large lower-third headline, and reserve the bottom for event details." maxLength={1200} />
+              </label>
+
+              <div className="brandkit-product-reference-row">
+                <input ref={templateInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => uploadTemplateReference(e.target.files?.[0])} />
+                {templateDraft.referenceImageUrl && <img src={templateDraft.referenceImageUrl} alt="Template reference" />}
+                <button type="button" className="brandkit-small-btn" onClick={() => templateInputRef.current?.click()} disabled={templateUploading}>
+                  {templateUploading ? "Uploading..." : templateDraft.referenceImageUrl ? "Replace Template Image" : "Upload Template Image"}
+                </button>
+                {templateDraft.referenceImageUrl && <button type="button" className="brandkit-link-btn" onClick={() => setTemplateDraft((prev) => ({ ...prev, referenceImageUrl: "" }))}>Remove</button>}
+              </div>
+
+              <label className="brandkit-primary-check">
+                <input type="checkbox" checked={!!templateDraft.isDefault} onChange={(e) => setTemplateDraft((prev) => ({ ...prev, isDefault: e.target.checked }))} />
+                Default image template for this Brand Kit
+              </label>
+
+              <div className="brandkit-modalActions">
+                <button type="button" className="brandkit-small-btn" onClick={() => setTemplateModalOpen(false)}>Cancel</button>
+                <button type="button" className="brandkit-small-btn brandkit-primary-action" onClick={saveTemplateDraft}>Save Template</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {productModalOpen && (
+          <div className="brandkit-modalOverlay" role="dialog" aria-modal="true">
+            <div className="brandkit-modalCard brandkit-product-modal">
+              <div className="brandkit-modalHeader"><div><span>Products & Services</span><h2>{editingProductIndex === null ? "Add Offering" : "Edit Offering"}</h2></div><button type="button" className="brandkit-modalClose" onClick={() => setProductModalOpen(false)}>×</button></div>
+              <label className="brandkit-modalField"><span>Name</span><input value={productDraft.name} onChange={(e) => setProductDraft((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Hot Honey Nachos" /></label>
+              <label className="brandkit-modalField"><span>Type</span><select value={productDraft.type} onChange={(e) => setProductDraft((p) => ({ ...p, type: e.target.value }))}><option value="product">Product</option><option value="service">Service</option><option value="software">Software</option><option value="restaurant_item">Restaurant item</option><option value="real_estate">Real estate</option><option value="event">Event</option><option value="other">Other</option></select></label>
+              <label className="brandkit-modalField"><span>Short description</span><textarea value={productDraft.description} onChange={(e) => setProductDraft((p) => ({ ...p, description: e.target.value }))} placeholder="What is it and what should ADGen understand about it?" /></label>
+              <label className="brandkit-modalField"><span>Key selling points</span><textarea value={productDraft.sellingPoints} onChange={(e) => setProductDraft((p) => ({ ...p, sellingPoints: e.target.value }))} placeholder="Example: Sweet and spicy flavor, shareable, limited-time menu item" /></label>
+              <div className="brandkit-product-reference-row">
+                <input ref={productImageInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => uploadProductReference(e.target.files?.[0])} />
+                {productDraft.referenceImageUrl && <img src={productDraft.referenceImageUrl} alt="Product reference" />}
+                <button type="button" className="brandkit-small-btn" onClick={() => productImageInputRef.current?.click()} disabled={productImageUploading}>{productImageUploading ? "Uploading..." : productDraft.referenceImageUrl ? "Replace Reference" : "Add Reference Image"}</button>
+                {productDraft.referenceImageUrl && <button type="button" className="brandkit-link-btn" onClick={() => setProductDraft((p) => ({ ...p, referenceImageUrl: "" }))}>Remove</button>}
+              </div>
+              <label className="brandkit-primary-check"><input type="checkbox" checked={!!productDraft.isPrimary} onChange={(e) => setProductDraft((p) => ({ ...p, isPrimary: e.target.checked }))} /> Primary product / service</label>
+              <div className="brandkit-modalActions"><button type="button" className="brandkit-small-btn" onClick={() => setProductModalOpen(false)}>Cancel</button><button type="button" className="brandkit-small-btn brandkit-primary-action" onClick={saveProductDraft}>Save Offering</button></div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

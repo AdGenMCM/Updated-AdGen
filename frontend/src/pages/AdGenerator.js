@@ -327,6 +327,8 @@ function AdGenerator() {
   const [brandKitId, setBrandKitId] = useState(null);
   const [brandKit, setBrandKit] = useState(null);
   const [brandKitLoading, setBrandKitLoading] = useState(true);
+  const [selectedBrandProductName, setSelectedBrandProductName] = useState("");
+  const [selectedBrandTemplateId, setSelectedBrandTemplateId] = useState("");
   const [creativeElements, setCreativeElements] = useState({
     headline: true,
     body: true,
@@ -364,6 +366,35 @@ function AdGenerator() {
     useBrandKit &&
     hasBrandKitLogo
   );
+  const brandKitProducts = Array.isArray(brandKit?.products)
+    ? brandKit.products.filter((item) => item && item.name)
+    : [];
+  const brandKitTemplates = useMemo(() => {
+    const saved = Array.isArray(brandKit?.imageTemplates)
+      ? brandKit.imageTemplates.filter((item) => item && item.referenceImageUrl)
+      : [];
+
+    if (saved.length) return saved;
+
+    if (brandKit?.templateReferenceUrl) {
+      return [{
+        id: "legacy-template",
+        name: "Brand Template",
+        referenceImageUrl: brandKit.templateReferenceUrl,
+        consistency: brandKit.templateConsistency === "follow_closely" ? "follow_closely" : "inspiration",
+        creativeDirection: "",
+        isDefault: true,
+      }];
+    }
+    return [];
+  }, [brandKit]);
+  const hasBrandTemplates = brandKitTemplates.length > 0;
+  const selectedBrandTemplate = brandKitTemplates.find(
+    (item) => String(item?.id || "") === String(selectedBrandTemplateId || "")
+  ) || null;
+  const brandCreativeStyle =
+    brandKit?.imageStyle || brandKit?.preferredAdLayout || "";
+  const brandCreativeLayout = brandKit?.preferredAdLayout || "";
 
 
   useEffect(() => {
@@ -494,6 +525,11 @@ function AdGenerator() {
     });
   }, [canUseBrandKitLogo]);
 
+  useEffect(() => {
+    setSelectedBrandProductName("");
+    setSelectedBrandTemplateId("");
+  }, [brandKitId, isFreePlan, useBrandKit]);
+
 
 
   const brandKitDefaults = useMemo(() => {
@@ -622,6 +658,22 @@ function AdGenerator() {
   const selectedImageTemplate = IMAGE_TEMPLATES.find(
     (template) => template.id === selectedTemplateId
   );
+
+  const applySavedBrandProduct = (productName) => {
+    setSelectedBrandProductName(productName);
+
+    const product = brandKitProducts.find(
+      (item) => String(item?.name || "") === String(productName || "")
+    );
+
+    if (!product) return;
+
+    setForm((previous) => ({
+      ...previous,
+      product_name: product.name || previous.product_name,
+      description: product.description || previous.description,
+    }));
+  };
 
   const safeDetailMessage = (detail) => {
     if (!detail) return null;
@@ -861,6 +913,14 @@ function AdGenerator() {
           : null,
         useBrandKit: isFreePlan ? false : useBrandKit,
         brandKitId: isFreePlan ? null : brandKitId,
+        brandProductName:
+          !isFreePlan && useBrandKit ? selectedBrandProductName || null : null,
+        brandTemplateId:
+          !isFreePlan && useBrandKit && selectedBrandTemplateId
+            ? selectedBrandTemplateId
+            : null,
+        useBrandTemplate:
+          !isFreePlan && useBrandKit && Boolean(selectedBrandTemplateId),
         campaignObjective: form.campaignObjective,
         referenceImageUrls: referenceImages.map((img) => img.url).filter(Boolean),
         referenceImageMode,
@@ -1427,37 +1487,7 @@ function AdGenerator() {
                       A Brand Kit logo is available. Enable Apply Brand Kit to access this option.
                     </small>
                   )}
-
-                  {!isFreePlan && !hasBrandKit && (
-                    <small className="adgen-logo-availability-note">
-                      Create or select a Brand Kit with an uploaded logo to enable Brand Kit Logo.
-                    </small>
-                  )}
-
-                  {isFreePlan && (
-                    <small className="adgen-logo-availability-note">
-                      Brand Kit Logo is available on paid plans with a saved Brand Kit logo.
-                    </small>
-                  )}
-
-                  {canUseBrandKitLogo && (
-                    <small className="adgen-logo-availability-note is-available">
-                      Brand Kit Logo is available from your Active Brand.
-                    </small>
-                  )}
                 </div>
-
-                <button
-                  type="submit"
-                  className="adgen-quick-generate"
-                  disabled={loading || referenceUploading || imageLimitReached}
-                >
-                  {loading
-                    ? "Creating..."
-                    : hasGeneratedBefore
-                      ? "✨ Generate Ad"
-                      : "✨ Generate My First Ad"}
-                </button>
 
                 <div className="adgen-quick-divider">
                   <span>or</span>
@@ -1617,18 +1647,6 @@ function AdGenerator() {
           {advancedOpen && (
           <div id="adgen-advanced-workspace" className="adgen-advanced-workspace">
           <form className="adgen-form" onSubmit={handleSubmit}>
-            {!isFreePlan && (
-              <BrandKitSelector
-                value={brandKitId}
-                onChange={setBrandKitId}
-                onKitChange={(selectedKit) => {
-                  setBrandKit(selectedKit);
-                  setBrandKitLoading(false);
-                }}
-                disabled={loading}
-              />
-            )}
-
             <div ref={firstWorkspaceSectionRef} className="template-scroll-target">
             <StepSection
               step="1"
@@ -1710,26 +1728,126 @@ function AdGenerator() {
             >
 
 
-              <div className="enhancement-grid">
-                <div className="option-card enhancement-card">
+              <div className={`brandkit-workspace-section ${isFreePlan ? "is-locked" : ""}`}>
+                <div className="brandkit-workspace-head">
+                  <div>
+                    <span className="brandkit-workspace-kicker">Brand Kit</span>
+                    <h3>Brand Creative Context</h3>
+                    <p>Choose the brand, then optionally apply a saved product or image template for this creative.</p>
+                  </div>
+                  {isFreePlan && <span className="brandkit-control-lock">🔒 Paid plans</span>}
+                </div>
+
+                <div className="brandkit-workspace-toggle">
                   {isFreePlan ? (
-                    <div>
-                      <strong>🔒 Brand Kit</strong>
-                      <small>  Available on paid plans.</small>
+                    <div className="brandkit-workspace-locked-copy">
+                      <strong>Apply Brand Kit</strong>
+                      <small>Upgrade to a paid plan to use Brand Kit, saved products, and image templates.</small>
                     </div>
                   ) : (
-                  <label className="option-toggle">
-                    <input type="checkbox" checked={useBrandKit} onChange={(e) => setUseBrandKit(e.target.checked)} disabled={loading} />
-                    <span>
-                      <strong>
-                        Apply Brand Kit <InfoTip text="Uses your saved logo, colors, fonts, brand voice, website, and brand defaults to keep generated ads consistent." />
-                      </strong>
-                      <small>{brandKitLoading ? "Checking saved Brand Kit..." : useBrandKit ? "Brand guidance enabled" : "Brand guidance disabled"}</small>
-                    </span>
-                  </label>
+                    <label className="option-toggle">
+                      <input
+                        type="checkbox"
+                        checked={useBrandKit}
+                        onChange={(e) => setUseBrandKit(e.target.checked)}
+                        disabled={loading}
+                      />
+                      <span>
+                        <strong>
+                          Apply Brand Kit <InfoTip text="Uses your saved logo, colors, fonts, brand voice, creative direction, products, and image templates to keep generated ads consistent." />
+                        </strong>
+                        <small>{brandKitLoading ? "Checking saved Brand Kit..." : useBrandKit ? "Brand guidance enabled" : "Turn this on before choosing a saved product or template"}</small>
+                      </span>
+                    </label>
                   )}
                 </div>
 
+                <div className="brandkit-workspace-selector">
+                  {!isFreePlan ? (
+                    <BrandKitSelector
+                      value={brandKitId}
+                      onChange={setBrandKitId}
+                      onKitChange={(selectedKit) => {
+                        setBrandKit(selectedKit);
+                        setBrandKitLoading(false);
+                      }}
+                      disabled={loading}
+                    />
+                  ) : (
+                    <div className="brandkit-workspace-disabled-field">Brand selection is available on paid plans.</div>
+                  )}
+                </div>
+
+                <div className="brandkit-generation-controls-grid">
+                  <label className="field">
+                    <span className="field-label">Saved Product / Service</span>
+                    <select
+                      value={selectedBrandProductName}
+                      onChange={(e) => applySavedBrandProduct(e.target.value)}
+                      disabled={
+                        isFreePlan || loading || !useBrandKit || !hasBrandKit || brandKitProducts.length === 0
+                      }
+                    >
+                      <option value="">
+                        {!useBrandKit
+                          ? "Enable Brand Kit first"
+                          : brandKitProducts.length
+                            ? "No saved offering / use current brief"
+                            : "No saved offerings"}
+                      </option>
+                      {brandKitProducts.map((product, index) => (
+                        <option key={`${product.name}-${index}`} value={product.name}>
+                          {product.name}{product.isPrimary ? " · Primary" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="field-helper">Selecting one fills the Product Name and saved description. Its reference image can guide generation.</small>
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Image Template</span>
+                    <select
+                      value={selectedBrandTemplateId}
+                      onChange={(e) => setSelectedBrandTemplateId(e.target.value)}
+                      disabled={isFreePlan || loading || !useBrandKit || !hasBrandKit || !hasBrandTemplates}
+                    >
+                      <option value="">
+                        {!useBrandKit
+                          ? "Enable Brand Kit first"
+                          : hasBrandTemplates
+                            ? "No image template"
+                            : "No saved image templates"}
+                      </option>
+                      {brandKitTemplates.map((template, index) => (
+                        <option key={template.id || `${template.name}-${index}`} value={template.id || `template-${index + 1}`}>
+                          {template.name || `Template ${index + 1}`}{template.isDefault ? " · Default" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="field-helper">
+                      {selectedBrandTemplate
+                        ? `${selectedBrandTemplate.consistency === "follow_closely" ? "Follow layout closely" : "Style inspiration"}${selectedBrandTemplate.creativeDirection ? ` · ${selectedBrandTemplate.creativeDirection}` : ""}`
+                        : "Choose a saved image-ad layout only when you want this generation to use it."}
+                    </small>
+                  </label>
+                </div>
+
+                {!isFreePlan && useBrandKit && hasBrandKit && (
+                  <div className="brandkit-generation-summary">
+                    <strong>Brand Guidance</strong>
+                    <span>
+                      {[
+                        brandCreativeStyle,
+                        brandCreativeLayout && brandCreativeLayout !== brandCreativeStyle ? brandCreativeLayout : "",
+                        selectedBrandProductName ? `Product: ${selectedBrandProductName}` : "",
+                        selectedBrandTemplate ? `Template: ${selectedBrandTemplate.name}` : "",
+                      ].filter(Boolean).join(" · ") || "Brand identity, voice, and guardrails"}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="enhancement-grid">
                 <div className={`option-card enhancement-card performance-intelligence-option ${
                   usePerformanceIntelligence ? "enabled" : ""
                 }`}>
@@ -1775,8 +1893,12 @@ function AdGenerator() {
                 <input ref={referenceInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" multiple hidden onChange={(e) => uploadReferenceImages(e.target.files)} />
 
                 <button type="button" className="reference-upload-btn" onClick={() => referenceInputRef.current?.click()} disabled={referenceUploading || loading}>
-                  {referenceUploading ? "Uploading..." : `Upload Reference Images (${referenceImages.length}/${MAX_REFERENCE_IMAGES})`}
+                  {referenceUploading ? "Uploading..." : `Add References for This Ad (${referenceImages.length}/${MAX_REFERENCE_IMAGES})`}
                 </button>
+
+                <div className="reference-scope-note">
+                  These references apply only to this generation and take priority over saved Brand Kit references.
+                </div>
 
                 {referenceError && <div className="reference-error">{referenceError}</div>}
 
@@ -1805,7 +1927,7 @@ function AdGenerator() {
                     <InfoTip
                       text={
                         hasReferenceImages
-                          ? "Use this when the uploaded image shows the actual product, packaging, app, or item you want preserved in the generated ad."
+                          ? "Keep the actual product, packaging, app, or subject visually consistent in this generation."
                           : "Upload at least one reference image to choose how AdGen should use it."
                       }
                     />
@@ -1824,7 +1946,7 @@ function AdGenerator() {
                     <InfoTip
                       text={
                         hasReferenceImages
-                          ? "Use this when the uploaded image is only for visual direction, such as lighting, mood, composition, colors, or layout style."
+                          ? "Use the uploaded image as visual inspiration for lighting, mood, composition, colors, or layout style."
                           : "Upload at least one reference image to choose how AdGen should use it."
                       }
                     />

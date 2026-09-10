@@ -392,6 +392,9 @@ class AdRequest(BaseModel):
     imageSize: str
     useBrandKit: bool = True
     brandKitId: Optional[str] = None
+    brandProductName: Optional[str] = None
+    useBrandTemplate: bool = False  # legacy boolean retained for older clients
+    brandTemplateId: Optional[str] = None
 
     offer: Optional[str] = None
 
@@ -1936,6 +1939,124 @@ def infer_visual_subject(
         return f"{pn} ({attrs})"
     return pn
 
+def _brand_kit_image_templates(brand_kit: dict | None) -> list[dict]:
+    if not brand_kit:
+        return []
+    templates = brand_kit.get("imageTemplates")
+    out = []
+    if isinstance(templates, list):
+        for index, item in enumerate(templates):
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("referenceImageUrl") or "").strip()
+            if not url:
+                continue
+            out.append({
+                **item,
+                "id": str(item.get("id") or f"template-{index + 1}"),
+                "name": str(item.get("name") or f"Template {index + 1}").strip(),
+                "referenceImageUrl": url,
+                "consistency": (
+                    "follow_closely"
+                    if str(item.get("consistency") or "").strip().lower() == "follow_closely"
+                    else "inspiration"
+                ),
+                "creativeDirection": str(item.get("creativeDirection") or "").strip(),
+                "isDefault": bool(item.get("isDefault")),
+            })
+    if out:
+        return out
+
+    legacy_url = str(brand_kit.get("templateReferenceUrl") or "").strip()
+    if legacy_url:
+        return [{
+            "id": "legacy-template",
+            "name": "Brand Template",
+            "referenceImageUrl": legacy_url,
+            "consistency": (
+                "follow_closely"
+                if str(brand_kit.get("templateConsistency") or "").strip().lower() == "follow_closely"
+                else "inspiration"
+            ),
+            "creativeDirection": "",
+            "isDefault": True,
+        }]
+    return []
+
+
+def _selected_brand_image_template(
+    brand_kit: dict | None,
+    template_id: str | None,
+    *,
+    legacy_enabled: bool = False,
+) -> dict | None:
+    templates = _brand_kit_image_templates(brand_kit)
+    if not templates:
+        return None
+    requested = str(template_id or "").strip()
+    if requested:
+        for item in templates:
+            if str(item.get("id") or "") == requested:
+                return item
+        return None
+    if legacy_enabled:
+        return next((item for item in templates if item.get("isDefault")), templates[0])
+    return None
+
+
+def _brand_kit_generation_references(
+    brand_kit: dict | None,
+    product_name: str,
+    existing_urls: list[str] | None = None,
+    *,
+    brand_product_name: str | None = None,
+    brand_template_id: str | None = None,
+    use_brand_template: bool = False,
+) -> list[str]:
+    """Add selected Brand Kit references without displacing explicit user references."""
+    existing = [
+        u
+        for u in (existing_urls or [])
+        if isinstance(u, str) and u.startswith("http")
+    ][:3]
+    if not brand_kit:
+        return existing
+
+    extras = []
+    target_value = brand_product_name or product_name or ""
+    target = re.sub(r"[^a-z0-9]+", " ", target_value.lower()).strip()
+
+    for product in brand_kit.get("products") or []:
+        if not isinstance(product, dict):
+            continue
+        name = re.sub(
+            r"[^a-z0-9]+",
+            " ",
+            str(product.get("name") or "").lower(),
+        ).strip()
+        url = product.get("referenceImageUrl")
+        if url and name and target and (
+            name == target or name in target or target in name
+        ):
+            extras.append(url)
+            break
+
+    selected_template = _selected_brand_image_template(
+        brand_kit,
+        brand_template_id,
+        legacy_enabled=use_brand_template,
+    )
+    if selected_template and selected_template.get("referenceImageUrl"):
+        extras.append(selected_template["referenceImageUrl"])
+
+    # Explicit request references have priority. Logo is passed separately, so
+    # keep this list to three additional images to stay inside the current four-image cap.
+    for url in extras:
+        if url not in existing and len(existing) < 3:
+            existing.append(url)
+    return existing
+
+
 BRAND_KIT_TIERS = {
     "trial_monthly",
     "starter_monthly",
@@ -1995,6 +2116,30 @@ def build_brand_kit_prompt_context(brand_kit: dict | None) -> str:
     add("Negative keywords", brand_kit.get("negativeKeywords"))
     add("Compliance rules", brand_kit.get("complianceRules"))
     add("Products/services notes", brand_kit.get("productsServices"))
+
+    # Brand Kit V2: persistent creative system and structured offerings.
+    add("Brand creative direction", brand_kit.get("creativeDirection"))
+    add("Required words & phrases", brand_kit.get("requiredPhrases"))
+    add("Preferred ad layout", brand_kit.get("preferredAdLayout"))
+    add("Logo placement", brand_kit.get("logoPlacement"))
+    add("Headline placement", brand_kit.get("headlinePlacement"))
+    add("CTA placement", brand_kit.get("ctaPlacement"))
+    image_templates = _brand_kit_image_templates(brand_kit)
+    if image_templates:
+        add("Saved image templates", ", ".join(str(item.get("name") or "Template") for item in image_templates[:10]))
+
+    products = brand_kit.get("products") or []
+    if isinstance(products, list):
+        for idx, product in enumerate(products[:10], start=1):
+            if not isinstance(product, dict) or not product.get("name"):
+                continue
+            bits = [f"name={product.get('name')}"]
+            if product.get("type"): bits.append(f"type={product.get('type')}")
+            if product.get("description"): bits.append(f"description={product.get('description')}")
+            if product.get("sellingPoints"): bits.append(f"selling points={product.get('sellingPoints')}")
+            if product.get("isPrimary"): bits.append("primary=yes")
+            if product.get("referenceImageUrl"): bits.append("reference image available=yes")
+            add(f"Saved offering {idx}", "; ".join(bits))
 
     if not active_lines:
         return ""
@@ -3865,7 +4010,30 @@ async def generate_ad(
     style = (payload.stylePreset or "Minimal").strip()[:30]
     product_type = (payload.productType or "").strip()[:40] or None
     campaign_objective = (payload.campaignObjective or "Auto").strip()[:80]
-    reference_image_urls = (payload.referenceImageUrls or [])[:3]
+    selected_brand_template = _selected_brand_image_template(
+        brand_kit,
+        (getattr(payload, "brandTemplateId", None) or "").strip() or None,
+        legacy_enabled=bool(
+            effective_use_brand_kit
+            and getattr(payload, "useBrandTemplate", False)
+        ),
+    ) if effective_use_brand_kit else None
+
+    reference_image_urls = _brand_kit_generation_references(
+        brand_kit,
+        product_name,
+        (payload.referenceImageUrls or [])[:3],
+        brand_product_name=(getattr(payload, "brandProductName", None) or "").strip()[:120] or None,
+        brand_template_id=(
+            str(selected_brand_template.get("id"))
+            if selected_brand_template
+            else None
+        ),
+        use_brand_template=bool(
+            effective_use_brand_kit
+            and getattr(payload, "useBrandTemplate", False)
+        ),
+    )
     reference_image_mode = (payload.referenceImageMode or "product_reference").strip()[
         :40
     ]
@@ -4148,7 +4316,10 @@ If reference images are provided, use them as visual guidance.
 Reference image mode:
 {reference_image_mode}
 
-If reference mode is product_reference, preserve the product, packaging, app screen, or object identity from the uploaded references as closely as possible.
+Brand Template Reference for this generation:
+{(f"Enabled — template '{selected_brand_template.get('name')}'. This is a reusable advertising layout/style reference, not the advertised product. Consistency mode: {selected_brand_template.get('consistency')}. Template-specific direction: {selected_brand_template.get('creativeDirection') or 'None provided'}. Follow the selected template only to the degree requested while replacing its old subjects and advertising text with the current request." if selected_brand_template else "Not enabled for this generation.")}
+
+If reference mode is product_reference, preserve the product, packaging, app screen, or object identity from the uploaded product references as closely as possible. A separately enabled Brand Template Reference is for layout/style only and must never be treated as the advertised product.
 
 If reference mode is style_inspiration, use the references only for composition, mood, lighting, framing, and design inspiration. Do not copy the reference image directly.
 
@@ -4505,6 +4676,20 @@ It should be visually impressive enough to appear in a professional design portf
                         else None
                     ),
                     "brandKitUsed": bool(brand_kit_context),
+                    "brandProductName": (
+                        (getattr(payload, "brandProductName", None) or "").strip() or None
+                    ),
+                    "brandTemplateUsed": bool(selected_brand_template),
+                    "brandTemplateId": (
+                        str(selected_brand_template.get("id"))
+                        if selected_brand_template
+                        else None
+                    ),
+                    "brandTemplateName": (
+                        str(selected_brand_template.get("name") or "")
+                        if selected_brand_template
+                        else None
+                    ),
                     "brandKitLogoUsed": bool(
                         logo_mode == "brand_kit" and brand_kit.get("logoUrl")
                     ),
@@ -5616,7 +5801,12 @@ Improve it.
         }
 
     try:
-        reference_image_urls = (payload.creative_image_urls or [])[:3]
+        reference_image_urls = _brand_kit_generation_references(
+            brand_kit,
+            product_name,
+            (payload.creative_image_urls or [])[:3],
+            use_brand_template=False,
+        )
 
         set_generation_progress(
             db, "optimizer_generation", progress_job_id, "generating_creative"

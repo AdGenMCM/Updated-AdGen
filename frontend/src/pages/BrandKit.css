@@ -901,3 +901,145 @@
 .brandkit-headerRow .ui-page-header { margin-bottom:0; flex:1 1 auto; }
 .brandkit-headerRow > .featureTutorialHelpButton { margin-top:6px; flex:0 0 auto; }
 @media (max-width: 720px) { .brandkit-headerRow { flex-direction:column; } .brandkit-headerRow > .featureTutorialHelpButton { margin-top:-12px; } }
+
+/* Brand Kit V2 */
+.brandkit-placement-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.brandkit-template-card,.brandkit-products-section { margin-top:18px; padding:18px; border:1px solid rgba(255,255,255,.09); border-radius:16px; background:#1f2a3a; }
+.brandkit-template-card h3,.brandkit-products-head h3 { margin:0 0 5px; color:#f8fafc; }
+.brandkit-template-card p,.brandkit-products-head p { margin:0 0 14px; color:#94a3b8; font-size:14px; }
+.brandkit-template-preview { width:100%; max-height:320px; object-fit:contain; display:block; margin:12px 0; border-radius:12px; background:#0f172a; }
+.brandkit-template-empty,.brandkit-empty-products { padding:18px; border:1px dashed rgba(255,255,255,.14); border-radius:12px; color:#94a3b8; text-align:center; margin:12px 0; background:#182134; }
+.brandkit-link-btn { border:0; background:transparent; color:#64748b; cursor:pointer; padding:8px 10px; }
+.brandkit-products-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.brandkit-product-list { display:grid; gap:10px; margin-top:14px; }
+.brandkit-product-card { display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid rgba(255,255,255,.09); border-radius:12px; background:#182134; }
+.brandkit-product-card > img { width:64px; height:64px; border-radius:10px; object-fit:cover; }
+.brandkit-product-copy { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.brandkit-product-copy strong { color:#f8fafc; }
+.brandkit-product-copy span { color:#6366f1; font-size:12px; text-transform:capitalize; }
+.brandkit-product-copy p { margin:0; color:#94a3b8; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.brandkit-product-actions { display:flex; gap:8px; }
+.brandkit-product-actions button { border:0; background:transparent; color:#2563eb; cursor:pointer; }
+.brandkit-product-modal { max-width:620px; }
+.brandkit-product-modal textarea { min-height:90px; }
+.brandkit-product-reference-row { display:flex; align-items:center; gap:10px; margin:12px 0; flex-wrap:wrap; }
+.brandkit-product-reference-row img { width:76px; height:76px; border-radius:12px; object-fit:cover; border:1px solid #e5e7eb; }
+.brandkit-primary-check { display:flex; align-items:center; gap:9px; color:#cbd5e1; font-size:14px; margin:12px 0; }
+@media (max-width:760px) { .brandkit-placement-grid { grid-template-columns:1fr; } .brandkit-products-head { flex-direction:column; } .brandkit-product-card { grid-template-columns:52px 1fr; } .brandkit-product-card > img { width:52px; height:52px; } .brandkit-product-actions { grid-column:1/-1; justify-content:flex-end; } }
+
+/* =========================================================
+   Brand Kit V2 — multiple image templates
+========================================================= */
+.brandkit-template-usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.brandkit-template-usage-row small {
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.brandkit-template-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.brandkit-template-item {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 13px;
+  background: #182134;
+}
+
+.brandkit-template-item > img {
+  width: 86px;
+  height: 86px;
+  object-fit: cover;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #0f172a;
+}
+
+.brandkit-template-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.brandkit-template-item-copy strong {
+  color: #f8fafc;
+}
+
+.brandkit-template-item-copy span {
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.brandkit-template-item-copy p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brandkit-modalField select,
+.brandkit-modalField textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  color: #fff;
+  background: #1f2937;
+  font: inherit;
+  outline: none;
+}
+
+.brandkit-modalField textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.brandkit-modalField select:focus,
+.brandkit-modalField textarea:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139,92,246,.18);
+}
+
+@media (max-width: 760px) {
+  .brandkit-template-usage-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .brandkit-template-item {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .brandkit-template-item > img {
+    width: 64px;
+    height: 64px;
+  }
+
+  .brandkit-template-item .brandkit-product-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
