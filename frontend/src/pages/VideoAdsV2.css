@@ -4003,3 +4003,173 @@
     width: 100%;
   }
 }
+
+/* Credit-aware mode and duration availability */
+.videoV2ChoiceCard.creditUnavailable {
+  opacity: 0.52;
+  filter: saturate(0.55);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.videoV2ChoiceCard.creditUnavailable:hover {
+  transform: none;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(17, 24, 39, 0.8);
+}
+
+.videoV2ChoiceCard.creditUnavailable .videoV2ChoiceAction {
+  color: var(--ag-muted);
+}
+
+.videoV2CreditNotice {
+  max-width: 1180px;
+  margin-top: 20px;
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 18px;
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.videoV2CreditNotice strong {
+  display: block;
+  color: var(--ag-text);
+  font-size: 0.95rem;
+}
+
+.videoV2CreditNotice p {
+  margin: 6px 0 0;
+  max-width: 760px;
+  color: var(--ag-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.videoV2CreditNoticeActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.videoV2CreditNoticeActions button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--ag-primary), var(--ag-primary-dark));
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.videoV2CreditNoticeActions button.secondary {
+  border: 1px solid var(--ag-border);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ag-text-soft);
+}
+
+.videoV2Durations button.creditUnavailable {
+  opacity: 0.46;
+  cursor: not-allowed;
+  border-color: var(--ag-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+@media (max-width: 760px) {
+  .videoV2CreditNotice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .videoV2CreditNoticeActions {
+    width: 100%;
+  }
+
+  .videoV2CreditNoticeActions button {
+    flex: 1;
+  }
+}
+
+/* Required-field validation: keep generation buttons clickable so ADGen can explain what is missing. */
+.videoV2FieldValidationError input,
+.videoV2FieldValidationError textarea {
+  border-color: rgba(245, 158, 11, .72) !important;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, .10) !important;
+}
+
+/* Character Dialogue field clarity */
+.videoCharacterDialogueLabel {
+  display: grid;
+  gap: 5px;
+  margin: 18px 0 8px;
+}
+
+.videoCharacterDialogueLabel strong {
+  color: var(--ag-text);
+  font-size: .84rem;
+}
+
+.videoCharacterDialogueLabel span {
+  color: var(--ag-muted);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.videoCharacterDialogueCount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: var(--ag-muted);
+  font-size: .7rem;
+}
+
+.videoCharacterDialogueCount strong {
+  color: var(--ag-text-soft);
+  font-size: .7rem;
+}
+
+
+/* Quick Create validation: keep required-field guidance next to the Generate action. */
+.videoAds .videoQuickValidationCard {
+  margin: 22px 0 4px;
+}
+
+/* Dialogue timing is the creative limit; character caps are only technical safeguards. */
+.videoV2DialogueTiming,
+.videoCharacterDialogueTiming {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 9px 11px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.055);
+  color: var(--ag-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.videoV2DialogueTiming.tooLong,
+.videoCharacterDialogueTiming.tooLong {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.08);
+  color: #fbbf24;
+}
+
+.videoCharacterDialogueTiming strong {
+  color: var(--ag-text-soft);
+  font-size: 0.74rem;
+}
+
+.videoCharacterDialogueTiming.tooLong strong {
+  color: #fbbf24;
+}

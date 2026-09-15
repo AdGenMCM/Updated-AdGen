@@ -279,6 +279,7 @@ function AdGenerator() {
   const referenceInputRef = useRef(null);
   const firstWorkspaceSectionRef = useRef(null);
   const templateSectionRef = useRef(null);
+  const imageValidationRef = useRef(null);
 
   const [form, setForm] = useState(INITIAL_FORM);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -346,6 +347,8 @@ function AdGenerator() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uiError, setUiError] = useState(null);
+  const [imageValidationField, setImageValidationField] = useState("");
+  const [imageValidationMessage, setImageValidationMessage] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [progress, setProgress] = useState({
     stage: "queued",
@@ -601,6 +604,11 @@ function AdGenerator() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
+    if (imageValidationField === name && String(value || "").trim()) {
+      setImageValidationField("");
+      setImageValidationMessage("");
+    }
+
     delete brandKitAppliedFieldsRef.current[name];
 
     setBrandKitAppliedFields((prev) => {
@@ -845,6 +853,35 @@ function AdGenerator() {
     }));
   };
 
+  const validateRequiredImageFields = () => {
+    const requiredFields = [
+      { name: "product_name", label: "Product or Service", message: "Add the product or service you are advertising before generating." },
+      { name: "description", label: "What are you promoting?", message: "Describe what you are promoting so ADGen knows what the ad should communicate." },
+      { name: "audience", label: "Target Audience", message: "Add who this ad is for before generating." },
+    ];
+
+    const missing = requiredFields.find(({ name }) => !String(form[name] || "").trim());
+    if (!missing) {
+      setImageValidationField("");
+      setImageValidationMessage("");
+      return true;
+    }
+
+    setImageValidationField(missing.name);
+    setImageValidationMessage(missing.message);
+    setUiError(null);
+
+    window.setTimeout(() => {
+      imageValidationRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const activeForm = advancedOpen
+        ? document.querySelector("#adgen-advanced-workspace .adgen-form")
+        : document.querySelector(".adgen-quick-form");
+      const field = activeForm?.querySelector(`[name="${missing.name}"]`);
+      field?.focus();
+    }, 60);
+    return false;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -860,6 +897,8 @@ function AdGenerator() {
       });
       return;
     }
+
+    if (!validateRequiredImageFields()) return;
 
     setLoading(true);
     setProgress({
@@ -1239,6 +1278,13 @@ function AdGenerator() {
             </div>
           )}
 
+          {imageValidationMessage && (
+            <div ref={imageValidationRef} className="adgenValidationNotice" role="alert" aria-live="polite">
+              <strong>Complete this field to continue</strong>
+              <p>{imageValidationMessage}</p>
+            </div>
+          )}
+
           {advancedOpen ? (
             <section className="adgen-quick-collapsed" aria-label="Quick Create">
               <div>
@@ -1311,10 +1357,11 @@ function AdGenerator() {
                     />
                   </label>
 
-                  <label className="field">
+                  <label className={`field ${imageValidationField === "product_name" ? "fieldValidationError" : ""}`}>
                     <span className="field-label">Product or Service</span>
                     <input
                       name="product_name"
+                      aria-invalid={imageValidationField === "product_name"}
                       placeholder="What are you advertising?"
                       value={form.product_name}
                       onChange={handleChange}
@@ -1323,10 +1370,11 @@ function AdGenerator() {
                     />
                   </label>
 
-                  <label className="field adgen-quick-description">
+                  <label className={`field adgen-quick-description ${imageValidationField === "description" ? "fieldValidationError" : ""}`}>
                     <span className="field-label">What are you promoting?</span>
                     <textarea
                       name="description"
+                      aria-invalid={imageValidationField === "description"}
                       placeholder="Describe the product, service, offer, or main benefit."
                       value={form.description}
                       onChange={handleChange}
@@ -1339,10 +1387,11 @@ function AdGenerator() {
                     </small>
                   </label>
 
-                  <label className="field">
+                  <label className={`field ${imageValidationField === "audience" ? "fieldValidationError" : ""}`}>
                     <span className="field-label">Who is this for?</span>
                     <input
                       name="audience"
+                      aria-invalid={imageValidationField === "audience"}
                       placeholder="Example: busy parents, skincare shoppers, small businesses"
                       value={form.audience}
                       onChange={handleChange}
@@ -1488,6 +1537,20 @@ function AdGenerator() {
                     </small>
                   )}
                 </div>
+
+                <button
+                  type="submit"
+                  className="adgen-quick-generate"
+                  disabled={loading || referenceUploading || imageLimitReached}
+                >
+                  {loading
+                    ? "Creating..."
+                    : referenceUploading
+                      ? "Uploading..."
+                      : hasGeneratedBefore
+                        ? "✨ Generate Ad"
+                        : "✨ Generate My First Ad"}
+                </button>
 
                 <div className="adgen-quick-divider">
                   <span>or</span>
@@ -1660,18 +1723,19 @@ function AdGenerator() {
                   <input name="companyName" placeholder="Hydrate Energy" value={form.companyName} onChange={handleChange} disabled={loading} />
                 </div>
 
-                <div className="field">
+                <div className={`field ${imageValidationField === "product_name" ? "fieldValidationError" : ""}`}>
                   <div className="field-label">Product Name</div>
-                  <input name="product_name" placeholder="Hydrate Energy Drink" value={form.product_name} onChange={handleChange} disabled={loading} />
+                  <input name="product_name" aria-invalid={imageValidationField === "product_name"} placeholder="Hydrate Energy Drink" value={form.product_name} onChange={handleChange} disabled={loading} />
                 </div>
               </div>
 
-              <div className="field">
+              <div className={`field ${imageValidationField === "description" ? "fieldValidationError" : ""}`}>
                 <div className="field-label">
                   Product Description <InfoTip text="Describe what the product is, the main benefit, and what you want the ad to communicate." />
                 </div>
                 <textarea
                   name="description"
+                  aria-invalid={imageValidationField === "description"}
                   placeholder="Describe the product, offer, and creative direction..."
                   value={form.description}
                   onChange={handleChange}
@@ -1684,11 +1748,11 @@ function AdGenerator() {
               </div>
 
               <div className="field-grid">
-                <div className="field">
+                <div className={`field ${imageValidationField === "audience" ? "fieldValidationError" : ""}`}>
                   <div className="field-label">
                     Target Audience {fieldBadge("audience")} <InfoTip text="Who the ad is for. Example: fitness enthusiasts, busy parents, small business owners, or skincare buyers." />
                   </div>
-                  <input name="audience" placeholder="Fitness enthusiasts" value={form.audience} onChange={handleChange} disabled={loading} />
+                  <input name="audience" aria-invalid={imageValidationField === "audience"} placeholder="Fitness enthusiasts" value={form.audience} onChange={handleChange} disabled={loading} />
                 </div>
 
                 <div className="field">

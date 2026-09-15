@@ -447,7 +447,7 @@
 }
 
 .button-row {
-  margin-top: 48px;
+  margin-top: 16px;
 }
 
 .option-toggle strong,
@@ -2129,4 +2129,20 @@
   font-size: 0.88rem;
   line-height: 1.5;
   text-align: center;
+}
+
+/* Consistent pre-generation required-field guidance */
+.adgenValidationNotice {
+  margin: 0 0 22px;
+  padding: 15px 17px;
+  border: 1px solid rgba(245, 158, 11, .38);
+  border-radius: 15px;
+  background: rgba(245, 158, 11, .075);
+}
+.adgenValidationNotice strong { color: #fde68a; font-size: .86rem; }
+.adgenValidationNotice p { margin: 5px 0 0; color: var(--ag-text-soft); font-size: .8rem; line-height: 1.5; }
+.fieldValidationError input,
+.fieldValidationError textarea {
+  border-color: rgba(245, 158, 11, .72) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, .10);
 }

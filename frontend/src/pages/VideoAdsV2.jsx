@@ -27,7 +27,7 @@ const LIMITS = {
   tone: 60,
   creativeDirection: 1200,
   scenePrompt: 1200,
-  dialogue: 140,
+  dialogue: 300,
   speakingAction: 320,
   performanceBeat: 420,
   voiceover: 180,
@@ -216,6 +216,7 @@ function hasCharacterDescription(...values) {
 }
 
 export default function VideoAdsV2() {
+  const navigate = useNavigate();
   const { refreshWorkspace, videoUsage: workspaceVideoUsage } = useWorkspace() || {};
   const refreshWorkspaceRef = useRef(refreshWorkspace);
   refreshWorkspaceRef.current = refreshWorkspace;
@@ -225,6 +226,8 @@ export default function VideoAdsV2() {
   const [creditPacksOpen, setCreditPacksOpen] = useState(false);
   const [videoUsageUsed, setVideoUsageUsed] = useState(null);
   const [videoUsageCap, setVideoUsageCap] = useState(null);
+  const [purchasedVideoCredits, setPurchasedVideoCredits] = useState(0);
+  const [creditAvailabilityNotice, setCreditAvailabilityNotice] = useState(null);
 
   useEffect(() => {
     if (!workspaceVideoUsage) return;
@@ -241,6 +244,7 @@ export default function VideoAdsV2() {
     );
     const hasFiniteCap = Number.isFinite(cap) && cap >= 0;
 
+    setPurchasedVideoCredits(purchased);
     setVideoUsageUsed(Number.isFinite(used) ? used : null);
     setVideoUsageCap(hasFiniteCap ? cap : null);
     setVideoLimitReached(
@@ -252,6 +256,15 @@ export default function VideoAdsV2() {
       )
     );
   }, [workspaceVideoUsage]);
+
+  const availableVideoCredits = useMemo(() => {
+    if (!Number.isFinite(videoUsageCap) || !Number.isFinite(videoUsageUsed)) return null;
+    const includedRemaining = Math.max(0, videoUsageCap - videoUsageUsed);
+    return includedRemaining + Math.max(0, Number(purchasedVideoCredits || 0));
+  }, [videoUsageCap, videoUsageUsed, purchasedVideoCredits]);
+
+  const canAffordVideoCredits = (required) =>
+    me.isAdmin || availableVideoCredits === null || availableVideoCredits >= required;
 
   const [duration, setDuration] = useState(15);
   const [formatId, setFormatId] = useState("vertical");
@@ -296,6 +309,9 @@ export default function VideoAdsV2() {
   const [error, setError] = useState(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [characterPromptWarning, setCharacterPromptWarning] = useState(false);
+  const [fullValidationField, setFullValidationField] = useState("");
+  const subjectNameRef = useRef(null);
+  const descriptionRef = useRef(null);
   const creativeDirectionRef = useRef(null);
 
   const selectedFormat = useMemo(
@@ -497,10 +513,27 @@ export default function VideoAdsV2() {
   });
 
   const createStoryboard = async () => {
-    if (!subjectName.trim() || !description.trim()) {
-      setError("Add what you are advertising and a campaign description first.");
+    if (!subjectName.trim()) {
+      setFullValidationField("subjectName");
+      setError("Add what you are advertising before building the storyboard.");
+      window.setTimeout(() => {
+        subjectNameRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        subjectNameRef.current?.focus();
+      }, 60);
       return;
     }
+
+    if (!description.trim()) {
+      setFullValidationField("description");
+      setError("Add a campaign or product description so ADGen knows what the video should communicate.");
+      window.setTimeout(() => {
+        descriptionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        descriptionRef.current?.focus();
+      }, 60);
+      return;
+    }
+
+    setFullValidationField("");
 
     if (
       voiceMode === "character_dialogue" &&
@@ -552,6 +585,24 @@ export default function VideoAdsV2() {
 
   const startFullAd = async () => {
     if (!storyboard) return;
+
+    if (voiceMode === "character_dialogue") {
+      const speakingScenes = (storyboard.scenes || []).filter(
+        (scene) => scene?.performanceMode === "speaking" && String(scene?.dialogue || "").trim()
+      );
+      const overlongScene = speakingScenes.find((scene) =>
+        estimateSpeechSeconds(scene.dialogue) > storyboardDialogueMaxSeconds(scene.duration)
+      );
+
+      if (overlongScene) {
+        const estimated = estimateSpeechSeconds(overlongScene.dialogue);
+        const available = storyboardDialogueMaxSeconds(overlongScene.duration);
+        setError(
+          `The dialogue in “${overlongScene.title || overlongScene.purpose || "a storyboard scene"}” is about ${estimated}s, but that scene has about ${available}s available for speech. Shorten the line before generating.`
+        );
+        return;
+      }
+    }
 
     // Show feedback immediately. The server may need several seconds to create
     // provider tasks, but the user should never see an unresponsive button.
@@ -629,6 +680,8 @@ export default function VideoAdsV2() {
         if (data.status === "succeeded") {
           setGenerating(false);
           setFeedbackOpen(true);
+          // Keep first-generation conversion tracking consistent with Image + Quick Clip.
+          void claimFirstGeneration("video", jobId, token);
           // Success is terminal: the backend has finalized the video-credit deduction.
           void refreshWorkspaceRef.current?.();
           return;
@@ -673,7 +726,19 @@ export default function VideoAdsV2() {
         </header>
 
         <div className="videoV2ChoiceGrid">
-          <button className="videoV2ChoiceCard flagship" onClick={() => setMode("full")}>
+          <button
+            className={`videoV2ChoiceCard flagship ${!canAffordVideoCredits(3) ? "creditUnavailable" : ""}`}
+            onClick={() => {
+              if (!canAffordVideoCredits(3)) {
+                setCreditAvailabilityNotice("full");
+                return;
+              }
+              setCreditAvailabilityNotice(null);
+              if (!canAffordVideoCredits(4)) setDuration(10);
+              setMode("full");
+            }}
+            aria-disabled={!canAffordVideoCredits(3)}
+          >
             <div className="videoV2ChoiceTop">
               <span>FLAGSHIP</span>
               <strong>Full Video Ad</strong>
@@ -688,7 +753,18 @@ export default function VideoAdsV2() {
             <div className="videoV2ChoiceAction">Create a Full Video Ad <span>→</span></div>
           </button>
 
-          <button className="videoV2ChoiceCard" onClick={() => setMode("quick")}>
+          <button
+            className={`videoV2ChoiceCard ${!canAffordVideoCredits(1) ? "creditUnavailable" : ""}`}
+            onClick={() => {
+              if (!canAffordVideoCredits(1)) {
+                setCreditAvailabilityNotice("quick");
+                return;
+              }
+              setCreditAvailabilityNotice(null);
+              setMode("quick");
+            }}
+            aria-disabled={!canAffordVideoCredits(1)}
+          >
             <div className="videoV2ChoiceTop">
               <span>FAST</span>
               <strong>Quick Clip</strong>
@@ -703,6 +779,28 @@ export default function VideoAdsV2() {
             <div className="videoV2ChoiceAction">Open Quick Clip <span>→</span></div>
           </button>
         </div>
+
+        {creditAvailabilityNotice && (
+          <div className="videoV2CreditNotice" role="alert" aria-live="polite">
+            <div>
+              <strong>More video credits needed</strong>
+              <p>
+                {creditAvailabilityNotice === "full"
+                  ? "Full Video Ads require at least 3 video credits. You can create a Quick Clip with fewer credits, or add more video credits to continue."
+                  : "Quick Clip requires at least 1 video credit. Add video credits or upgrade your plan to keep creating."}
+              </p>
+            </div>
+            <div className="videoV2CreditNoticeActions">
+              <button type="button" onClick={() => setCreditPacksOpen(true)}>Buy Video Credits</button>
+              <button type="button" className="secondary" onClick={() => navigate("/subscribe?upgrade=1")}>Upgrade Plan</button>
+            </div>
+          </div>
+        )}
+
+        <CreditPackModal
+          open={creditPacksOpen}
+          onClose={() => setCreditPacksOpen(false)}
+        />
       </div>
     );
   }
@@ -768,7 +866,7 @@ export default function VideoAdsV2() {
         </div>
       </header>
 
-      {videoLimitReached && (
+      {videoLimitReached && !me.isAdmin && (
         <div className="generatorLimitTop">
           <div className="generatorUsageLimitCard generatorUsageLimitCardV2" role="alert">
             <div className="generatorLimitIntro">
@@ -844,12 +942,14 @@ export default function VideoAdsV2() {
                 <CharacterCount value={companyName} max={LIMITS.companyName} />
               </label>
 
-              <label>
+              <label className={fullValidationField === "subjectName" ? "videoV2FieldValidationError" : ""}>
                 <span>What are you advertising?</span>
                 <input
+                  ref={subjectNameRef}
+                  aria-invalid={fullValidationField === "subjectName"}
                   value={subjectName}
                   maxLength={LIMITS.subjectName}
-                  onChange={(e) => { setSubjectName(e.target.value); invalidateStoryboard(); }}
+                  onChange={(e) => { setSubjectName(e.target.value); if (e.target.value.trim()) setFullValidationField(""); invalidateStoryboard(); }}
                   placeholder="Product, service, property, app, event, offer..."
                 />
                 <CharacterCount value={subjectName} max={LIMITS.subjectName} />
@@ -878,15 +978,17 @@ export default function VideoAdsV2() {
               </div>
             </div>
 
-            <label className="videoV2Field">
+            <label className={`videoV2Field ${fullValidationField === "description" ? "videoV2FieldValidationError" : ""}`}>
               <span>
                 Campaign / Product Description
                 <InfoTip text="Describe the product, problem, benefits, use case, desired action, and anything ADGen should understand before planning the scenes." />
               </span>
               <textarea
+                ref={descriptionRef}
+                aria-invalid={fullValidationField === "description"}
                 value={description}
                 maxLength={LIMITS.description}
-                onChange={(e) => { setDescription(e.target.value); invalidateStoryboard(); }}
+                onChange={(e) => { setDescription(e.target.value); if (e.target.value.trim()) setFullValidationField(""); invalidateStoryboard(); }}
                 placeholder="Describe the product, key benefits, use case, environment, and commercial you want..."
               />
               <CharacterCount value={description} max={LIMITS.description} />
@@ -1045,8 +1147,17 @@ export default function VideoAdsV2() {
                 {DURATIONS.map((item) => (
                   <button
                     key={item.value}
-                    className={duration === item.value ? "selected" : ""}
-                    onClick={() => { setDuration(item.value); invalidateStoryboard(); }}
+                    className={`${duration === item.value ? "selected" : ""} ${!canAffordVideoCredits(item.credits) ? "creditUnavailable" : ""}`}
+                    onClick={() => {
+                      if (!canAffordVideoCredits(item.credits)) {
+                        setCreditAvailabilityNotice("full");
+                        return;
+                      }
+                      setCreditAvailabilityNotice(null);
+                      setDuration(item.value);
+                      invalidateStoryboard();
+                    }}
+                    aria-disabled={!canAffordVideoCredits(item.credits)}
                   >
                     <strong>{item.value}s</strong>
                     <span>{item.credits} credits</span>
@@ -1267,7 +1378,7 @@ export default function VideoAdsV2() {
 
             <button
               className="videoV2Primary"
-              disabled={videoLimitReached || storyLoading || generating || !subjectName.trim() || !description.trim()}
+              disabled={(!me.isAdmin && videoLimitReached) || !canAffordVideoCredits(credits) || storyLoading || generating}
               onClick={createStoryboard}
             >
               {storyLoading
@@ -1392,11 +1503,27 @@ export default function VideoAdsV2() {
                             value={scene.dialogue || ""}
                             maxLength={LIMITS.dialogue}
                             disabled={scene.performanceMode !== "speaking"}
-                            placeholder={scene.performanceMode === "speaking" ? "Short natural line that comfortably fits this scene" : "No dialogue in this scene"}
+                            placeholder={scene.performanceMode === "speaking" ? "Example: Your morning routine just got easier." : "No dialogue in this scene"}
                             onChange={(e) => updateScene(scene.id, "dialogue", e.target.value)}
                           />
                           {scene.performanceMode === "speaking" && (
-                            <CharacterCount value={scene.dialogue} max={LIMITS.dialogue} />
+                            <>
+                              <small className="videoV2FieldHelp">
+                                Enter the exact words the visible person says in this scene. The limit is based on this scene's speaking time, not a character target.
+                              </small>
+                              {(() => {
+                                const estimated = estimateSpeechSeconds(scene.dialogue);
+                                const available = storyboardDialogueMaxSeconds(scene.duration);
+                                const tooLong = estimated > available;
+                                return (
+                                  <small className={tooLong ? "videoV2DialogueTiming tooLong" : "videoV2DialogueTiming"}>
+                                    {scene.dialogue?.trim()
+                                      ? `Estimated speaking time: ~${estimated}s / ~${available}s available in this ${scene.duration}s scene${tooLong ? " — shorten this line before generating." : "."}`
+                                      : `Up to ~${available}s of dialogue is available in this ${scene.duration}s scene.`}
+                                  </small>
+                                );
+                              })()}
+                            </>
                           )}
                         </label>
                       </>
@@ -1425,7 +1552,7 @@ export default function VideoAdsV2() {
                   <strong>{duration}-second Full Video Ad</strong>
                   <span>{credits} video credits · {storyboard.scenes.length} storyboard shots · one continuous generation</span>
                 </div>
-                <button className="videoV2Primary" onClick={startFullAd} disabled={videoLimitReached || generating}>
+                <button className="videoV2Primary" onClick={startFullAd} disabled={(!me.isAdmin && videoLimitReached) || !canAffordVideoCredits(credits) || generating}>
                   {generating ? "Creating Your Ad..." : `Generate Full Ad · ${credits} Credits`}
                 </button>
               </div>
@@ -1490,11 +1617,12 @@ const QUICK_V2_API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localho
 
 const VIDEO_DESCRIPTION_MAX = 1200;
 const QUICK_PRODUCT_MAX = 80;
-const QUICK_AUDIENCE_MAX = 100;
+const QUICK_AUDIENCE_MAX = 160;
 const QUICK_CTA_MAX = 20;
 const IMAGE_MOTION_PROMPT_MAX = 1000;
 const CREATIVE_DIRECTION_MAX = 900;
 const QUICK_V2_CHARACTER_ACTION_MAX = 300;
+const QUICK_V2_CHARACTER_DIALOGUE_MAX = 300;
 const VIDEO_GENERATOR_MODE_KEY = "adgen:video-generator-mode";
 
 const NARRATOR_VOICE_OPTIONS = [
@@ -1857,6 +1985,13 @@ function characterDialogueMaxSeconds(duration) {
   return Number(duration) >= 10 ? 4.0 : 2.5;
 }
 
+function storyboardDialogueMaxSeconds(sceneDuration) {
+  const seconds = Number(sceneDuration) || 0;
+  // Leave a small beat for natural movement/cuts while making scene duration
+  // the authoritative creative limit rather than an arbitrary character count.
+  return Math.max(0.8, Math.round(Math.max(0, seconds - 0.4) * 10) / 10);
+}
+
 
 
 function hasUsefulCharacterDescription(...values) {
@@ -2096,6 +2231,15 @@ function VideoAdsV2Quick() {
       )
     );
   }, [workspaceVideoUsage]);
+
+  const availableVideoCredits = useMemo(() => {
+    if (!Number.isFinite(videoUsageCap) || !Number.isFinite(videoUsageUsed)) return null;
+    const includedRemaining = Math.max(0, videoUsageCap - videoUsageUsed);
+    return includedRemaining + Math.max(0, Number(purchasedVideoCredits || 0));
+  }, [videoUsageCap, videoUsageUsed, purchasedVideoCredits]);
+
+  const canAffordVideoCredits = (required) =>
+    me.isAdmin || availableVideoCredits === null || availableVideoCredits >= required;
 
   // scroll targets
   const statusRef = useRef(null);
@@ -2710,10 +2854,41 @@ function VideoAdsV2Quick() {
     return parts.join(" ").slice(0, 1580);
   };
 
+  const showRequiredQuickField = (field) => {
+    const details = {
+      image: {
+        code: "reference_image_required",
+        title: "Add a reference image",
+        message: "Upload the image you want ADGen to animate before generating this clip.",
+        help: "Choose an image, then try Generate Video again.",
+        target: "creative",
+      },
+      productName: {
+        code: "product_name_required",
+        title: "Add the product or service",
+        message: "Tell ADGen what you are advertising before generating the video.",
+        help: "Enter the product, service, app, property, event, or offer you want featured.",
+        target: "creative",
+      },
+      description: {
+        code: "video_prompt_required",
+        title: "Add a video prompt",
+        message: "Describe what you want the video to show before generating.",
+        help: "Include the subject, action, environment, product interaction, camera movement, or desired ending shot.",
+        target: "creative",
+      },
+    };
+    setValidationError(details[field]);
+    setError(null);
+    window.setTimeout(() => {
+      validationRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  };
+
   // Start jobs
   const startImageVideo = async () => {
     if (!ensureVideoCreditsAvailable()) return;
-    if (!imageFile) throw new Error("Please upload an image first.");
+    if (!imageFile) { showRequiredQuickField("image"); return; }
     ensureScriptFitsOrThrow();
 
     resetJob();
@@ -2833,6 +3008,8 @@ function VideoAdsV2Quick() {
 
   const startPromptVideo = async ({ quickMode = false } = {}) => {
     if (!ensureVideoCreditsAvailable()) return;
+    if (!productName.trim()) { showRequiredQuickField("productName"); return; }
+    if (!description.trim()) { showRequiredQuickField("description"); return; }
     if (!quickMode) {
       ensureScriptFitsOrThrow();
 
@@ -3077,10 +3254,9 @@ function VideoAdsV2Quick() {
       if (timer) clearTimeout(timer);
     };
   }, [jobId]);
-  const canStartUnified = Boolean(productName.trim() && description.trim());
 
   const ensureVideoCreditsAvailable = () => {
-    if (!videoLimitReached) return true;
+    if (me.isAdmin || !videoLimitReached) return true;
 
     setError(
       "You've used all available video credits for this billing period. Upgrade to continue creating."
@@ -3363,8 +3539,11 @@ return (
                     key={item.value}
                     type="button"
                     className={duration === item.value ? "selected" : ""}
-                    onClick={() => setDuration(item.value)}
-                    disabled={isGenerating}
+                    onClick={() => {
+                      if (canAffordVideoCredits(item.credits)) setDuration(item.value);
+                    }}
+                    disabled={isGenerating || !canAffordVideoCredits(item.credits)}
+                    title={!canAffordVideoCredits(item.credits) ? `Requires ${item.credits} video credits` : ""}
                   >
                     <strong>{item.value}s</strong>
                     <small>{item.credits} {item.credits === 1 ? "credit" : "credits"}</small>
@@ -3398,7 +3577,7 @@ return (
                 <label>Product or Service</label>
                 <input
                   value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
+                  onChange={(e) => { setProductName(e.target.value); clearVideoValidation(); }}
                   placeholder="What are you advertising?"
                   maxLength={QUICK_PRODUCT_MAX}
                   disabled={isGenerating}
@@ -3562,14 +3741,53 @@ return (
               </div>
             </div>
 
+            {validationError && !advancedOpen && (
+              <div
+                ref={validationRef}
+                className="videoValidationCard videoQuickValidationCard"
+                role="alert"
+                aria-live="assertive"
+              >
+                <div className="videoValidationIcon" aria-hidden="true">!</div>
+                <div className="videoValidationCopy">
+                  <strong>{validationError.title}</strong>
+                  <p>{validationError.message}</p>
+                  {validationError.help && (
+                    <p className="videoValidationHelp">{validationError.help}</p>
+                  )}
+                </div>
+                {(validationError.actionLabel || validationError.secondaryActionLabel) && (
+                  <div className="videoValidationActions">
+                    {validationError.actionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction"
+                        onClick={() => applyValidationFix(validationError)}
+                      >
+                        {validationError.actionLabel}
+                      </button>
+                    )}
+                    {validationError.secondaryActionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction secondary"
+                        onClick={() => applyValidationFix(validationError, true)}
+                      >
+                        {validationError.secondaryActionLabel}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               type="button"
               className="videoQuickGenerate"
               disabled={
                 isGenerating ||
-                videoLimitReached ||
-                !productName.trim() ||
-                !description.trim()
+                (!me.isAdmin && videoLimitReached) ||
+                !canAffordVideoCredits(duration === 10 ? 2 : 1)
               }
               onClick={async () => {
                 setVoiceMode("none");
@@ -4118,14 +4336,17 @@ return (
                     )}
                   </div>
 
-                  <div className="videoValidationActions">
-                    <button
-                      type="button"
-                      className="videoValidationAction"
-                      onClick={() => applyValidationFix(validationError)}
-                    >
-                      {validationError.actionLabel}
-                    </button>
+                  {(validationError.actionLabel || validationError.secondaryActionLabel) && (
+                    <div className="videoValidationActions">
+                    {validationError.actionLabel && (
+                      <button
+                        type="button"
+                        className="videoValidationAction"
+                        onClick={() => applyValidationFix(validationError)}
+                      >
+                        {validationError.actionLabel}
+                      </button>
+                    )}
 
                     {validationError.secondaryActionLabel && (
                       <button
@@ -4137,6 +4358,7 @@ return (
                       </button>
                     )}
                   </div>
+                  )}
                 </div>
               )}
             </StepSection>
@@ -4409,7 +4631,7 @@ return (
                   {voiceMode === "character_dialogue" ? "Character Dialogue Script" : "Voiceover Script"}
                   <InfoTip text="Keep the script concise so it fits the selected duration and the speaker’s planned on-screen time." />
                 </div>
-                <div className="hint">{voiceMode === "character_dialogue" ? "The visible on-screen person will deliver this line while continuing the Action While Speaking. Keep the line short enough for a natural pace." : "The selected narrator will read this script off-screen."}</div>
+                <div className="hint">{voiceMode === "character_dialogue" ? "Write the exact words the visible on-screen person should say. The character delivers this dialogue while performing the Action While Speaking below." : "The selected narrator will read this script off-screen."}</div>
               </div>
 
               <button
@@ -4438,7 +4660,7 @@ return (
               <div className="field videoCharacterActionField">
                 <label>
                   Action While Speaking
-                  <InfoTip text="Describe the physical action that should continue while the character delivers the dialogue. Quick Clip preserves this generated motion instead of defaulting to a static talking head." />
+                  <InfoTip text="Describe what the visible person should physically do while saying the Character Dialogue Script. This controls movement and performance, not the words they speak." />
                 </label>
                 <textarea
                   value={characterAction}
@@ -4446,19 +4668,36 @@ return (
                   rows={3}
                   maxLength={QUICK_V2_CHARACTER_ACTION_MAX}
                   disabled={isGenerating}
-                  placeholder="Example: Walk through the gym while adjusting the treadmill and speaking naturally to camera."
+                  placeholder="Example: Walk through the gym, adjust the treadmill controls, then look toward camera while continuing to move naturally."
                 />
-                <div className="hint">{characterAction.length}/{QUICK_V2_CHARACTER_ACTION_MAX} characters</div>
+                <div className="hint">Describe movement only — the dialogue itself goes in the field below. {characterAction.length}/{QUICK_V2_CHARACTER_ACTION_MAX} characters</div>
               </div>
             )}
 
+            {voiceMode === "character_dialogue" && (
+              <div className="videoCharacterDialogueLabel">
+                <strong>What the character says</strong>
+                <span>Enter the exact spoken line. Speaking time is the limit; ADGen checks that the line fits the dialogue window for the selected clip duration.</span>
+              </div>
+            )}
             <textarea
               value={voiceoverScript}
               onChange={(e) => { setVoiceoverScript(e.target.value); clearVideoValidation(); }}
               rows={4}
+              maxLength={voiceMode === "character_dialogue" ? QUICK_V2_CHARACTER_DIALOGUE_MAX : undefined}
               disabled={voiceMode === "none" || isGenerating}
-              placeholder={voiceMode === "character_dialogue" ? "Type what the on-screen person should say…" : "Type your voiceover script here…"}
+              placeholder={voiceMode === "character_dialogue" ? "Example: Meet the easiest way to upgrade your morning routine." : "Type your voiceover script here…"}
             />
+            {voiceMode === "character_dialogue" && (
+              <div className={`videoCharacterDialogueTiming ${scriptTooLong ? "tooLong" : ""}`}>
+                <span>Dialogue timing</span>
+                <strong>
+                  {(voiceoverScript || "").trim()
+                    ? `~${scriptEstimateSec}s / ~${scriptMaxSeconds}s available`
+                    : `Up to ~${scriptMaxSeconds}s available`}
+                </strong>
+              </div>
+            )}
 
             {scriptHint && (
               <div className={scriptTooLong ? "error" : "hint"} style={{ marginTop: 8 }}>
@@ -4503,9 +4742,9 @@ return (
               className="primary"
               disabled={
                 isGenerating ||
-                videoLimitReached ||
-                scriptTooLong ||
-                !canStartUnified
+                (!me.isAdmin && videoLimitReached) ||
+                !canAffordVideoCredits(duration === 10 ? 2 : 1) ||
+                scriptTooLong
               }
               onClick={async () => {
                 try {
@@ -4522,7 +4761,7 @@ return (
                   : ""
               }
             >
-              {isGenerating ? "Creating..." : "Create My Video"}
+              {isGenerating ? "Creating..." : "✨ Create My Video"}
             </button>
 
             <div className="hint" style={{ marginTop: 8 }}>
