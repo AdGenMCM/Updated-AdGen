@@ -423,6 +423,33 @@ function DetailsDrawer({ item, onClose }) {
             </p>
           </section>
 
+          {item.kind === "video" && item.videoGeneration?.compiledKlingPrompt && (
+            <section className="admin-creative-detail-section">
+              <h3>Final Kling Prompt</h3>
+              <p className="admin-creative-long-copy">
+                {item.videoGeneration.compiledKlingPrompt}
+              </p>
+            </section>
+          )}
+
+          {item.kind === "video" && item.videoGeneration?.compiledKlingPayload && (
+            <section className="admin-creative-detail-section">
+              <h3>Final Kling Payload</h3>
+              <pre className="admin-creative-long-copy">
+                {JSON.stringify(item.videoGeneration.compiledKlingPayload, null, 2)}
+              </pre>
+            </section>
+          )}
+
+          {item.kind === "video" && item.videoGeneration?.finalTextPlan && (
+            <section className="admin-creative-detail-section">
+              <h3>Final Text Plan</h3>
+              <pre className="admin-creative-long-copy">
+                {JSON.stringify(item.videoGeneration.finalTextPlan, null, 2)}
+              </pre>
+            </section>
+          )}
+
           {(copy.headline || copy.primary_text || copy.cta) && (
             <section className="admin-creative-detail-section">
               <h3>Generated copy</h3>

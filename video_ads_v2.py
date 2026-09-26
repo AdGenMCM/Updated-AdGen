@@ -801,7 +801,7 @@ def _overlay_png(
     if cta:
         font_size=max(24,min(54,int(width*0.052)))
         font=_font(font_size)
-        brand_font=_font(max(15,min(28,int(width*0.024))))
+        brand_font=_font(max(22,min(42,int(width*0.036))))
         max_width=int(width*0.74)
     else:
         # Social-ad overlay sizing shared by Quick Clip and Full Video.
@@ -2137,6 +2137,105 @@ def _product_text_safe_motion() -> str:
     )
 
 
+def _extract_explicit_quick_copy(req: Any) -> Dict[str, Any]:
+    """Extract explicit user-requested ad typography for deterministic finishing."""
+    source = " ".join(part for part in [
+        _clean(getattr(req, "description", None), 1800),
+        _clean(getattr(req, "fullCreativeDirection", None), 1400),
+    ] if part)
+    if not source:
+        return {"overlays": [], "endText": None}
+    title_match = re.search(r"(?is)\bshow\s+(?:the\s+)?title\s*:\s*(.+?)(?=\s+then\s*:|\s+end\s+with\s*:|$)", source)
+    then_match = re.search(r"(?is)\bthen\s*:\s*(.+?)(?=\s+end\s+with\s*:|$)", source)
+    end_match = re.search(r"(?is)\bend\s+with\s*:\s*(.+?)$", source)
+    overlays: List[str] = []
+    for match in (title_match, then_match):
+        if not match:
+            continue
+        value = _clean(match.group(1), 120).strip(' \"“”')
+        if value and value not in overlays:
+            overlays.append(value)
+    end_text = None
+    if end_match:
+        value = _clean(end_match.group(1), 160).strip(' \"“”')
+        if value:
+            url_match = re.search(r"\b(?:https?://)?(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:/\S*)?", value)
+            end_text = _clean(url_match.group(0) if url_match else value, 160)
+    return {"overlays": overlays[:2], "endText": end_text}
+
+
+def _quick_visual_fallback(req: Any, brand: str, intel: str) -> str:
+    """Compact visual-only fallback when the Creative Director call is unavailable."""
+    description = _clean(getattr(req, "description", None), 1300)
+    description = re.sub(r"(?is)\bshow\s+(?:the\s+)?title\s*:.*?(?=\bthen\s*:|\bend\s+with\s*:|$)", " ", description)
+    description = re.sub(r"(?is)\bthen\s*:.*?(?=\bend\s+with\s*:|$)", " ", description)
+    description = re.sub(r"(?is)\bend\s+with\s*:.*$", " ", description)
+    description = _clean(description, 1000)
+    parts = [
+        f"Create a {int(getattr(req, 'duration', 6) or 6)}-second vertical commercial for {_clean(getattr(req, 'productName', None), 120)}.",
+        description,
+        "Visually represent what is actually being advertised; do not invent a physical product, package, book, device, or interface unless the brief or reference image calls for one.",
+        "Use one cohesive visual concept with a clear hook, two or three connected visual beats, a consistent visual language and recurring motif, and a strong final visual payoff with continuous purposeful motion. Treat lists of imagery in the brief as options, not a checklist.",
+        "Do not render new advertising titles, slogans, captions, URLs, credits, labels, or other written copy. ADGen adds requested advertising typography after rendering.",
+    ]
+    if getattr(req, "promptImageUrl", None):
+        parts.append(_reference_image_motion_policy())
+    if brand: parts.append(brand)
+    if intel: parts.append(intel)
+    return _clean(" ".join(p for p in parts if p), 2200)
+
+
+def _compile_quick_visual_prompt_sync(req: Any, brand: str, intel: str) -> str:
+    """Use GPT as a creative compiler, not as another layer of provider prose."""
+    fallback = _quick_visual_fallback(req, brand, intel)
+    if not OPENAI_API_KEY:
+        return fallback
+    brief = {
+        "duration": int(getattr(req, "duration", 6) or 6),
+        "company": _clean(getattr(req, "companyName", None), 120),
+        "subject": _clean(getattr(req, "productName", None), 120),
+        "description": _clean(getattr(req, "description", None), 1800),
+        "audience": _clean(getattr(req, "audience", None), 240),
+        "offer": _clean(getattr(req, "offer", None), 200),
+        "goal": _clean(getattr(req, "goal", None), 60),
+        "additionalDirection": _clean(getattr(req, "fullCreativeDirection", None), 1400),
+        "hasReferenceImage": bool(getattr(req, "promptImageUrl", None)),
+        "brandContext": _clean(brand, 700),
+        "performanceContext": _clean(intel, 650),
+    }
+    instructions = f"""You are ADGen's video creative director. Convert the JSON brief below into ONE concise provider-facing visual prompt for Kling.
+
+Rules:
+- First infer what is actually being advertised: physical product, software, service, media/storytelling project, event, real estate, etc.
+- The semantic brief is authoritative. Ignore generic form defaults such as \"studio product\", \"bright clean\", \"subtle camera\", or \"product showcase\" when they conflict with what the subject actually is.
+- For a media/storytelling project, visualize compelling glimpses of its worlds/themes. Do NOT invent a physical book, package, box, device, or fake product.
+- Plan only the strongest 2-4 visual beats that fit the duration. Be concrete about subjects, action, transitions, atmosphere, camera, and lighting.
+- Develop ONE cohesive visual concept for the entire clip. Treat lists of imagery in the brief as creative options, not a checklist to cover. Select only the few strongest elements that communicate the central idea within the available duration.
+- Maintain a consistent visual language, atmosphere, palette, and recurring motif across shots. If Brand Kit context supplies visual identity, use it; otherwise invent an appropriate identity for this generation and keep it consistent. Favor a clear visual progression and connected transitions over an unrelated montage of brief elements.
+- Do NOT ask Kling to render newly created advertising typography. No titles, slogans, captions, URLs, credits, fine print, UI copy, or pseudo-text. ADGen renders requested advertising copy deterministically after the video is generated.
+- If a reference image exists, preserve the referenced real product/subject and its native visible markings; do not redesign it.
+- Do not repeat metadata labels like Audience, Goal, Brand, Visual style, Camera, Lighting, or Pacing.
+- Return JSON only with exactly: {{\"visual_prompt\":\"...\"}}.
+- Keep visual_prompt under 1500 characters.
+
+BRIEF JSON:
+{json.dumps(brief, ensure_ascii=False)}"""
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(model=OPENAI_TEXT_MODEL,messages=[
+            {"role":"system","content":"Return valid JSON only."},
+            {"role":"user","content":instructions},
+        ])
+        content = (response.choices[0].message.content or "").strip()
+        parsed = json.loads(content)
+        visual = _clean(parsed.get("visual_prompt"), 1500)
+        if visual:
+            return visual
+    except Exception as exc:
+        print('[Video V2 Quick Creative Director Warning]',repr(exc),flush=True)
+    return fallback
+
+
 def _quick_prompt(req:Any,base_prompt:str,brand:str,intel:str)->str:
     audio=req.audio; mode=audio.voiceMode
     parts=[base_prompt]
@@ -2241,7 +2340,9 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
     # Compile all contextual injections before charging credits, then moderate the
     # exact final generation prompt that will be sent to the provider.
     brand,intel=_quick_brand_intel(db,uid,user_doc,req,admin,tier,bool(image_url))
-    prompt=_quick_prompt(req,base_prompt,brand,intel)
+    # Creative Director output is authoritative for Quick Clip provider visuals.
+    prompt=await asyncio.to_thread(_compile_quick_visual_prompt_sync,req,brand,intel)
+    explicit_copy=_extract_explicit_quick_copy(req)
     await _moderate_compiled_video_payload(
         db,
         uid,
@@ -2306,6 +2407,8 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         'voiceoverScript':_clean(req.voiceoverScript,1200) or None,
         'textOverlays':bool(req.textOverlays and req.audio.voiceMode=='none'),
         'overlayMessages':_sanitize_overlay_messages(req.overlayMessages,req.duration),
+        'autoOverlayMessages':explicit_copy.get('overlays') or [],
+        'autoEndText':explicit_copy.get('endText') or None,
         'ctaFinish':bool(req.ctaFinish),
         'callToAction':_clean(getattr(req,'callToAction',None),160) or None,
         'progressStage':'building_prompt',
@@ -2324,6 +2427,7 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
             'falStatusUrl':submitted.get('status_url'),
             'falResponseUrl':submitted.get('response_url'),
             'compiledKlingPrompt':prompt,
+            'compiledKlingPayload':payload,
             'compiledBrandDirection':_clean(brand,700) or None,
             'compiledPerformanceDirection':_clean(intel,650) or None,
             'updatedAt':int(time.time()),
@@ -2401,7 +2505,10 @@ async def _finish_quick(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
         except Exception as exc:
             print('[Video V2 Quick Music Warning]',repr(exc),flush=True)
             ref.update({'musicWarning':str(exc)[:800],'updatedAt':int(time.time())})
-    if bool(job.get('textOverlays')) or bool(job.get('ctaFinish')):
+    auto_overlays=list(job.get('autoOverlayMessages') or [])
+    auto_end_text=_clean(job.get('autoEndText'),160) or None
+    should_finish=bool(job.get('textOverlays')) or bool(job.get('ctaFinish')) or bool(auto_overlays) or bool(auto_end_text)
+    if should_finish:
         ref.update({'progressStage':'finalizing','progressPercent':91,'progressMessage':'Applying selected text and CTA finishing.','updatedAt':int(time.time())})
         stage_started=time.perf_counter()
         before_finishing=final
@@ -2410,10 +2517,10 @@ async def _finish_quick(job_id:str,job:Dict[str,Any],ref,db)->Dict[str,Any]:
             final,
             storyboard={},
             captions=False,
-            text_overlays=bool(job.get('textOverlays')) and voice_mode=='none',
-            overlay_messages=job.get('overlayMessages') or [],
-            end_card=bool(job.get('ctaFinish')),
-            cta=job.get('callToAction'),
+            text_overlays=(bool(job.get('textOverlays')) or bool(auto_overlays)) and voice_mode=='none',
+            overlay_messages=(job.get('overlayMessages') or []) if bool(job.get('textOverlays')) else auto_overlays,
+            end_card=bool(job.get('ctaFinish')) or bool(auto_end_text),
+            cta=job.get('callToAction') if bool(job.get('ctaFinish')) else auto_end_text,
             brand=job.get('companyName'),
             duration=int(job.get('duration') or 6),
         )

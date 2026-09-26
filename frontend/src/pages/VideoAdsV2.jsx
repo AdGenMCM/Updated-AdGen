@@ -215,6 +215,22 @@ function hasCharacterDescription(...values) {
   return hasCharacter && hasAppearance;
 }
 
+
+function extractExplicitVideoText(description = "", creativeDirection = "") {
+  const source = `${description || ""} ${creativeDirection || ""}`.trim();
+  if (!source) return { overlays: [], endText: "" };
+  const title = source.match(/\b(?:show|display|put)\s+(?:the\s+)?(?:title|text|words?)\s*:?\s*["“]?(.+?)["”]?(?=\s+then\s*:|\s+end\s+with\s*:|$)/i);
+  const then = source.match(/\bthen\s*:\s*["“]?(.+?)["”]?(?=\s+end\s+with\s*:|$)/i);
+  const end = source.match(/\b(?:end|finish|close)\s+with\s*:\s*["“]?(.+?)["”]?\s*$/i);
+  const overlays = [title?.[1], then?.[1]]
+    .map((value) => String(value || "").trim().replace(/^["“”]+|["“”]+$/g, ""))
+    .filter((value, index, values) => value && values.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index);
+  let endText = String(end?.[1] || "").trim().replace(/^["“”]+|["“”]+$/g, "");
+  const url = endText.match(/\b(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/\S*)?/);
+  if (url) endText = url[0];
+  return { overlays: overlays.slice(0, 2), endText };
+}
+
 export default function VideoAdsV2() {
   const navigate = useNavigate();
   const { refreshWorkspace, videoUsage: workspaceVideoUsage } = useWorkspace() || {};
@@ -2092,6 +2108,18 @@ function VideoAdsV2Quick() {
   const [textOverlays, setTextOverlays] = useState(false);
   const [overlayMessages, setOverlayMessages] = useState(["", "", ""]);
   const [ctaFinish, setCtaFinish] = useState(false);
+  const plannedQuickText = useMemo(() => {
+    const explicit = extractExplicitVideoText(description, fullCreativeDirection);
+    const dedicated = voiceMode === "none" && textOverlays
+      ? overlayMessages.slice(0, quickOverlayLimit).map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const overlays = [];
+    [...dedicated, ...explicit.overlays].forEach((value) => {
+      if (value && !overlays.some((item) => item.toLowerCase() === value.toLowerCase()) && overlays.length < quickOverlayLimit) overlays.push(value);
+    });
+    const endText = ctaFinish && callToAction.trim() ? callToAction.trim() : explicit.endText;
+    return { overlays, endText, hasExplicit: explicit.overlays.length > 0 || Boolean(explicit.endText), hasDedicated: dedicated.length > 0 };
+  }, [description, fullCreativeDirection, voiceMode, textOverlays, overlayMessages, quickOverlayLimit, ctaFinish, callToAction]);
   const [voiceoverScript, setVoiceoverScript] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -4527,7 +4555,7 @@ return (
            </div>
 
            <div className={`videoEnhancementCard ${textOverlays && voiceMode === "none" ? "enabled" : ""}`}>
-            <label className="videoToggle"><input type="checkbox" checked={textOverlays} onChange={(e) => setTextOverlays(e.target.checked)} disabled={isGenerating || voiceMode !== "none"} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>{voiceMode === "none" ? "Text Overlays" : "🔒 Text Overlays"}</span></span><small>{voiceMode === "none" ? `${quickOverlayLimit} messages maximum` : "Available with No Voice"}</small></span></label>
+            <label className="videoToggle"><input type="checkbox" checked={textOverlays} onChange={(e) => setTextOverlays(e.target.checked)} disabled={isGenerating || voiceMode !== "none"} /><span className="videoToggleCopy"><span className="videoToggleTitle"><span>{voiceMode === "none" ? "Text Overlays" : "🔒 Text Overlays"}</span></span><small>{voiceMode === "none" ? "Add short, readable marketing text. Explicit on-screen text requested in your description is still honored when this is off." : "Available with No Voice"}</small></span></label>
            </div>
            <div className={`videoEnhancementCard ${ctaFinish ? "enabled" : ""}`}>
             <label className="videoToggle">
@@ -4542,7 +4570,7 @@ return (
                   <span>CTA Finish</span>
                   <InfoTip text="Adds your selected call-to-action and brand name over approximately the final 1.8 seconds of the existing clip. It does not generate a separate end card." />
                 </span>
-                <small>Show your CTA with a branded treatment over the final moments of the clip.</small>
+                <small>Add a polished branded ending with your CTA, offer, brand, or destination.</small>
               </span>
             </label>
            </div>
@@ -4624,6 +4652,16 @@ return (
 
 
           {voiceMode === "none" && textOverlays && <div className="videoQuickOverlayEditor"><div className="videoQuickFinishingHead"><strong>Text Overlay Messages</strong><span>{quickOverlayLimit} maximum · 2–6 words each.</span></div><div className="videoQuickOverlayInputs">{Array.from({ length: quickOverlayLimit }).map((_, index) => <label key={index}><span>Message {index + 1}</span><input value={overlayMessages[index] || ""} maxLength={42} placeholder="2–6 words" onChange={(e) => updateOverlayMessage(index, e.target.value)} /><small>{(overlayMessages[index] || "").length}/42</small></label>)}</div></div>}
+          {(plannedQuickText.overlays.length > 0 || plannedQuickText.endText) && (
+            <div className="videoPlannedTextCard">
+              <div className="videoQuickFinishingHead"><strong>Planned On-Screen Text</strong><span>Rendered by ADGen for exact spelling.</span></div>
+              <div className="videoPlannedTextList">
+                {plannedQuickText.overlays.map((text, index) => <div key={`${text}-${index}`}><span>{index === 0 ? "Title / Overlay" : "Overlay"}</span><strong>{text}</strong></div>)}
+                {plannedQuickText.endText && <div><span>End</span><strong>{plannedQuickText.endText}</strong></div>}
+              </div>
+              <small>{plannedQuickText.hasDedicated ? "Text entered in the overlay controls takes priority over text requested in your description." : "Text explicitly requested in your description will be included even when Text Overlays is off."}</small>
+            </div>
+          )}
           <div ref={voiceScriptRef} className={`box voBox ${voiceMode === "none" ? "voBoxDisabled" : ""}`}>
             <div className="voiceHeader">
               <div>

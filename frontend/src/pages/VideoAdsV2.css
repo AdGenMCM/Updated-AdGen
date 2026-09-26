@@ -4173,3 +4173,18 @@
 .videoCharacterDialogueTiming.tooLong strong {
   color: #fbbf24;
 }
+
+/* Exact deterministic text plan preview */
+.videoAds .videoPlannedTextCard {
+  margin: 0 0 28px;
+  padding: 18px 20px;
+  border: 1px solid rgba(139, 92, 246, .28);
+  border-radius: 18px;
+  background: rgba(124, 58, 237, .055);
+}
+.videoAds .videoPlannedTextList { display: grid; gap: 9px; margin-top: 13px; }
+.videoAds .videoPlannedTextList > div { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.07); }
+.videoAds .videoPlannedTextList > div:last-child { border-bottom: 0; }
+.videoAds .videoPlannedTextList span { color: var(--ag-muted); font-size: .72rem; font-weight: 850; }
+.videoAds .videoPlannedTextList strong { color: var(--ag-text); font-size: .82rem; text-align: right; }
+.videoAds .videoPlannedTextCard > small { display: block; margin-top: 12px; color: var(--ag-muted); font-size: .71rem; line-height: 1.45; }

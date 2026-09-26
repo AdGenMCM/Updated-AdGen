@@ -6763,6 +6763,17 @@ def _admin_creative_item(kind: str, doc_id: str, data: dict, user: dict) -> dict
                 ["compiledGenerationPrompt", "compiledPrompt", "directorPrompt"],
                 default=None,
             ),
+            "compiledKlingPrompt": data.get("compiledKlingPrompt") or None,
+            "compiledKlingPayload": (
+                data.get("compiledKlingPayload")
+                if isinstance(data.get("compiledKlingPayload"), dict)
+                else None
+            ),
+            "finalTextPlan": (
+                data.get("finalTextPlan")
+                if isinstance(data.get("finalTextPlan"), dict)
+                else None
+            ),
         }
 
     return {
