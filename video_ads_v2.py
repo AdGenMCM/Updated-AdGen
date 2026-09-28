@@ -1060,6 +1060,7 @@ def _mirror_full(db, job_id:str, job:Dict[str,Any])->None:
     if not job.get('finalVideoUrl'): return
     db.collection('video_jobs').document(job_id).set({
         'uid':job.get('uid'),'status':'succeeded','kind':'full_video_ad_v2','source':'video_v2_kling',
+        'firstGenerationTrackingEligible':True,
         'productName':job.get('productName'),'description':job.get('description'),'duration':job.get('duration'),
         'ratio':job.get('ratio'),'finalVideoUrl':job.get('finalVideoUrl'),'storyboard':job.get('storyboard'),
         'brief':job.get('brief'),'scenes':job.get('scenes'),
@@ -2387,6 +2388,7 @@ async def _start_quick_common(req:Any,authorization:str|None,*,image_url:Optiona
         'status':'running',
         'kind':'quick_clip_v2',
         'source':'video_v2_kling',
+        'firstGenerationTrackingEligible':True,
         'companyName':getattr(req,'companyName',None),
         'productName':getattr(req,'productName',None),
         'description':getattr(req,'description',None),
